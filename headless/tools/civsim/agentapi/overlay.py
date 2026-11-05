@@ -44,6 +44,8 @@ GAPS: dict[str, str] = {
     "FIX-0108": "ResponseGoodyChoice: no pending-choice check (any goody at any time) and NULL plot dereference.",
     "FIX-0109": "ResponseLeague*: CanVote/CanProposeEnact/CanProposeRepeal only in CvAssertMsg (compiled out), NULL league, negative vote counts add votes.",
     "FIX-0110": "ResponseUpdatePolicies(bValue=false): setHasPolicy(false) on any policy id, unchecked.",
+    "FIX-0111": "ResponseResearch: a tech id past the tech table (normal research branch) reaches CvPlayerTechs::CanEverResearch -> GC.getTechInfo, which indexes the table unchecked (crash on every machine).",
+    "FIX-0112": "ResponsePushMission: a MOVE_TO / ROUTE_TO to a plot off the map is queued and crashes the owner's machine later (CvUnit::setExperience dereferences the missing plot); the queued order also replaced the previous orders.",
     "AUD-01": "ResponseMinorCivGiftGold: iGold < 0 passes 'GetGold() >= iGold' and DoGoldGiftFromMajor does ChangeGold(-iGold), so a negative gift credits the sender.",
     "AUD-02": "ResponseFaithGreatPersonChoice: no GetNumFaithGreatPeople() > 0 check (compare ResponseGreatPersonChoice under NET_FIX_SINGLE_USE_ABILITY_DUPE): any number of faith great people.",
     "AUD-03": "ResponseGreatPersonChoice / ResponseMayaBonusChoice: the spawn is gated by the counter (NET_FIX_SINGLE_USE_ABILITY_DUPE) but ChangeNumFreeGreatPeople(-1) / ChangeNumMayaBoosts(-1) run unconditionally: a bogus choice drives the counter negative.",
@@ -68,12 +70,12 @@ GAPS: dict[str, str] = {
 # ---------------------------------------------------------------------------------------------------------------
 # unit.*
 # ---------------------------------------------------------------------------------------------------------------
-C("unit.push_mission", "player", send="sendPushMission", resp="ResponsePushMission", rate="unit", tags=[BOT],
+C("unit.push_mission", "player", send="sendPushMission", resp="ResponsePushMission", rate="unit", tags=[BOT], gaps=["FIX-0112"],
   over={"iUnitID": {}, "eMission": {}, "iData1": {"name": "data1", "note": "plot x | target unit id | build id, by mission"},
         "iData2": {"name": "data2", "note": "plot y | extra, by mission"},
         "iFlags": {"name": "flags", "type": "bitset:MoveFlags"}, "bShift": {"name": "append"}},
   rules=["ownership/hand: unit exists and owner == session.player (handler: GET_PLAYER(ePlayer).getUnit(id) only)",
-         "range/hand: mission is a Missions Type (the handler remaps MISSION_PARADROP to -2 under REMOVE_PARADROP_ANIMATION); plot (data1, data2) inside map bounds for plot missions",
+         "range/hand: mission is a Missions Type (the handler remaps MISSION_PARADROP to -2 under REMOVE_PARADROP_ANIMATION); plot (data1, data2) inside map bounds for plot missions (MOVE_TO / ROUTE_TO to a missing plot is ignored on every machine) [gap:FIX-0112]",
          "applicability/hand: CvUnitMission::CanStartMission(unit, mission, data1, data2, plot(data1,data2)) (runs the Lua hook CanStartMission, so the host query must be hook-neutral, OQ 4). The DLL re-checks it when the mission starts (CvUnitMission::ContinueMission) but queues anything",
          "applicability/hand: move missions: CvUnit::canMoveInto / canMoveOrAttackInto on the target plot"],
   note="Settlers: MISSION_MOVE_TO then MISSION_FOUND (helpers unit.move_to, unit.found_city).")
@@ -137,25 +139,27 @@ C("city.rename", "player", lua="SendRenameCity", send="SendRenameCity", resp="Re
 # ---------------------------------------------------------------------------------------------------------------
 # research, policies, ideology
 # ---------------------------------------------------------------------------------------------------------------
-C("player.research", "player", send="sendResearch", resp="ResponseResearch", lua="SendResearch", rate="player", tags=[BOT],
+C("player.research", "player", send="sendResearch", resp="ResponseResearch", lua="SendResearch", rate="player", tags=[BOT], gaps=["FIX-0111"],
   mux={"iDiscover": 0, "ePlayerToStealFrom": "NO_PLAYER"}, drop=["iDiscover", "ePlayerToStealFrom"],
   derived={"iDiscover": 0, "ePlayerToStealFrom": "NO_PLAYER"},
   over={"eTech": {"name": "tech", "none": True, "note": "NO_TECH clears the research queue"}, "bShift": {"name": "append"}},
-  rules=["applicability/hand: tech is NO_TECH (clears the queue) or CvPlayerTechs::CanEverResearch(tech); otherwise the handler ignores the command (CanEverResearch runs the Lua hook PlayerCanEverResearch: the host query must be hook-neutral, OQ 4)",
+  rules=["range/hand: tech in [NO_TECH, NumTechInfos) and a valid player id [gap:FIX-0111]",
+         "applicability/hand: tech is NO_TECH (clears the queue) or CvPlayerTechs::CanEverResearch(tech); otherwise the handler ignores the command (CanEverResearch runs the Lua hook PlayerCanEverResearch: the host query must be hook-neutral, OQ 4)",
          "phase/hand: allowed whenever the player's turn is active, not only while ENDTURN_BLOCKING_RESEARCH is pending (the queue can be changed any time)"])
-C("player.free_tech", "player", send="sendResearch", resp="ResponseResearch", lua="SendResearch", rate="player", tags=[BOT], gaps=["FIX-0101"],
+C("player.free_tech", "player", send="sendResearch", resp="ResponseResearch", lua="SendResearch", rate="player", tags=[BOT], gaps=["FIX-0101", "FIX-0111"],
   phase=["turn_active", "pending:ENDTURN_BLOCKING_FREE_TECH"],
   mux={"iDiscover": ">0", "ePlayerToStealFrom": "NO_PLAYER"}, drop=["iDiscover", "ePlayerToStealFrom", "bShift"],
   derived={"iDiscover": "CvPlayer::GetNumFreeTechs()", "ePlayerToStealFrom": "NO_PLAYER", "bShift": False},
   over={"eTech": {"name": "tech"}},
   rules=["pending/hand: CvPlayer::GetNumFreeTechs() > 0 [gap:FIX-0101]; the honest sender passes iDiscover == GetNumFreeTechs(), the host fills it, the client never supplies it",
+         "range/hand: tech in [0, NumTechInfos) (the free branch is safe on its own: CanResearchForFree range-checks) and a valid player id [gap:FIX-0111]",
          "applicability/hand: CvPlayerTechs::CanResearchForFree(tech) (the handler already ignores a tech that fails it; it runs the Lua hook PlayerCanResearch, so the host query must be hook-neutral, OQ 4)"])
-C("espionage.steal_tech", "player", send="sendResearch", resp="ResponseResearch", lua="SendResearch", rate="player", gaps=["FIX-0101"],
+C("espionage.steal_tech", "player", send="sendResearch", resp="ResponseResearch", lua="SendResearch", rate="player", gaps=["FIX-0101", "FIX-0111"],
   phase=["turn_active", "pending:ENDTURN_BLOCKING_STEAL_TECH"],
   mux={"iDiscover": 0, "ePlayerToStealFrom": "<major>"}, drop=["iDiscover", "bShift"], derived={"iDiscover": 0, "bShift": False},
   over={"eTech": {"name": "tech"}, "ePlayerToStealFrom": {"name": "from_player", **MAJOR}},
   rules=["player/hand: from_player is a major civ in [0, MAX_MAJOR_CIVS) [gap:FIX-0101]",
-         "range/hand: tech in [0, NumTechInfos) [gap:FIX-0101]",
+         "range/hand: tech in [0, NumTechInfos) [gap:FIX-0101] [gap:FIX-0111]",
          "applicability/hand: CvPlayerEspionage::GetNumTechsToSteal(from_player) > 0 and CvPlayer::canStealTech(from_player, tech) (the handler checks both under BUILD_STEALABLE_TECH_LIST_ONCE_PER_TURN)"])
 C("policy.adopt", "player", send="sendUpdatePolicies", resp="ResponseUpdatePolicies", lua="SendUpdatePolicies", rate="player", tags=[BOT],
   mux={"bNOTPolicyBranch": True, "bValue": True}, drop=["bNOTPolicyBranch", "bValue"], derived={"bNOTPolicyBranch": True, "bValue": True},

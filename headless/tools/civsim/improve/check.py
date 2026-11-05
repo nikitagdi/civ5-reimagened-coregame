@@ -7,8 +7,8 @@ from pathlib import Path
 from . import registry as R
 
 FLAG_RE = re.compile(r"LEKMOD_HEADLESS_(?:OPT|FIX|HYG|DIAG)_[A-Z0-9_]+")
-# not improvement flags: the shadow-check switch of optimized-diag builds
-NOT_IMPROVEMENT_FLAGS = {"LEKMOD_HEADLESS_OPT_VERIFY", "LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY"}  # + HYG-0010's every-N-turns knob
+# not improvement flags: the shadow-check switches of optimized-diag builds (OPT-0090 has its shadow switch in its record)
+NOT_IMPROVEMENT_FLAGS = {"LEKMOD_HEADLESS_OPT_VERIFY", "LEKMOD_HEADLESS_OPT_ASTAR_UNREACHABLE_STOP_SHADOW", "LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY"}  # + HYG-0010's every-N-turns knob
 PP_IF_RE = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef|elif)\b(.*)$")
 HEADER_FLAG_RE = re.compile(r"^//\s*(LEKMOD_HEADLESS_[A-Z0-9_]+)\s")
 LUA_PATH_RE = re.compile(r"^([^\s(]+\.lua)\b")

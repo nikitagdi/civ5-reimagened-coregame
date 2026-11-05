@@ -614,7 +614,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_POLICY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_POLICY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_POLICY"
     },
     {
@@ -622,7 +622,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_RESEARCH"
     },
     {
@@ -630,7 +630,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_PRODUCTION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_PRODUCTION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_PRODUCTION"
     },
     {
@@ -638,7 +638,7 @@
       "kind": "unit_check",
       "non_active": "CvGame::updateTestEndTurn runs only for the active player, but its inputs are const CvPlayer/CvUnit queries valid for any player",
       "open": null,
-      "source": "CvPlayer::hasReadyUnit() and canHold(plot) in CvGame::updateTestEndTurn (CvGame.cpp:2366)",
+      "source": "CvPlayer::hasReadyUnit() and canHold(plot) in CvGame::updateTestEndTurn (CvGame.cpp:2380)",
       "type": "ENDTURN_BLOCKING_UNITS"
     },
     {
@@ -646,7 +646,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_DIPLO_VOTE in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_DIPLO_VOTE in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_DIPLO_VOTE"
     },
     {
@@ -662,7 +662,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_FREE_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_FREE_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_FREE_TECH"
     },
     {
@@ -670,7 +670,7 @@
       "kind": "unit_check",
       "non_active": "CvGame::updateTestEndTurn runs only for the active player, but its inputs are const CvPlayer/CvUnit queries valid for any player",
       "open": null,
-      "source": "CvPlayer::hasReadyUnit() and !GetFirstReadyUnit()->canHold(plot) in CvGame::updateTestEndTurn (CvGame.cpp:2362)",
+      "source": "CvPlayer::hasReadyUnit() and !GetFirstReadyUnit()->canHold(plot) in CvGame::updateTestEndTurn (CvGame.cpp:2376)",
       "type": "ENDTURN_BLOCKING_STACKED_UNITS"
     },
     {
@@ -686,7 +686,7 @@
       "kind": "unit_check",
       "non_active": "CvGame::updateTestEndTurn runs only for the active player, but its inputs are const CvPlayer/CvUnit queries valid for any player",
       "open": "also depends on GAMEOPTION_PROMOTION_SAVING (a game option, readable)",
-      "source": "CvPlayer::hasPromotableUnit() in CvGame::updateTestEndTurn (CvGame.cpp:2352)",
+      "source": "CvPlayer::hasPromotableUnit() in CvGame::updateTestEndTurn (CvGame.cpp:2366)",
       "type": "ENDTURN_BLOCKING_UNIT_PROMOTION"
     },
     {
@@ -694,7 +694,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": "blocks only if the UI auto-end-turn preference is on (IsMPAutoEndTurnEnabled/IsSPAutoEndTurnEnabled, UI state of the active player): make it a session option, do not read the UI",
-      "source": "NOTIFICATION_CITY_RANGE_ATTACK in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_CITY_RANGE_ATTACK in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_CITY_RANGE_ATTACK"
     },
     {
@@ -702,7 +702,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_FREE_POLICY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_FREE_POLICY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_FREE_POLICY"
     },
     {
@@ -710,7 +710,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_FREE_GREAT_PERSON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_FREE_GREAT_PERSON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_FREE_ITEMS"
     },
     {
@@ -718,7 +718,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_FOUND_PANTHEON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_FOUND_PANTHEON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_FOUND_PANTHEON"
     },
     {
@@ -726,7 +726,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_FOUND_RELIGION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_FOUND_RELIGION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_FOUND_RELIGION"
     },
     {
@@ -734,7 +734,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_ENHANCE_RELIGION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_ENHANCE_RELIGION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_ENHANCE_RELIGION"
     },
     {
@@ -742,7 +742,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_SPY_STOLE_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_SPY_STOLE_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_STEAL_TECH"
     },
     {
@@ -750,7 +750,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_MAYA_LONG_COUNT in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_MAYA_LONG_COUNT in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_MAYA_LONG_COUNT"
     },
     {
@@ -758,7 +758,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_FAITH_GREAT_PERSON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_FAITH_GREAT_PERSON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_FAITH_GREAT_PERSON"
     },
     {
@@ -766,7 +766,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_ADD_REFORMATION_BELIEF in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_ADD_REFORMATION_BELIEF in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_ADD_REFORMATION_BELIEF"
     },
     {
@@ -774,7 +774,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_LEAGUE_CALL_FOR_PROPOSALS in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_LEAGUE_CALL_FOR_PROPOSALS in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_LEAGUE_CALL_FOR_PROPOSALS"
     },
     {
@@ -782,7 +782,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_CHOOSE_ARCHAEOLOGY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_CHOOSE_ARCHAEOLOGY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_CHOOSE_ARCHAEOLOGY"
     },
     {
@@ -790,7 +790,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_LEAGUE_CALL_FOR_VOTES in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_LEAGUE_CALL_FOR_VOTES in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_LEAGUE_CALL_FOR_VOTES"
     },
     {
@@ -798,7 +798,7 @@
       "kind": "notification",
       "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
       "open": null,
-      "source": "NOTIFICATION_CHOOSE_IDEOLOGY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "source": "NOTIFICATION_CHOOSE_IDEOLOGY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:666)",
       "type": "ENDTURN_BLOCKING_CHOOSE_IDEOLOGY"
     }
   ],

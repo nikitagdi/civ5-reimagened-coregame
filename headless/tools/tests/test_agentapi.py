@@ -70,7 +70,7 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(schema.check_fix_alignment(doc, FIXES), [])
         self.assertEqual(coverage.check_guards(doc, canon.DLL_SRC), [])
         ids = {g["id"] for c in doc["commands"] for g in c["dll_gaps"] if g["id"].startswith("FIX-")}
-        self.assertEqual(ids, {r["id"] for r in FIXES if r["kind"] == "validation"})
+        self.assertEqual(ids, {r["id"] for r in FIXES if r["kind"] == "validation"} - set(schema.NO_COMMAND_FIXES))
         stale = copy.deepcopy(FIXES)
         next(r for r in stale if r["id"] == "FIX-0103")["status"] = "implemented"
         self.assertTrue(schema.check_fix_alignment(doc, stale))

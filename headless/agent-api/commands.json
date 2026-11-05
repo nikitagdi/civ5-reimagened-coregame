@@ -87,7 +87,7 @@
         "net_msg": null,
         "response": "ResponseBarbarianRansom",
         "send": "sendBarbarianRansom",
-        "src": "ICvDLLUtility.h:124; CvDllInterfaces.h:1179; CvDllNetMessageHandler.cpp:94"
+        "src": "ICvDLLUtility.h:124; CvDllInterfaces.h:1179; CvDllNetMessageHandler.cpp:100"
       }
     },
     {
@@ -214,7 +214,7 @@
         "net_msg": null,
         "response": "ResponseCityBuyPlot",
         "send": "sendCityBuyPlot",
-        "src": "ICvDLLUtility.h:133; CvDllInterfaces.h:1181; CvDllNetMessageHandler.cpp:168"
+        "src": "ICvDLLUtility.h:133; CvDllInterfaces.h:1181; CvDllNetMessageHandler.cpp:183"
       }
     },
     {
@@ -296,7 +296,7 @@
         "net_msg": null,
         "response": "ResponseCityDoTask",
         "send": "sendDoTask",
-        "src": "ICvDLLUtility.h:106; CvDllInterfaces.h:1182; CvDllNetMessageHandler.cpp:200"
+        "src": "ICvDLLUtility.h:106; CvDllInterfaces.h:1182; CvDllNetMessageHandler.cpp:218"
       }
     },
     {
@@ -337,7 +337,7 @@
         "net_msg": null,
         "response": "ResponseCityPopOrder",
         "send": "sendPopOrder",
-        "src": "ICvDLLUtility.h:103; CvDllInterfaces.h:1183; CvDllNetMessageHandler.cpp:227"
+        "src": "ICvDLLUtility.h:103; CvDllInterfaces.h:1183; CvDllNetMessageHandler.cpp:248"
       }
     },
     {
@@ -398,7 +398,7 @@
         "net_msg": null,
         "response": "ResponseCityPurchase",
         "send": "sendPurchase",
-        "src": "ICvDLLUtility.h:105; CvDllInterfaces.h:1219; CvDllNetMessageHandler.cpp:242"
+        "src": "ICvDLLUtility.h:105; CvDllInterfaces.h:1219; CvDllNetMessageHandler.cpp:269"
       }
     },
     {
@@ -485,7 +485,7 @@
         "net_msg": null,
         "response": "ResponseCityPushOrder",
         "send": "sendPushOrder",
-        "src": "ICvDLLUtility.h:102; CvDllInterfaces.h:1185; CvDllNetMessageHandler.cpp:252"
+        "src": "ICvDLLUtility.h:102; CvDllInterfaces.h:1185; CvDllNetMessageHandler.cpp:282"
       }
     },
     {
@@ -527,7 +527,7 @@
         "net_msg": null,
         "response": "ResponseRenameCity",
         "send": "SendRenameCity",
-        "src": "ICvDLLUtility.h:129; CvDllInterfaces.h:1202; CvDllNetMessageHandler.cpp:1498"
+        "src": "ICvDLLUtility.h:129; CvDllInterfaces.h:1202; CvDllNetMessageHandler.cpp:1687"
       }
     },
     {
@@ -568,7 +568,7 @@
         "net_msg": null,
         "response": "ResponseSellBuilding",
         "send": "SendSellBuilding",
-        "src": "ICvDLLUtility.h:128; CvDllInterfaces.h:1206; CvDllNetMessageHandler.cpp:1642"
+        "src": "ICvDLLUtility.h:128; CvDllInterfaces.h:1206; CvDllNetMessageHandler.cpp:1858"
       }
     },
     {
@@ -621,7 +621,7 @@
         "net_msg": null,
         "response": "ResponseSetCityAIFocus",
         "send": "sendSetCityAIFocus",
-        "src": "ICvDLLUtility.h:143; CvDllInterfaces.h:1207; CvDllNetMessageHandler.cpp:1663"
+        "src": "ICvDLLUtility.h:143; CvDllInterfaces.h:1207; CvDllNetMessageHandler.cpp:1882"
       }
     },
     {
@@ -662,7 +662,7 @@
         "net_msg": null,
         "response": "ResponseSetCityAvoidGrowth",
         "send": "sendSetCityAvoidGrowth",
-        "src": "ICvDLLUtility.h:144; CvDllInterfaces.h:1208; CvDllNetMessageHandler.cpp:1676"
+        "src": "ICvDLLUtility.h:144; CvDllInterfaces.h:1208; CvDllNetMessageHandler.cpp:1898"
       }
     },
     {
@@ -703,7 +703,7 @@
         "net_msg": null,
         "response": "ResponseCitySwapOrder",
         "send": "sendSwapOrder",
-        "src": "ICvDLLUtility.h:104; CvDllInterfaces.h:1186; CvDllNetMessageHandler.cpp:262"
+        "src": "ICvDLLUtility.h:104; CvDllInterfaces.h:1186; CvDllNetMessageHandler.cpp:295"
       }
     },
     {
@@ -739,7 +739,7 @@
         "net_msg": null,
         "response": "ResponseUpdateCityCitizens",
         "send": "SendUpdateCityCitizens",
-        "src": "ICvDLLUtility.h:127; CvDllInterfaces.h:1210; CvDllNetMessageHandler.cpp:1749"
+        "src": "ICvDLLUtility.h:127; CvDllInterfaces.h:1210; CvDllNetMessageHandler.cpp:1977"
       }
     },
     {
@@ -799,7 +799,7 @@
         "net_msg": null,
         "response": "ResponseReturnCivilian",
         "send": "sendReturnCivilian",
-        "src": "ICvDLLUtility.h:126; CvDllInterfaces.h:1205; CvDllNetMessageHandler.cpp:1637"
+        "src": "ICvDLLUtility.h:126; CvDllInterfaces.h:1205; CvDllNetMessageHandler.cpp:1850"
       }
     },
     {
@@ -840,7 +840,7 @@
         "net_msg": null,
         "response": "ResponseArchaeologyChoice",
         "send": null,
-        "src": "CvDllInterfaces2.h:95; CvDllNetMessageHandler.cpp:1485"
+        "src": "CvDllInterfaces2.h:95; CvDllNetMessageHandler.cpp:1668"
       }
     },
     {
@@ -912,7 +912,7 @@
         "net_msg": null,
         "response": "ResponseMoveGreatWorks",
         "send": "sendMoveGreatWorks",
-        "src": "ICvDLLUtility.h:157; CvDllInterfaces2.h:106; CvDllNetMessageHandler.cpp:959"
+        "src": "ICvDLLUtility.h:157; CvDllInterfaces2.h:106; CvDllNetMessageHandler.cpp:1073"
       }
     },
     {
@@ -953,7 +953,7 @@
         "net_msg": null,
         "response": "ResponseSetSwappableGreatWork",
         "send": "sendSetSwappableGreatWork",
-        "src": "ICvDLLUtility.h:155; CvDllInterfaces2.h:104; CvDllNetMessageHandler.cpp:899"
+        "src": "ICvDLLUtility.h:155; CvDllInterfaces2.h:104; CvDllNetMessageHandler.cpp:1007"
       }
     },
     {
@@ -1009,7 +1009,7 @@
         "net_msg": null,
         "response": "ResponseSwapGreatWorks",
         "send": "sendSwapGreatWorks",
-        "src": "ICvDLLUtility.h:156; CvDllInterfaces2.h:105; CvDllNetMessageHandler.cpp:953"
+        "src": "ICvDLLUtility.h:156; CvDllInterfaces2.h:105; CvDllNetMessageHandler.cpp:1064"
       }
     },
     {
@@ -1066,7 +1066,7 @@
         "net_msg": null,
         "response": "ResponsePlayerDealFinalized",
         "send": null,
-        "src": "CvDllInterfaces.h:1199; CvDllNetMessageHandler.cpp:1287"
+        "src": "CvDllInterfaces.h:1199; CvDllNetMessageHandler.cpp:1434"
       }
     },
     {
@@ -1081,7 +1081,7 @@
       "class": "player",
       "dll_gaps": [],
       "name": "diplo.accept_ai_deal",
-      "note": "OPEN (SPEC OQ 8): v2 models it as diplo.respond_ai_offer{offer_id, accept}; the DLL assembles the ICvDeal1 itself.",
+      "note": "OPEN: v2 models it as diplo.respond_ai_offer{offer_id, accept}; the DLL assembles the ICvDeal1 itself.",
       "rate": "player",
       "since": "1.0",
       "turn_phase": [
@@ -1129,7 +1129,7 @@
       "class": "player",
       "dll_gaps": [],
       "name": "diplo.accept_ai_demand",
-      "note": "OPEN (SPEC OQ 8): see diplo.accept_ai_deal.",
+      "note": "OPEN: see diplo.accept_ai_deal.",
       "rate": "player",
       "since": "1.0",
       "turn_phase": [
@@ -1212,7 +1212,7 @@
         "net_msg": null,
         "response": "ResponseChangeWar",
         "send": "sendChangeWar",
-        "src": "ICvDLLUtility.h:111; CvDllInterfaces.h:1180; CvDllNetMessageHandler.cpp:120"
+        "src": "ICvDLLUtility.h:111; CvDllInterfaces.h:1180; CvDllNetMessageHandler.cpp:129"
       }
     },
     {
@@ -1284,7 +1284,7 @@
         "net_msg": null,
         "response": "ResponseDiplomacyFromUI",
         "send": "sendFromUIDiploEvent",
-        "src": "ICvDLLUtility.h:150; CvDllInterfaces.h:1189; CvDllNetMessageHandler.cpp:308"
+        "src": "ICvDLLUtility.h:150; CvDllInterfaces.h:1189; CvDllNetMessageHandler.cpp:350"
       }
     },
     {
@@ -1320,7 +1320,7 @@
         "net_msg": null,
         "response": "ResponseIgnoreWarning",
         "send": "sendIgnoreWarning",
-        "src": "ICvDLLUtility.h:112; CvDllInterfaces2.h:94; CvDllNetMessageHandler.cpp:153"
+        "src": "ICvDLLUtility.h:112; CvDllInterfaces2.h:94; CvDllNetMessageHandler.cpp:165"
       }
     },
     {
@@ -1369,7 +1369,7 @@
         "net_msg": null,
         "response": "ResponseDiploVote",
         "send": "SendDiploVote",
-        "src": "ICvDLLUtility.h:117; CvDllInterfaces.h:1190; CvDllNetMessageHandler.cpp:321"
+        "src": "ICvDLLUtility.h:117; CvDllInterfaces.h:1190; CvDllNetMessageHandler.cpp:366"
       }
     },
     {
@@ -1390,7 +1390,7 @@
         "net_msg": null,
         "response": "ResponseChooseElection",
         "send": null,
-        "src": "CvDllInterfaces.h:1187; CvDllNetMessageHandler.cpp:275"
+        "src": "CvDllInterfaces.h:1187; CvDllNetMessageHandler.cpp:311"
       }
     },
     {
@@ -1453,7 +1453,7 @@
         "net_msg": null,
         "response": "ResponseMoveSpy",
         "send": "SendMoveSpy",
-        "src": "ICvDLLUtility.h:88; CvDllInterfaces.h:1225; CvDllNetMessageHandler.cpp:592"
+        "src": "ICvDLLUtility.h:88; CvDllInterfaces.h:1225; CvDllNetMessageHandler.cpp:655"
       }
     },
     {
@@ -1488,7 +1488,7 @@
         "net_msg": null,
         "response": "ResponseStageCoup",
         "send": "SendStageCoup",
-        "src": "ICvDLLUtility.h:89; CvDllInterfaces.h:1226; CvDllNetMessageHandler.cpp:622"
+        "src": "ICvDLLUtility.h:89; CvDllInterfaces.h:1226; CvDllNetMessageHandler.cpp:688"
       }
     },
     {
@@ -1515,6 +1515,15 @@
           "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH",
           "gap": "ResponseResearch: iDiscover > 0 without GetNumFreeTechs() > 0 sets NumFreeTechs to iDiscover-1 (arbitrary free techs); the steal branch indexes m_aiNumTechsToStealList[player] / HasTech(tech) without range checks.",
           "id": "FIX-0101"
+        },
+        {
+          "dll_note": "Why FIX-0101 missed it: its tech range test sits inside the steal-branch condition (iDiscover <= 0 && ePlayerToStealFrom != NO_PLAYER); the free branch is safe on its own (CanResearchForFree range-checks), the normal branch is not.",
+          "dll_scope": "ResponseResearch with eTech < NO_TECH or eTech >= number of techs (any branch), or an invalid player id.",
+          "dll_status": "implemented",
+          "fix": "FIX-0111",
+          "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH_TECH",
+          "gap": "ResponseResearch: a tech id past the tech table (normal research branch) reaches CvPlayerTechs::CanEverResearch -> GC.getTechInfo, which indexes the table unchecked (crash on every machine).",
+          "id": "FIX-0111"
         }
       ],
       "name": "espionage.steal_tech",
@@ -1533,7 +1542,7 @@
         "pending/auto: decision ENDTURN_BLOCKING_STEAL_TECH is pending for session.player (observation 'pending')",
         "rate/auto: rate class 'player'",
         "player/hand: from_player is a major civ in [0, MAX_MAJOR_CIVS) [gap:FIX-0101]",
-        "range/hand: tech in [0, NumTechInfos) [gap:FIX-0101]",
+        "range/hand: tech in [0, NumTechInfos) [gap:FIX-0101] [gap:FIX-0111]",
         "applicability/hand: CvPlayerEspionage::GetNumTechsToSteal(from_player) > 0 and CvPlayer::canStealTech(from_player, tech) (the handler checks both under BUILD_STEALABLE_TECH_LIST_ONCE_PER_TURN)"
       ],
       "wire": {
@@ -1551,7 +1560,7 @@
         "net_msg": null,
         "response": "ResponseResearch",
         "send": "sendResearch",
-        "src": "ICvDLLUtility.h:107; CvDllInterfaces.h:1233; CvDllNetMessageHandler.cpp:1532"
+        "src": "ICvDLLUtility.h:107; CvDllInterfaces.h:1233; CvDllNetMessageHandler.cpp:1730"
       }
     },
     {
@@ -1649,7 +1658,7 @@
         "net_msg": null,
         "response": "ResponseGoodyChoice",
         "send": "sendGoodyChoice",
-        "src": "ICvDLLUtility.h:154; CvDllInterfaces2.h:103; CvDllNetMessageHandler.cpp:1460"
+        "src": "ICvDLLUtility.h:154; CvDllInterfaces2.h:103; CvDllNetMessageHandler.cpp:1640"
       }
     },
     {
@@ -1700,7 +1709,7 @@
         "net_msg": null,
         "response": "ResponseGreatPersonChoice",
         "send": "sendGreatPersonChoice",
-        "src": "ICvDLLUtility.h:140; CvDllInterfaces.h:1194; CvDllNetMessageHandler.cpp:1413"
+        "src": "ICvDLLUtility.h:140; CvDllInterfaces.h:1194; CvDllNetMessageHandler.cpp:1584"
       }
     },
     {
@@ -1751,7 +1760,7 @@
         "net_msg": null,
         "response": "ResponseFaithGreatPersonChoice",
         "send": "sendFaithGreatPersonChoice",
-        "src": "ICvDLLUtility.h:142; CvDllInterfaces.h:1224; CvDllNetMessageHandler.cpp:1449"
+        "src": "ICvDLLUtility.h:142; CvDllInterfaces.h:1224; CvDllNetMessageHandler.cpp:1626"
       }
     },
     {
@@ -1802,7 +1811,7 @@
         "net_msg": null,
         "response": "ResponseMayaBonusChoice",
         "send": "sendMayaBonusChoice",
-        "src": "ICvDLLUtility.h:141; CvDllInterfaces.h:1223; CvDllNetMessageHandler.cpp:1429"
+        "src": "ICvDLLUtility.h:141; CvDllInterfaces.h:1223; CvDllNetMessageHandler.cpp:1603"
       }
     },
     {
@@ -1854,7 +1863,7 @@
         "net_msg": null,
         "response": "ResponseLeagueEditName",
         "send": "SendLeagueEditName",
-        "src": "ICvDLLUtility.h:369; CvDllInterfaces2.h:102; CvDllNetMessageHandler.cpp:874"
+        "src": "ICvDLLUtility.h:369; CvDllInterfaces2.h:102; CvDllNetMessageHandler.cpp:976"
       }
     },
     {
@@ -1912,7 +1921,7 @@
         "net_msg": null,
         "response": "ResponseLeagueProposeEnact",
         "send": "SendLeagueProposeEnact",
-        "src": "ICvDLLUtility.h:367; CvDllInterfaces2.h:100; CvDllNetMessageHandler.cpp:743"
+        "src": "ICvDLLUtility.h:367; CvDllInterfaces2.h:100; CvDllNetMessageHandler.cpp:833"
       }
     },
     {
@@ -1965,7 +1974,7 @@
         "net_msg": null,
         "response": "ResponseLeagueProposeRepeal",
         "send": "SendLeagueProposeRepeal",
-        "src": "ICvDLLUtility.h:368; CvDllInterfaces2.h:101; CvDllNetMessageHandler.cpp:811"
+        "src": "ICvDLLUtility.h:368; CvDllInterfaces2.h:101; CvDllNetMessageHandler.cpp:907"
       }
     },
     {
@@ -2019,7 +2028,7 @@
         "net_msg": null,
         "response": "ResponseLeagueVoteAbstain",
         "send": "SendLeagueVoteAbstain",
-        "src": "ICvDLLUtility.h:366; CvDllInterfaces2.h:99; CvDllNetMessageHandler.cpp:713"
+        "src": "ICvDLLUtility.h:366; CvDllInterfaces2.h:99; CvDllNetMessageHandler.cpp:797"
       }
     },
     {
@@ -2083,7 +2092,7 @@
         "net_msg": null,
         "response": "ResponseLeagueVoteEnact",
         "send": "SendLeagueVoteEnact",
-        "src": "ICvDLLUtility.h:364; CvDllInterfaces2.h:97; CvDllNetMessageHandler.cpp:653"
+        "src": "ICvDLLUtility.h:364; CvDllInterfaces2.h:97; CvDllNetMessageHandler.cpp:725"
       }
     },
     {
@@ -2147,7 +2156,7 @@
         "net_msg": null,
         "response": "ResponseLeagueVoteRepeal",
         "send": "SendLeagueVoteRepeal",
-        "src": "ICvDLLUtility.h:365; CvDllInterfaces2.h:98; CvDllNetMessageHandler.cpp:683"
+        "src": "ICvDLLUtility.h:365; CvDllInterfaces2.h:98; CvDllNetMessageHandler.cpp:761"
       }
     },
     {
@@ -2207,7 +2216,7 @@
         "net_msg": null,
         "response": "ResponseMinorCivBullyGold",
         "send": "sendMinorBullyGold",
-        "src": "ICvDLLUtility.h:137; CvDllInterfaces.h:1228; CvDllNetMessageHandler.cpp:1185"
+        "src": "ICvDLLUtility.h:137; CvDllInterfaces.h:1228; CvDllNetMessageHandler.cpp:1314"
       }
     },
     {
@@ -2267,7 +2276,7 @@
         "net_msg": null,
         "response": "ResponseMinorCivBullyUnit",
         "send": "sendMinorBullyUnit",
-        "src": "ICvDLLUtility.h:138; CvDllInterfaces.h:1229; CvDllNetMessageHandler.cpp:1198"
+        "src": "ICvDLLUtility.h:138; CvDllInterfaces.h:1229; CvDllNetMessageHandler.cpp:1330"
       }
     },
     {
@@ -2314,7 +2323,7 @@
         "net_msg": null,
         "response": "ResponseMinorCivBuyout",
         "send": "sendMinorBuyout",
-        "src": "ICvDLLUtility.h:139; CvDllInterfaces.h:1231; CvDllNetMessageHandler.cpp:1261"
+        "src": "ICvDLLUtility.h:139; CvDllInterfaces.h:1231; CvDllNetMessageHandler.cpp:1402"
       }
     },
     {
@@ -2395,7 +2404,7 @@
         "net_msg": null,
         "response": "ResponseMinorCivGiftGold",
         "send": "sendMinorGiftGold",
-        "src": "ICvDLLUtility.h:135; CvDllInterfaces.h:1197; CvDllNetMessageHandler.cpp:1211"
+        "src": "ICvDLLUtility.h:135; CvDllInterfaces.h:1197; CvDllNetMessageHandler.cpp:1346"
       }
     },
     {
@@ -2465,7 +2474,7 @@
         "net_msg": null,
         "response": "ResponseMinorCivGiftGold",
         "send": "sendMinorGiftGold",
-        "src": "ICvDLLUtility.h:135; CvDllInterfaces.h:1197; CvDllNetMessageHandler.cpp:1211"
+        "src": "ICvDLLUtility.h:135; CvDllInterfaces.h:1197; CvDllNetMessageHandler.cpp:1346"
       }
     },
     {
@@ -2518,7 +2527,7 @@
         "net_msg": null,
         "response": "ResponseMinorCivGiftTileImprovement",
         "send": "sendMinorGiftTileImprovement",
-        "src": "ICvDLLUtility.h:136; CvDllInterfaces.h:1230; CvDllNetMessageHandler.cpp:1248"
+        "src": "ICvDLLUtility.h:136; CvDllInterfaces.h:1230; CvDllNetMessageHandler.cpp:1386"
       }
     },
     {
@@ -2578,7 +2587,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -2660,7 +2669,7 @@
         "net_msg": null,
         "response": "ResponseLiberatePlayer",
         "send": "SendLiberateMinor",
-        "src": "ICvDLLUtility.h:115; CvDllInterfaces.h:1196; CvDllNetMessageHandler.cpp:1180"
+        "src": "ICvDLLUtility.h:115; CvDllInterfaces.h:1196; CvDllNetMessageHandler.cpp:1306"
       }
     },
     {
@@ -2712,7 +2721,7 @@
         "net_msg": null,
         "response": "ResponseMinorNoUnitSpawning",
         "send": "SendMinorNoUnitSpawning",
-        "src": "ICvDLLUtility.h:114; CvDllInterfaces.h:1198; CvDllNetMessageHandler.cpp:1274"
+        "src": "ICvDLLUtility.h:114; CvDllInterfaces.h:1198; CvDllNetMessageHandler.cpp:1418"
       }
     },
     {
@@ -2772,7 +2781,7 @@
           "sendMinorPledgeProtection",
           "SendPledgeMinorProtection"
         ],
-        "src": "ICvDLLUtility.h:134; ICvDLLUtility.h:113; CvDllInterfaces.h:1232; CvDllNetMessageHandler.cpp:1365"
+        "src": "ICvDLLUtility.h:134; ICvDLLUtility.h:113; CvDllInterfaces.h:1232; CvDllNetMessageHandler.cpp:1518"
       }
     },
     {
@@ -2867,7 +2876,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -2903,7 +2912,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -2939,7 +2948,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -2975,7 +2984,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -3014,7 +3023,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -3065,7 +3074,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -3126,7 +3135,7 @@
         "net_msg": null,
         "response": "ResponseChangeIdeology",
         "send": "sendChangeIdeology",
-        "src": "ICvDLLUtility.h:371; CvDllInterfaces2.h:108; CvDllNetMessageHandler.cpp:965"
+        "src": "ICvDLLUtility.h:371; CvDllInterfaces2.h:108; CvDllNetMessageHandler.cpp:1082"
       }
     },
     {
@@ -3155,7 +3164,7 @@
         "net_msg": null,
         "response": "ResponseExtendedGame",
         "send": "sendExtendedGame",
-        "src": "ICvDLLUtility.h:84; CvDllInterfaces.h:1192; CvDllNetMessageHandler.cpp:379"
+        "src": "ICvDLLUtility.h:84; CvDllInterfaces.h:1192; CvDllNetMessageHandler.cpp:430"
       }
     },
     {
@@ -3176,6 +3185,15 @@
           "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH",
           "gap": "ResponseResearch: iDiscover > 0 without GetNumFreeTechs() > 0 sets NumFreeTechs to iDiscover-1 (arbitrary free techs); the steal branch indexes m_aiNumTechsToStealList[player] / HasTech(tech) without range checks.",
           "id": "FIX-0101"
+        },
+        {
+          "dll_note": "Why FIX-0101 missed it: its tech range test sits inside the steal-branch condition (iDiscover <= 0 && ePlayerToStealFrom != NO_PLAYER); the free branch is safe on its own (CanResearchForFree range-checks), the normal branch is not.",
+          "dll_scope": "ResponseResearch with eTech < NO_TECH or eTech >= number of techs (any branch), or an invalid player id.",
+          "dll_status": "implemented",
+          "fix": "FIX-0111",
+          "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH_TECH",
+          "gap": "ResponseResearch: a tech id past the tech table (normal research branch) reaches CvPlayerTechs::CanEverResearch -> GC.getTechInfo, which indexes the table unchecked (crash on every machine).",
+          "id": "FIX-0111"
         }
       ],
       "name": "player.free_tech",
@@ -3197,6 +3215,7 @@
         "pending/auto: decision ENDTURN_BLOCKING_FREE_TECH is pending for session.player (observation 'pending')",
         "rate/auto: rate class 'player'",
         "pending/hand: CvPlayer::GetNumFreeTechs() > 0 [gap:FIX-0101]; the honest sender passes iDiscover == GetNumFreeTechs(), the host fills it, the client never supplies it",
+        "range/hand: tech in [0, NumTechInfos) (the free branch is safe on its own: CanResearchForFree range-checks) and a valid player id [gap:FIX-0111]",
         "applicability/hand: CvPlayerTechs::CanResearchForFree(tech) (the handler already ignores a tech that fails it; it runs the Lua hook PlayerCanResearch, so the host query must be hook-neutral, OQ 4)"
       ],
       "wire": {
@@ -3215,7 +3234,7 @@
         "net_msg": null,
         "response": "ResponseResearch",
         "send": "sendResearch",
-        "src": "ICvDLLUtility.h:107; CvDllInterfaces.h:1233; CvDllNetMessageHandler.cpp:1532"
+        "src": "ICvDLLUtility.h:107; CvDllInterfaces.h:1233; CvDllNetMessageHandler.cpp:1730"
       }
     },
     {
@@ -3271,7 +3290,7 @@
         "net_msg": null,
         "response": "ResponseLaunchSpaceship",
         "send": "sendLaunch",
-        "src": "ICvDLLUtility.h:118; CvDllInterfaces.h:1195; CvDllNetMessageHandler.cpp:1169"
+        "src": "ICvDLLUtility.h:118; CvDllInterfaces.h:1195; CvDllNetMessageHandler.cpp:1292"
       }
     },
     {
@@ -3290,7 +3309,17 @@
         }
       ],
       "class": "player",
-      "dll_gaps": [],
+      "dll_gaps": [
+        {
+          "dll_note": "Why FIX-0101 missed it: its tech range test sits inside the steal-branch condition (iDiscover <= 0 && ePlayerToStealFrom != NO_PLAYER); the free branch is safe on its own (CanResearchForFree range-checks), the normal branch is not.",
+          "dll_scope": "ResponseResearch with eTech < NO_TECH or eTech >= number of techs (any branch), or an invalid player id.",
+          "dll_status": "implemented",
+          "fix": "FIX-0111",
+          "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH_TECH",
+          "gap": "ResponseResearch: a tech id past the tech table (normal research branch) reaches CvPlayerTechs::CanEverResearch -> GC.getTechInfo, which indexes the table unchecked (crash on every machine).",
+          "id": "FIX-0111"
+        }
+      ],
       "name": "player.research",
       "rate": "player",
       "since": "1.0",
@@ -3307,6 +3336,7 @@
         "ownership/auto: not required: the command references no unit or city",
         "phase/auto: the session player's turn is active, the game is not paused, loading or resyncing",
         "rate/auto: rate class 'player'",
+        "range/hand: tech in [NO_TECH, NumTechInfos) and a valid player id [gap:FIX-0111]",
         "applicability/hand: tech is NO_TECH (clears the queue) or CvPlayerTechs::CanEverResearch(tech); otherwise the handler ignores the command (CanEverResearch runs the Lua hook PlayerCanEverResearch: the host query must be hook-neutral, OQ 4)",
         "phase/hand: allowed whenever the player's turn is active, not only while ENDTURN_BLOCKING_RESEARCH is pending (the queue can be changed any time)"
       ],
@@ -3325,7 +3355,7 @@
         "net_msg": null,
         "response": "ResponseResearch",
         "send": "sendResearch",
-        "src": "ICvDLLUtility.h:107; CvDllInterfaces.h:1233; CvDllNetMessageHandler.cpp:1532"
+        "src": "ICvDLLUtility.h:107; CvDllInterfaces.h:1233; CvDllNetMessageHandler.cpp:1730"
       }
     },
     {
@@ -3405,7 +3435,7 @@
         "net_msg": null,
         "response": "ResponsePlayerOption",
         "send": "sendPlayerOption",
-        "src": "ICvDLLUtility.h:83; CvDllInterfaces.h:1200; CvDllNetMessageHandler.cpp:1360"
+        "src": "ICvDLLUtility.h:83; CvDllInterfaces.h:1200; CvDllNetMessageHandler.cpp:1510"
       }
     },
     {
@@ -3453,7 +3483,7 @@
         "net_msg": null,
         "response": "ResponseUpdatePolicies",
         "send": "sendUpdatePolicies",
-        "src": "ICvDLLUtility.h:116; CvDllInterfaces.h:1211; CvDllNetMessageHandler.cpp:1763"
+        "src": "ICvDLLUtility.h:116; CvDllInterfaces.h:1211; CvDllNetMessageHandler.cpp:1994"
       }
     },
     {
@@ -3505,7 +3535,7 @@
         "net_msg": null,
         "response": "ResponseIdeologyChoice",
         "send": null,
-        "src": "CvDllInterfaces2.h:96; CvDllNetMessageHandler.cpp:1491"
+        "src": "CvDllInterfaces2.h:96; CvDllNetMessageHandler.cpp:1677"
       }
     },
     {
@@ -3540,7 +3570,7 @@
         "net_msg": null,
         "response": "ResponseUpdatePolicies",
         "send": "sendUpdatePolicies",
-        "src": "ICvDLLUtility.h:116; CvDllInterfaces.h:1211; CvDllNetMessageHandler.cpp:1763"
+        "src": "ICvDLLUtility.h:116; CvDllInterfaces.h:1211; CvDllNetMessageHandler.cpp:1994"
       }
     },
     {
@@ -3584,7 +3614,7 @@
         "net_msg": null,
         "response": "ResponseUpdatePolicies",
         "send": "sendUpdatePolicies",
-        "src": "ICvDLLUtility.h:116; CvDllInterfaces.h:1211; CvDllNetMessageHandler.cpp:1763"
+        "src": "ICvDLLUtility.h:116; CvDllInterfaces.h:1211; CvDllNetMessageHandler.cpp:1994"
       }
     },
     {
@@ -3729,7 +3759,7 @@
         "net_msg": null,
         "response": "ResponseEnhanceReligion",
         "send": "SendEnhanceReligion",
-        "src": "ICvDLLUtility.h:87; CvDllInterfaces.h:1222; CvDllNetMessageHandler.cpp:511"
+        "src": "ICvDLLUtility.h:87; CvDllInterfaces.h:1222; CvDllNetMessageHandler.cpp:571"
       }
     },
     {
@@ -3769,7 +3799,7 @@
         "net_msg": null,
         "response": "ResponseFaithPurchase",
         "send": "SendFaithPurchase",
-        "src": "ICvDLLUtility.h:90; CvDllInterfaces.h:1227; CvDllNetMessageHandler.cpp:641"
+        "src": "ICvDLLUtility.h:90; CvDllInterfaces.h:1227; CvDllNetMessageHandler.cpp:710"
       }
     },
     {
@@ -3854,7 +3884,7 @@
         "net_msg": null,
         "response": "ResponseFoundReligion",
         "send": "SendFoundReligion",
-        "src": "ICvDLLUtility.h:86; CvDllInterfaces.h:1221; CvDllNetMessageHandler.cpp:438"
+        "src": "ICvDLLUtility.h:86; CvDllInterfaces.h:1221; CvDllNetMessageHandler.cpp:495"
       }
     },
     {
@@ -3894,7 +3924,7 @@
         "net_msg": null,
         "response": "ResponseFoundPantheon",
         "send": "SendFoundPantheon",
-        "src": "ICvDLLUtility.h:85; CvDllInterfaces.h:1220; CvDllNetMessageHandler.cpp:384"
+        "src": "ICvDLLUtility.h:85; CvDllInterfaces.h:1220; CvDllNetMessageHandler.cpp:438"
       }
     },
     {
@@ -3953,7 +3983,7 @@
         "net_msg": null,
         "response": "ResponseEnhanceReligion",
         "send": "SendEnhanceReligion",
-        "src": "ICvDLLUtility.h:87; CvDllInterfaces.h:1222; CvDllNetMessageHandler.cpp:511"
+        "src": "ICvDLLUtility.h:87; CvDllInterfaces.h:1222; CvDllNetMessageHandler.cpp:571"
       }
     },
     {
@@ -4002,7 +4032,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -4030,7 +4060,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -4234,7 +4264,7 @@
         "net_msg": null,
         "response": "ResponseGiftUnit",
         "send": "sendGiftUnit",
-        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:979"
+        "src": "ICvDLLUtility.h:125; CvDllInterfaces.h:1193; CvDllNetMessageHandler.cpp:1099"
       }
     },
     {
@@ -4359,7 +4389,7 @@
         "net_msg": null,
         "response": "ResponseAutoMission",
         "send": "sendAutoMission",
-        "src": "ICvDLLUtility.h:100; CvDllInterfaces.h:1178; CvDllNetMessageHandler.cpp:84"
+        "src": "ICvDLLUtility.h:100; CvDllInterfaces.h:1178; CvDllNetMessageHandler.cpp:87"
       }
     },
     {
@@ -4416,7 +4446,7 @@
         "net_msg": null,
         "response": "ResponseDoCommand",
         "send": "sendDoCommand",
-        "src": "ICvDLLUtility.h:101; CvDllInterfaces.h:1191; CvDllNetMessageHandler.cpp:329"
+        "src": "ICvDLLUtility.h:101; CvDllInterfaces.h:1191; CvDllNetMessageHandler.cpp:377"
       }
     },
     {
@@ -4453,7 +4483,7 @@
         "net_msg": null,
         "response": "ResponseDestroyUnit",
         "send": null,
-        "src": "CvDllInterfaces.h:1188; CvDllNetMessageHandler.cpp:281"
+        "src": "CvDllInterfaces.h:1188; CvDllNetMessageHandler.cpp:320"
       }
     },
     {
@@ -4510,7 +4540,7 @@
         "net_msg": null,
         "response": "ResponseDoCommand",
         "send": "sendDoCommand",
-        "src": "ICvDLLUtility.h:101; CvDllInterfaces.h:1191; CvDllNetMessageHandler.cpp:329"
+        "src": "ICvDLLUtility.h:101; CvDllInterfaces.h:1191; CvDllNetMessageHandler.cpp:377"
       }
     },
     {
@@ -4658,7 +4688,17 @@
         }
       ],
       "class": "player",
-      "dll_gaps": [],
+      "dll_gaps": [
+        {
+          "dll_note": "The check is in the net handler, not in CvUnit::setExperience (CvUnit.* belongs to agent A). Other missions whose data are plots (airlift, nuke, paradrop, rebase, range attack) are not covered.",
+          "dll_scope": "ResponsePushMission with MISSION_MOVE_TO / MISSION_ROUTE_TO and GC.getMap().plot(iData1, iData2) == NULL.",
+          "dll_status": "implemented",
+          "fix": "FIX-0112",
+          "flag": "LEKMOD_HEADLESS_FIX_VAL_PUSH_MISSION",
+          "gap": "ResponsePushMission: a MOVE_TO / ROUTE_TO to a plot off the map is queued and crashes the owner's machine later (CvUnit::setExperience dereferences the missing plot); the queued order also replaced the previous orders.",
+          "id": "FIX-0112"
+        }
+      ],
       "name": "unit.push_mission",
       "note": "Settlers: MISSION_MOVE_TO then MISSION_FOUND (helpers unit.move_to, unit.found_city).",
       "rate": "unit",
@@ -4676,7 +4716,7 @@
         "phase/auto: the session player's turn is active, the game is not paused, loading or resyncing",
         "rate/auto: rate class 'unit'",
         "ownership/hand: unit exists and owner == session.player (handler: GET_PLAYER(ePlayer).getUnit(id) only)",
-        "range/hand: mission is a Missions Type (the handler remaps MISSION_PARADROP to -2 under REMOVE_PARADROP_ANIMATION); plot (data1, data2) inside map bounds for plot missions",
+        "range/hand: mission is a Missions Type (the handler remaps MISSION_PARADROP to -2 under REMOVE_PARADROP_ANIMATION); plot (data1, data2) inside map bounds for plot missions (MOVE_TO / ROUTE_TO to a missing plot is ignored on every machine) [gap:FIX-0112]",
         "applicability/hand: CvUnitMission::CanStartMission(unit, mission, data1, data2, plot(data1,data2)) (runs the Lua hook CanStartMission, so the host query must be hook-neutral, OQ 4). The DLL re-checks it when the mission starts (CvUnitMission::ContinueMission) but queues anything",
         "applicability/hand: move missions: CvUnit::canMoveInto / canMoveOrAttackInto on the target plot"
       ],
@@ -4687,7 +4727,7 @@
         "net_msg": null,
         "response": "ResponsePushMission",
         "send": "sendPushMission",
-        "src": "ICvDLLUtility.h:99; CvDllInterfaces.h:1201; CvDllNetMessageHandler.cpp:1378"
+        "src": "ICvDLLUtility.h:99; CvDllInterfaces.h:1201; CvDllNetMessageHandler.cpp:1534"
       }
     },
     {
@@ -4729,7 +4769,7 @@
         "net_msg": null,
         "response": "ResponseRenameUnit",
         "send": "SendRenameUnit",
-        "src": "ICvDLLUtility.h:130; CvDllInterfaces.h:1203; CvDllNetMessageHandler.cpp:1513"
+        "src": "ICvDLLUtility.h:130; CvDllInterfaces.h:1203; CvDllNetMessageHandler.cpp:1705"
       }
     },
     {
@@ -4784,7 +4824,7 @@
         "net_msg": null,
         "response": "ResponseSwapUnits",
         "send": "sendSwapUnits",
-        "src": "ICvDLLUtility.h:132; CvDllInterfaces.h:1209; CvDllNetMessageHandler.cpp:1692"
+        "src": "ICvDLLUtility.h:132; CvDllInterfaces.h:1209; CvDllNetMessageHandler.cpp:1917"
       }
     }
   ],

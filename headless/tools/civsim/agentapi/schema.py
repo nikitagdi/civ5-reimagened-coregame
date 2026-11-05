@@ -199,10 +199,14 @@ def check_commands(doc: dict, fixes: list[dict] | None = None) -> list[str]:
     return errs
 
 
+# validation-class records that fence a Lua getter, not a Response* handler: there is no command to put them on
+NO_COMMAND_FIXES = {"FIX-0113": "Lua Game.GetFounder (read-only getter, CvLuaGame.cpp), not a net command"}
+
+
 def check_fix_alignment(doc: dict, fixes: list[dict]) -> list[str]:
     """Every FIX-VALIDATION record sits on a command with the same flag/status; nothing refers to a missing record."""
     errs: list[str] = []
-    rec = {r["id"]: r for r in fixes if r.get("kind") == "validation"}
+    rec = {r["id"]: r for r in fixes if r.get("kind") == "validation" and r["id"] not in NO_COMMAND_FIXES}
     seen: set[str] = set()
     for c in doc["commands"]:
         for g in c["dll_gaps"]:
