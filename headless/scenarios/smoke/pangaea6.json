@@ -1,0 +1,29 @@
+{
+  "name": "pangaea6",
+  "seeds": { "sync": 1234567, "map": 7654321 },
+  "game_type": "single",
+  "world_size": "WORLDSIZE_STANDARD",
+  "map_script": "Assets\\Maps\\Lekmap v5.2\\LekmapPangaeaFractalv5.2.lua",
+  "map_options": {},
+  "climate": "CLIMATE_TEMPERATE",
+  "sea_level": "SEALEVEL_MEDIUM",
+  "era": "ERA_ANCIENT",
+  "game_speed": "GAMESPEED_STANDARD",
+  "handicap": "HANDICAP_AI_DEFAULT",
+  "max_turns": 0,
+  "active_player": 0,
+  "civs": [
+    { "civ": "CIVILIZATION_ROME", "leader": "LEADER_AUGUSTUS" },
+    { "civ": "CIVILIZATION_GREECE", "leader": "LEADER_ALEXANDER" },
+    { "civ": "CIVILIZATION_EGYPT", "leader": "LEADER_RAMESSES" },
+    { "civ": "CIVILIZATION_CHINA", "leader": "LEADER_WU_ZETIAN" },
+    { "civ": "CIVILIZATION_GERMANY", "leader": "LEADER_BISMARCK" },
+    { "civ": "CIVILIZATION_JAPAN", "leader": "LEADER_ODA_NOBUNAGA" }
+  ],
+  "minors": [
+    "MINOR_CIV_BRATISLAVA", "MINOR_CIV_BUDAPEST", "MINOR_CIV_GENEVA", "MINOR_CIV_RIGA",
+    "MINOR_CIV_GENOA", "MINOR_CIV_FLORENCE", "MINOR_CIV_RAGUSA", "MINOR_CIV_SYDNEY",
+    "MINOR_CIV_QUEBEC_CITY", "MINOR_CIV_BUCHAREST", "MINOR_CIV_BELGRADE", "MINOR_CIV_BRUSSELS"
+  ],
+  "game_options": {}
+}

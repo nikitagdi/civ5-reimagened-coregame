@@ -1,0 +1,205 @@
+{
+  "api": "1.0",
+  "envelope": {
+    "cause_cmd": "seq of the command that caused it (optional)",
+    "data": "kind specific fields",
+    "frame": "server frame",
+    "kind": "event kind",
+    "seq": "per-client event counter",
+    "subject": "object the event is about",
+    "turn": "game turn"
+  },
+  "events": [
+    {
+      "data": [
+        "notification"
+      ],
+      "kind": "notification",
+      "source": "notifications",
+      "subject": "player",
+      "visible_if": "own"
+    },
+    {
+      "data": [
+        "turn",
+        "pending_players",
+        "timer"
+      ],
+      "kind": "turn.begin",
+      "source": "session",
+      "subject": "player",
+      "visible_if": "own"
+    },
+    {
+      "data": [
+        "turn"
+      ],
+      "kind": "turn.end",
+      "source": "session",
+      "subject": "player",
+      "visible_if": "own"
+    },
+    {
+      "data": [
+        "type",
+        "plot"
+      ],
+      "kind": "unit.created",
+      "source": "diff",
+      "subject": "unit_ref",
+      "visible_if": "own | visible"
+    },
+    {
+      "data": [
+        "from",
+        "to"
+      ],
+      "kind": "unit.moved",
+      "source": "diff",
+      "subject": "unit_ref",
+      "visible_if": "own | visible at either end"
+    },
+    {
+      "data": [
+        "cause"
+      ],
+      "kind": "unit.destroyed",
+      "source": "diff",
+      "subject": "unit_ref",
+      "visible_if": "own | visible"
+    },
+    {
+      "data": [
+        "hp"
+      ],
+      "kind": "unit.damaged",
+      "source": "diff",
+      "subject": "unit_ref",
+      "visible_if": "own | visible"
+    },
+    {
+      "data": [
+        "promotion"
+      ],
+      "kind": "unit.promoted",
+      "source": "game_event",
+      "subject": "unit_ref",
+      "visible_if": "own | visible"
+    },
+    {
+      "data": [
+        "plot"
+      ],
+      "kind": "city.founded",
+      "source": "diff",
+      "subject": "city_ref",
+      "visible_if": "own | revealed"
+    },
+    {
+      "data": [
+        "old_owner",
+        "new_owner"
+      ],
+      "kind": "city.captured",
+      "source": "diff",
+      "subject": "city_ref",
+      "visible_if": "own | revealed"
+    },
+    {
+      "data": [
+        "plot"
+      ],
+      "kind": "city.razed",
+      "source": "diff",
+      "subject": "city_ref",
+      "visible_if": "own | revealed"
+    },
+    {
+      "data": [
+        "population"
+      ],
+      "kind": "city.pop_changed",
+      "source": "diff",
+      "subject": "city_ref",
+      "visible_if": "own | revealed"
+    },
+    {
+      "data": [
+        "terrain",
+        "owner"
+      ],
+      "kind": "plot.revealed",
+      "source": "diff",
+      "subject": "plot",
+      "visible_if": "own"
+    },
+    {
+      "data": [
+        "improvement"
+      ],
+      "kind": "plot.improved",
+      "source": "diff",
+      "subject": "plot",
+      "visible_if": "own | revealed"
+    },
+    {
+      "data": [
+        "with",
+        "war"
+      ],
+      "kind": "war.changed",
+      "source": "diff",
+      "subject": "team",
+      "visible_if": "met teams"
+    },
+    {
+      "data": [
+        "tech"
+      ],
+      "kind": "tech.acquired",
+      "source": "diff",
+      "subject": "player",
+      "visible_if": "own"
+    },
+    {
+      "data": [
+        "policy"
+      ],
+      "kind": "policy.adopted",
+      "source": "game_event",
+      "subject": "player",
+      "visible_if": "own"
+    },
+    {
+      "data": [
+        "attacker",
+        "defender",
+        "damage",
+        "interception"
+      ],
+      "kind": "combat",
+      "source": "gameplay_tap",
+      "subject": "unit_ref",
+      "visible_if": "either participant visible"
+    },
+    {
+      "data": [
+        "cmd_id",
+        "code",
+        "detail"
+      ],
+      "kind": "cmd.rejected",
+      "source": "session",
+      "subject": "command",
+      "visible_if": "own"
+    }
+  ],
+  "schema": 1,
+  "sources": {
+    "diff": "difference of two frames by stable ids, filtered on the server by the receiver's visibility",
+    "game_event": "Lua GameEvents hooks of the DLL (read-only listener)",
+    "gameplay_tap": "ICvCombatInfo1 / Gameplay* sink through an optional read-only tap (never the active-player filtered path)",
+    "notifications": "CvNotifications of the receiving player (already personal, survive save/load)",
+    "session": "API session layer"
+  }
+}

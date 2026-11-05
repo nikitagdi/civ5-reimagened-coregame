@@ -1,0 +1,19 @@
+{
+  "peers": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "dll": "ls-ghyg",
+  "comment": "Same as lek6-spectator-rel with golden-hyg (world anchor lines of that build).",
+  "name": "lek6-spectator-ghyg",
+  "scenario": "headless/scenarios/smoke/lekmod6.json",
+  "until_turn": 100,
+  "mask": [
+    "cvunitcycler.cpp",
+    "cvplot.cpp:10981|",
+    "cvplot.cpp:10982|",
+    "cvgame.cpp:10944|"
+  ]
+}

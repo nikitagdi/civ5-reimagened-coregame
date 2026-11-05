@@ -1,0 +1,17 @@
+{
+  "peers": [
+    0,
+    1
+  ],
+  "dll": "ls-ghyg",
+  "comment": "DS-0003 trap T3 in spectator mode: Italy (AI) is the active player of peer 0. The installed Lekmod_italy.lua applies the golden-age bonus only where Game.GetActivePlayer() == Italy.",
+  "name": "italy-t3-ghyg",
+  "scenario": "headless/scenarios/lockstep/lekmod6-italy.json",
+  "until_turn": 200,
+  "mask": [
+    "cvunitcycler.cpp",
+    "cvplot.cpp:10981|",
+    "cvplot.cpp:10982|",
+    "cvgame.cpp:10944|"
+  ]
+}

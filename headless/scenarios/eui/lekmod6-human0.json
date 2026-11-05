@@ -1,0 +1,61 @@
+{
+  "name": "lekmod6-human0",
+  "seeds": {
+    "sync": 2345678,
+    "map": 8765432
+  },
+  "game_type": "network",
+  "world_size": "WORLDSIZE_STANDARD",
+  "map_script": "Assets\\Maps\\Lekmap v5.2\\LekmapPangaeaFractalv5.2.lua",
+  "map_options": {},
+  "climate": "CLIMATE_TEMPERATE",
+  "sea_level": "SEALEVEL_MEDIUM",
+  "era": "ERA_ANCIENT",
+  "game_speed": "GAMESPEED_STANDARD",
+  "handicap": "HANDICAP_AI_DEFAULT",
+  "max_turns": 0,
+  "active_player": 0,
+  "civs": [
+    {
+      "civ": "CIVILIZATION_MAORI",
+      "leader": "LEADER_MC_TE_RAUPARAHA",
+      "human": true
+    },
+    {
+      "civ": "CIVILIZATION_KILWA",
+      "leader": "LEADER_MC_AL_HASSAN"
+    },
+    {
+      "civ": "CIVILIZATION_VIETNAM",
+      "leader": "LEADER_TRUNG"
+    },
+    {
+      "civ": "CIVILIZATION_TONGA",
+      "leader": "LEADER_MC_AHO_EITU"
+    },
+    {
+      "civ": "CIVILIZATION_BOLIVIA",
+      "leader": "LEADER_LEU_BELZU"
+    },
+    {
+      "civ": "CIVILIZATION_GEORGIA",
+      "leader": "LEADER_TAMAR"
+    }
+  ],
+  "minors": [
+    "MINOR_CIV_BRATISLAVA",
+    "MINOR_CIV_BUDAPEST",
+    "MINOR_CIV_GENEVA",
+    "MINOR_CIV_RIGA",
+    "MINOR_CIV_GENOA",
+    "MINOR_CIV_FLORENCE",
+    "MINOR_CIV_RAGUSA",
+    "MINOR_CIV_SYDNEY",
+    "MINOR_CIV_QUEBEC_CITY",
+    "MINOR_CIV_BUCHAREST",
+    "MINOR_CIV_BELGRADE",
+    "MINOR_CIV_BRUSSELS"
+  ],
+  "game_options": {},
+  "game_options_preset": "lekmod-mp"
+}

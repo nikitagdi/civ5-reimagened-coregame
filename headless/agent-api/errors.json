@@ -1,0 +1,158 @@
+{
+  "api": "1.0",
+  "codes": [
+    {
+      "code": "parse_error",
+      "fatal": true,
+      "meaning": "frame larger than the limit or not decodable",
+      "reaches_dll": false,
+      "step": "range"
+    },
+    {
+      "code": "unknown_command",
+      "fatal": false,
+      "meaning": "name not in the dictionary",
+      "reaches_dll": false,
+      "step": "range"
+    },
+    {
+      "code": "bad_args",
+      "fatal": false,
+      "meaning": "missing/unknown argument or wrong type",
+      "reaches_dll": false,
+      "step": "range"
+    },
+    {
+      "code": "out_of_range",
+      "fatal": false,
+      "meaning": "numeric/plot argument outside its range",
+      "reaches_dll": false,
+      "step": "range"
+    },
+    {
+      "code": "string_invalid",
+      "fatal": false,
+      "meaning": "control character or string longer than max_len",
+      "reaches_dll": false,
+      "step": "range"
+    },
+    {
+      "code": "reserved_value",
+      "fatal": false,
+      "meaning": "raw multiplexer value (GiftUnit < 0, EnhanceReligion -1, MinorGiftGold > 100000); use the dedicated command",
+      "reaches_dll": false,
+      "step": "range"
+    },
+    {
+      "code": "forbidden",
+      "fatal": false,
+      "meaning": "class server / pregame / unsupported",
+      "reaches_dll": false,
+      "step": "class"
+    },
+    {
+      "code": "role_forbidden",
+      "fatal": false,
+      "meaning": "role does not allow the command or view",
+      "reaches_dll": false,
+      "step": "class"
+    },
+    {
+      "code": "player_mismatch",
+      "fatal": false,
+      "meaning": "player argument must be the session player",
+      "reaches_dll": false,
+      "step": "player"
+    },
+    {
+      "code": "invalid_player",
+      "fatal": false,
+      "meaning": "player/team id out of range, dead or of the wrong kind",
+      "reaches_dll": false,
+      "step": "player"
+    },
+    {
+      "code": "not_found",
+      "fatal": false,
+      "meaning": "unit, city, plot or league does not exist",
+      "reaches_dll": false,
+      "step": "ownership"
+    },
+    {
+      "code": "not_owner",
+      "fatal": false,
+      "meaning": "unit or city does not belong to the session player",
+      "reaches_dll": false,
+      "step": "ownership"
+    },
+    {
+      "code": "wrong_phase",
+      "fatal": false,
+      "meaning": "turn not active, game paused, loading or resyncing",
+      "reaches_dll": false,
+      "step": "phase"
+    },
+    {
+      "code": "no_pending",
+      "fatal": false,
+      "meaning": "the decision is not pending for the session player",
+      "reaches_dll": false,
+      "step": "pending"
+    },
+    {
+      "code": "pending_decision",
+      "fatal": false,
+      "meaning": "turn.complete while an end-turn blocker is pending",
+      "reaches_dll": false,
+      "step": "pending"
+    },
+    {
+      "code": "not_applicable",
+      "fatal": false,
+      "meaning": "the DLL can* function says no; detail names it",
+      "reaches_dll": false,
+      "step": "applicability"
+    },
+    {
+      "code": "rate_limited",
+      "fatal": false,
+      "meaning": "budget of the rate class exhausted",
+      "reaches_dll": false,
+      "step": "rate"
+    },
+    {
+      "code": "api_version",
+      "fatal": true,
+      "meaning": "major version mismatch",
+      "reaches_dll": false,
+      "step": "hello"
+    },
+    {
+      "code": "data_mismatch",
+      "fatal": false,
+      "meaning": "data_hash differs (enum ids may not match)",
+      "reaches_dll": false,
+      "step": "hello"
+    },
+    {
+      "code": "not_implemented",
+      "fatal": false,
+      "meaning": "V1 host reserves api_* commands and answers this",
+      "reaches_dll": false,
+      "step": "session"
+    },
+    {
+      "code": "internal",
+      "fatal": true,
+      "meaning": "server fault; never caused by a command that was accepted",
+      "reaches_dll": false,
+      "step": "session"
+    }
+  ],
+  "format": {
+    "ack": "{cmd_id, status: 'rejected', code, detail}",
+    "error": "{ok: false, error: code, where: step, detail}  (same shape as the engine-host control channel)",
+    "rule": "a rejected command never reaches the DLL and is not written to commands.bin (only to the rejection log)"
+  },
+  "schema": 1
+}

@@ -1,0 +1,18 @@
+{
+  "lua_overlay": "headless/out/lua-overlay/italy-fixed",
+  "mask": [
+    "cvunitcycler.cpp",
+    "cvplot.cpp:10981|",
+    "cvplot.cpp:10982|",
+    "cvgame.cpp:10944|"
+  ],
+  "peers": [
+    0,
+    1
+  ],
+  "name": "italy-t3-ghyg-fixed",
+  "until_turn": 200,
+  "scenario": "headless/scenarios/lockstep/lekmod6-italy.json",
+  "comment": "Control for italy-t3-ghyg: the repo Lekmod_italy.lua (FIX-0003) through --lua-overlay.",
+  "dll": "ls-ghyg"
+}

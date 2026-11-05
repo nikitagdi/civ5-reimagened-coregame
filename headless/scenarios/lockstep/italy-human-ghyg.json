@@ -1,0 +1,38 @@
+{
+  "name": "italy-human-ghyg",
+  "comment": "Human slot smoke: Italy (slot 0) is SS_TAKEN on every peer; peer 0 has it as active player and a bot ends its turns once all AI civs are processed; at turn 2 the bot researches Pottery through the command path (sendResearch -> every peer ResponseResearch).",
+  "scenario": "headless/scenarios/lockstep/lekmod6-italy-human.json",
+  "peers": [
+    0,
+    1,
+    2
+  ],
+  "until_turn": 30,
+  "dll": "ls-ghyg",
+  "mask": [
+    "cvunitcycler.cpp",
+    "cvplot.cpp:10981|",
+    "cvplot.cpp:10982|",
+    "cvgame.cpp:10944|"
+  ],
+  "bots": [
+    {
+      "peer": 0,
+      "auto_end_turn": true
+    }
+  ],
+  "script": [
+    {
+      "method": "sendResearch",
+      "cmd": "inject",
+      "turn": 2,
+      "peer": 0,
+      "args": [
+        1,
+        0,
+        -1,
+        0
+      ]
+    }
+  ]
+}

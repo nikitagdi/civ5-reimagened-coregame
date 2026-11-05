@@ -1,0 +1,35 @@
+{
+  "name": "duel",
+  "seeds": {
+    "sync": 2222,
+    "map": 3333
+  },
+  "game_type": "single",
+  "world_size": "WORLDSIZE_DUEL",
+  "map_script": "Assets\\Maps\\Lekmap v5.2\\LekmapPangaeaFractalv5.2.lua",
+  "map_options": {},
+  "climate": "CLIMATE_TEMPERATE",
+  "sea_level": "SEALEVEL_MEDIUM",
+  "era": "ERA_ANCIENT",
+  "game_speed": "GAMESPEED_STANDARD",
+  "handicap": "HANDICAP_AI_DEFAULT",
+  "max_turns": 0,
+  "active_player": 0,
+  "civs": [
+    {
+      "civ": "CIVILIZATION_ROME",
+      "leader": "LEADER_AUGUSTUS"
+    },
+    {
+      "civ": "CIVILIZATION_GREECE",
+      "leader": "LEADER_ALEXANDER"
+    }
+  ],
+  "minors": [
+    "MINOR_CIV_BRATISLAVA",
+    "MINOR_CIV_BUDAPEST",
+    "MINOR_CIV_GENEVA",
+    "MINOR_CIV_RIGA"
+  ],
+  "game_options": {}
+}

@@ -1,0 +1,20 @@
+{
+  "mask": [
+    "cvunitcycler.cpp",
+    "cvplot.cpp:11121|",
+    "cvplot.cpp:11122|",
+    "cvgame.cpp:11069|"
+  ],
+  "peers": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "name": "lek6-spectator-rel",
+  "until_turn": 100,
+  "scenario": "headless/scenarios/smoke/lekmod6.json",
+  "dll": "ls-rel",
+  "comment": "Spectator lockstep: all slots AI, peer i has AI slot i as active player. Mask: unit cycler (UI) and CvPlot world anchor (visual, set only for the active team) at the source lines of the rel/reld build (gfix-rel 2026-10-17 10:19).",
+  "diag_dll": "ls-reld"
+}

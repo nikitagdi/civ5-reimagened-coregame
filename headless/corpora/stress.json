@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "corpus": "stress",
+  "note": "heavy late game: Large (10 civs + 20 CS) and Huge (12 civs + 24 CS), Lekmap Pangaea Fractal, 4 seeds, 200 turns",
+  "groups": [
+    { "base": "../scenarios/base/stress-huge.json", "set": { "turns": 200, "world_size": "WORLDSIZE_LARGE", "civs.count": 10, "minors.count": 20 },
+      "matrix": { "seed": [31, 32, 33, 34] } },
+    { "base": "../scenarios/base/stress-huge.json", "set": { "turns": 200, "world_size": "WORLDSIZE_HUGE", "civs.count": 12, "minors.count": 24 },
+      "matrix": { "seed": [41, 42, 43, 44] } }
+  ]
+}

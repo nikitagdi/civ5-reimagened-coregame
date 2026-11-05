@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "corpus": "realistic",
+  "note": "like the real games: Lekmap Pangaea Fractal, standard, 4/6/8 civs + 12 city-states, 4 seeds, 100 turns",
+  "base": "../scenarios/base/pangaea-std.json",
+  "set": { "turns": 100, "minors.count": 12 },
+  "matrix": { "seed": [11, 12, 13, 14], "civs.count": [4, 6, 8] }
+}

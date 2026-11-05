@@ -1,0 +1,85 @@
+{
+  "name": "stress-large10-s31",
+  "seeds": {
+    "map": 31,
+    "sync": 31296
+  },
+  "game_type": "single",
+  "world_size": "WORLDSIZE_LARGE",
+  "map_script": "Assets\\Maps\\Lekmap v5.2\\LekmapPangaeaFractalv5.2.lua",
+  "map_options": {},
+  "climate": "CLIMATE_TEMPERATE",
+  "sea_level": "SEALEVEL_MEDIUM",
+  "era": "ERA_ANCIENT",
+  "game_speed": "GAMESPEED_STANDARD",
+  "handicap": "HANDICAP_AI_DEFAULT",
+  "max_turns": 0,
+  "active_player": 0,
+  "civs": [
+    {
+      "civ": "CIVILIZATION_ROME",
+      "leader": "LEADER_AUGUSTUS"
+    },
+    {
+      "civ": "CIVILIZATION_GREECE",
+      "leader": "LEADER_ALEXANDER"
+    },
+    {
+      "civ": "CIVILIZATION_EGYPT",
+      "leader": "LEADER_RAMESSES"
+    },
+    {
+      "civ": "CIVILIZATION_CHINA",
+      "leader": "LEADER_WU_ZETIAN"
+    },
+    {
+      "civ": "CIVILIZATION_GERMANY",
+      "leader": "LEADER_BISMARCK"
+    },
+    {
+      "civ": "CIVILIZATION_JAPAN",
+      "leader": "LEADER_ODA_NOBUNAGA"
+    },
+    {
+      "civ": "CIVILIZATION_AMERICA",
+      "leader": "LEADER_WASHINGTON"
+    },
+    {
+      "civ": "CIVILIZATION_ENGLAND",
+      "leader": "LEADER_ELIZABETH"
+    },
+    {
+      "civ": "CIVILIZATION_FRANCE",
+      "leader": "LEADER_NAPOLEON"
+    },
+    {
+      "civ": "CIVILIZATION_RUSSIA",
+      "leader": "LEADER_CATHERINE"
+    }
+  ],
+  "minors": [
+    "MINOR_CIV_BRATISLAVA",
+    "MINOR_CIV_BUDAPEST",
+    "MINOR_CIV_GENEVA",
+    "MINOR_CIV_RIGA",
+    "MINOR_CIV_GENOA",
+    "MINOR_CIV_FLORENCE",
+    "MINOR_CIV_RAGUSA",
+    "MINOR_CIV_SYDNEY",
+    "MINOR_CIV_QUEBEC_CITY",
+    "MINOR_CIV_BUCHAREST",
+    "MINOR_CIV_BELGRADE",
+    "MINOR_CIV_BRUSSELS",
+    "MINOR_CIV_ALMATY",
+    "MINOR_CIV_ANTWERP",
+    "MINOR_CIV_BOGOTA",
+    "MINOR_CIV_BYBLOS",
+    "MINOR_CIV_CAHOKIA",
+    "MINOR_CIV_CAPE_TOWN",
+    "MINOR_CIV_COLOMBO",
+    "MINOR_CIV_HANOI"
+  ],
+  "game_options": {},
+  "turns": 150,
+  "note": "corpus stress/s31 as expanded by simrunner, 150 turns"
+}

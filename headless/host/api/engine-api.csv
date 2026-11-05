@@ -1,0 +1,419 @@
+family,method,class,value,exe_rva,note
+EngineUtility,QueryInterface,gen,,,
+EngineUtility,Destroy,gen,,,
+EngineUtility,getInterfaceIFace,query,NULL,,
+EngineUtility,GetScriptSystem,sim,,,HstScriptSystem (M2)
+EngineUtility,reset,sink,,,
+EngineUtility,DoMapSetup,sim,,,no-op (renderer notification)
+EngineUtility,DoTurn,sim,,,"M3: clears per-turn net state (turn complete, AI civs processed)"
+EngineUtility,IsHost,sim,,,"single mode: true; lockstep peer mode: only the host peer (exe Sync_Net_IsHost)"
+EngineUtility,IsPlayerConnected,sim,,,false: all slots AI in V1 (design: slot is SS_TAKEN)
+EngineUtility,GetModsDatabase,query,NULL,,
+EngineUtility,IsModActivated,query,false,,
+EngineUtility,IsDLCValid,query,true,,
+EngineUtility,getAssignedNetworkID,query,-1,,
+EngineUtility,IsPitbossHost,query,false,,
+EngineUtility,GetPitbossSmtpHost,sink,,,
+EngineUtility,GetPitbossSmtpLogin,sink,,,
+EngineUtility,GetPitbossSmtpPassword,sink,,,
+EngineUtility,GetPitbossEmail,sink,,,
+EngineUtility,netMessageDebugLog,sink,,,
+EngineUtility,sendPlayerInfo,sink,,,
+EngineUtility,sendGameInfo,sink,,,
+EngineUtility,sendPlayerOption,sink,,,
+EngineUtility,sendExtendedGame,sink,,,
+EngineUtility,SendFoundPantheon,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendFoundReligion,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendEnhanceReligion,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendMoveSpy,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendStageCoup,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendFaithPurchase,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendAutoMoves,sim,,,M3: no Response* in ICvNetMessageHandler3; logged once
+EngineUtility,sendTurnComplete,sim,,,"M3: marks active player; received at next slice (peer mode: outbox, received from the network)"
+EngineUtility,HasSentTurnComplete,sim,,,M3
+EngineUtility,HasReceivedTurnComplete,sim,,,M3
+EngineUtility,HasSentTurnAllComplete,sim,,,M3: = turn complete (one peer)
+EngineUtility,HasReceivedTurnAllComplete,sim,,,M3: = turn complete (one peer)
+EngineUtility,HasReceivedTurnAllCompleteFromAllPlayers,sim,,,M3: all SS_TAKEN slots complete (all-AI: true)
+EngineUtility,sendTurnUnready,sim,,,M3: true; clears active turn complete
+EngineUtility,sendPushMission,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendAutoMission,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendDoCommand,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendPushOrder,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendPopOrder,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendSwapOrder,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendPurchase,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendDoTask,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendResearch,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendChat,sink,,,
+EngineUtility,sendPing,sink,,,
+EngineUtility,sendPause,sink,,,
+EngineUtility,sendChangeWar,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendIgnoreWarning,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendPledgeMinorProtection,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendMinorNoUnitSpawning,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendLiberateMinor,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendUpdatePolicies,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendDiploVote,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendLaunch,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendAdvancedStartAction,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorCivQuestNoInterest,sim,,,M3: no Response*; logged once
+EngineUtility,sendMinorCivQuestCompleted,sim,,,M3: no Response*; logged once
+EngineUtility,sendMinorCivIntrusion,sim,,,M3: no Response*; logged once
+EngineUtility,sendMinorCivEnterTerritory,sim,,,M3: no Response*; logged once
+EngineUtility,sendBarbarianRansom,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendGiftUnit,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendReturnCivilian,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendUpdateCityCitizens,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendSellBuilding,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendRenameCity,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendRenameUnit,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendPlayerHurry,sim,,,M3: no Response*; logged once
+EngineUtility,sendSwapUnits,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendCityBuyPlot,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorPledgeProtection,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorGiftGold,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorGiftTileImprovement,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorBullyGold,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorBullyUnit,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMinorBuyout,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendGreatPersonChoice,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMayaBonusChoice,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendFaithGreatPersonChoice,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendSetCityAIFocus,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendSetCityAvoidGrowth,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendUnitSyncCheck,sink,,,
+EngineUtility,sendPlotSyncCheck,sink,,,
+EngineUtility,sendCitySyncCheck,sink,,,
+EngineUtility,sendRandomNumberGeneratorSyncCheck,sink,,,
+EngineUtility,sendPlayerSyncCheck,sink,,,
+EngineUtility,sendFromUIDiploEvent,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendNetDealAccepted,sim,,,M3: synchronous DealAI::DoAcceptedDeal on the receiver (GUESS)
+EngineUtility,sendNetDemandAccepted,sim,,,M3: synchronous DealAI::DoAcceptedDemand (GUESS)
+EngineUtility,sendTurnReminder,sink,,,
+EngineUtility,sendGoodyChoice,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendSetSwappableGreatWork,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendSwapGreatWorks,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendMoveGreatWorks,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,netDisconnect,sink,,,
+EngineUtility,sendPlayerInitialAIProcessed,sim,,,"M3: flag only (peer mode: also on the wire, no effect on delivery)"
+EngineUtility,hotJoinComplete,sink,,,
+EngineUtility,allAIProcessedThisTurn,sim,,,M3: = AI civs processed received
+EngineUtility,getMillisecsPerTurn,sim,,,GUESS 250 ms per turn slice
+EngineUtility,getSecsPerTurn,sim,,,GUESS 0.25
+EngineUtility,getTurnsPerSecond,sim,,,GUESS 4
+EngineUtility,getTurnsPerMinute,sim,,,GUESS 240 (CvGame::getMinutesPlayed divides by it)
+EngineUtility,CanAdvanceTurn,sim,,,"M3: true (single mode, no net barrier); peer mode with turn_barrier: true once the coordinator granted the turn (GUESS)"
+EngineUtility,openSlot,sink,,,
+EngineUtility,closeSlot,sink,,,
+EngineUtility,getMapScriptName,sink,,,
+EngineUtility,getTransferredMap,query,false,,
+EngineUtility,isWBMapScript,query,false,,
+EngineUtility,isWBMapNoPlayers,query,false,,
+EngineUtility,getPlayerName,sink,,,
+EngineUtility,getPlayerNameKey,sink,,,
+EngineUtility,getPlayerDisplayNickName,sink,,,
+EngineUtility,getCivDescription,sink,,,
+EngineUtility,getCivDescriptionKey,sink,,,
+EngineUtility,getCivShortDesc,sink,,,
+EngineUtility,getCivShortDescKey,sink,,,
+EngineUtility,getCivAdjective,sink,,,
+EngineUtility,getCivAdjectiveKey,sink,,,
+EngineUtility,stripSpecialCharacters,sink,,,
+EngineUtility,InitGlobals,sim,,,no-op
+EngineUtility,UninitGlobals,sim,,,no-op
+EngineUtility,SetDone,sink,,,
+EngineUtility,GetDone,query,false,,
+EngineUtility,GetAutorun,query,true,,fidelity deviation: victory -> GAMESTATE_EXTENDED (design 2.2)
+EngineUtility,GetAudioTagIndex,query,-1,,
+EngineUtility,altKey,query,false,,
+EngineUtility,shiftKey,query,false,,
+EngineUtility,ctrlKey,query,false,,
+EngineUtility,EnumerateFiles,sink,,,
+EngineUtility,ReleaseEnumeratedFilesList,sink,,,
+EngineUtility,SaveGame,sim,,,counted no-op; host checkpoints come from --checkpoint-every and the control save command (HstSession::SaveGame)
+EngineUtility,LoadGame,sink,,,
+EngineUtility,AutoSave,sim,,,counted no-op (AutoSave(true) once at slice 0); see SaveGame
+EngineUtility,saveReplay,sink,,,
+EngineUtility,QuickSave,sink,,,
+EngineUtility,QuickLoad,sink,,,
+EngineUtility,sendPbemTurn,sink,,,
+EngineUtility,getPassword,sink,,,
+EngineUtility,RestartGame,sink,,,
+EngineUtility,getPlayerOption,query,false,,
+EngineUtility,GetCacheFolderPath,sim,,,run dir + backslash (I1; CvGame::reset recreates Civ5SavedGameDatabase.db there)
+EngineUtility,GameplayEraChanged,sink,,,
+EngineUtility,GameplayBridgeChanged,sink,,,
+EngineUtility,GameplayUnitCreated,sink,,,
+EngineUtility,GameplayUnitMoved,sink,,,
+EngineUtility,GameplayUnitTeleported,sink,,,
+EngineUtility,GameplayUnitDestroyed,sink,,,
+EngineUtility,GameplayUnitDestroyedInCombat,sink,,,
+EngineUtility,GameplayUnitSetDamage,sink,,,
+EngineUtility,GameplayUnitFortify,sink,,,
+EngineUtility,GameplayUnitWork,sink,,,
+EngineUtility,GameplayUnitParadrop,sink,,,
+EngineUtility,GameplayUnitActivate,sink,,,
+EngineUtility,GameplayUnitEmbark,sink,,,
+EngineUtility,GameplayUnitGarrison,sink,,,
+EngineUtility,GameplayUnitShouldDimFlag,sink,,,
+EngineUtility,GameplayUnitMarkThreatening,sink,,,
+EngineUtility,GameplayUnitVisibility,sink,,,
+EngineUtility,GameplayUnitCombat,sink,,,
+EngineUtility,GameplayCityCreated,sink,,,
+EngineUtility,GameplayCityDestroyed,sink,,,
+EngineUtility,GameplayCityCaptured,sink,,,
+EngineUtility,GameplayCitySetDamage,sink,,,
+EngineUtility,GameplayCityPopulationChanged,sink,,,
+EngineUtility,GameplayCityCombat,sink,,,
+EngineUtility,GameplayUnitMissionEnd,sink,,,
+EngineUtility,GameplayUnitRebased,sink,,,
+EngineUtility,GameplayUnitResetAnimationState,sink,,,
+EngineUtility,GameplayTechAcquired,sink,,,
+EngineUtility,GameplayFeatureChanged,sink,,,
+EngineUtility,GameplayPlotStateChange,sink,,,
+EngineUtility,GameplayPlotIconStateChange,sink,,,
+EngineUtility,GameplayNaturalWonderRevealed,sink,,,
+EngineUtility,GameplayWallCreated,sink,,,
+EngineUtility,GameplayDoFX,sink,,,
+EngineUtility,GameplayFOWChanged,sink,,,
+EngineUtility,GameplayYieldMightHaveChanged,sink,,,
+EngineUtility,NotifyAILeadersInGame,sink,,,
+EngineUtility,NotifySpecificAILeaderInGame,sink,,,
+EngineUtility,GameplayWarStateChanged,sink,,,
+EngineUtility,DoClearDiplomacyTradeTable,sink,,,
+EngineUtility,GameplayDiplomacyAILeaderMessage,sink,,,
+EngineUtility,GameplayMetTeam,sink,,,
+EngineUtility,NetMessageDebug,sink,,,
+EngineUtility,endTurnTimerLength,query,0.0f,,
+EngineUtility,GameplayWonderCreated,sink,,,
+EngineUtility,GameplayWonderEdited,sink,,,
+EngineUtility,GameplayWonderRemoved,sink,,,
+EngineUtility,GameplaySpaceshipCreated,sink,,,
+EngineUtility,GameplaySpaceshipEdited,sink,,,
+EngineUtility,GameplaySpaceshipRemoved,sink,,,
+EngineUtility,GameplayOpenOptionsScreen,sink,,,
+EngineUtility,GameplaySearchForPediaEntry,sink,,,
+EngineUtility,GameplayOpenInfoCorner,sink,,,
+EngineUtility,GameplayWorldAnchor,sink,,,
+EngineUtility,GameplayMinimapUnitSelect,sink,,,
+EngineUtility,GameplayMinimapNotification,sink,,,
+EngineUtility,GameplayGoldenAgeStarted,sink,,,
+EngineUtility,GameplayGoldenAgeEnded,sink,,,
+EngineUtility,GameplayTurnChanged,sink,,,
+EngineUtility,GameplayActivePlayerChanged,sink,,,
+EngineUtility,PublishActivePlayer,sink,,,
+EngineUtility,PublishNewGameTurn,sink,,,
+EngineUtility,UnlockAchievement,sink,,,
+EngineUtility,IsAchievementUnlocked,query,false,,
+EngineUtility,GetSteamStat,query,false,,
+EngineUtility,SetSteamStat,sink,,,
+EngineUtility,IncrementSteamStat,sink,,,
+EngineUtility,IncrementSteamStatAndUnlock,sink,,,
+EngineUtility,SetAdvisorBadAttackInterrupt,sink,,,
+EngineUtility,GetAdvisorBadAttackInterrupt,query,false,,
+EngineUtility,SetAdvisorCityAttackInterrupt,sink,,,
+EngineUtility,GetAdvisorCityAttackInterrupt,query,false,,
+EngineUtility,GetTutorialLevel,query,0,,
+EngineUtility,ReseatPlayer,sink,,,
+EngineUtility,IsNetPlayer,query,false,,
+EngineUtility,SendGameDoTurnProcessed,sink,,,
+EngineUtility,RecordVictoryInformation,sink,,,
+EngineUtility,RecordLeaderboardScore,sink,,,
+EngineUtility,TunerConnected,query,false,,
+EngineUtility,TunerEverConnected,query,false,,
+EngineUtility,PublishEraChanges,sink,,,
+EngineUtility,RecordGameCoreMessages,sink,,,
+EngineUtility,IsProcessingGameCoreMessages,query,false,,
+EngineUtility,GetGameCoreLock,query,,,
+EngineUtility,ReleaseGameCoreLock,query,,,
+EngineUtility,TryGameCoreLock,query,true,,
+EngineUtility,HasGameCoreLock,query,false,,false: LuaSupport::CallHook skips release/reacquire
+EngineUtility,IsGameCoreThread,query,true,,
+EngineUtility,IsGameCoreExecuting,query,false,,
+EngineUtility,ReseatConnectedPlayer,query,false,,
+EngineUtility,SendLeagueVoteEnact,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendLeagueVoteRepeal,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendLeagueVoteAbstain,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendLeagueProposeEnact,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendLeagueProposeRepeal,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,SendLeagueEditName,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,sendChangeIdeology,sim,,,"M3 loopback: queued, delivered to ICvNetMessageHandler3 before the next Update"
+EngineUtility,TradeVisuals_NewRoute,sink,,,
+EngineUtility,TradeVisuals_UpdateRouteDirection,sink,,,
+EngineUtility,TradeVisuals_DestroyRoute,sink,,,
+EngineUtility,TradeVisuals_ActivatePopupRoute,sink,,,
+EngineUtility,TradeVisuals_DeactivatePopupRoute,sink,,,
+EngineUtility,FlushTurnReminders,sink,,,
+EngineUtility,BeginSendBundle,sink,,,
+EngineUtility,EndSendBundle,sink,,,
+EngineUtility,IsPlayerKicked,query,false,,
+EngineUtility,IsPlayerHotJoining,query,false,,
+EngineUtility,allAICivsProcessedThisTurn,sim,,,"M3: SendAICivsProcessed received (next slice); peer mode: received from every peer"
+EngineUtility,SendAICivsProcessed,sim,,,M3: queued; received at next slice
+EngineUtility,HasReceivedAICivsProcessed,sim,,,"M3; peer mode: per sending peer (its active player)"
+EngineUtility,GetNumAICivsProcessed,sim,,,"M3: 0/1; peer mode: number of peers"
+EngineUtility,VerifyPlayerSlot,sink,,,
+EngineUtility,ShouldValidateGameDatabase,query,false,,
+EngineUtility,GetEvaluatedMapScriptPath,sim,,,not implemented yet (CvDllNetInitInfo / WB loader only)
+UserInterface,QueryInterface,gen,,,
+UserInterface,Destroy,gen,,,
+UserInterface,lookAtSelectionPlot,sink,,,
+UserInterface,CanDoInterfaceMode,sink,,,
+UserInterface,getSelectionPlot,query,NULL,,
+UserInterface,GetHeadSelectedUnit,query,NULL,,
+UserInterface,DoAutoUnitCycle,sink,,,
+UserInterface,GetScratchDeal,query,NULL,,
+UserInterface,SetScratchDeal,sink,,,
+UserInterface,isPopupUp,query,false,,
+UserInterface,isPopupQueued,query,false,,
+UserInterface,isDiploOrPopupWaiting,query,false,,
+UserInterface,isDiploActive,query,false,,
+UserInterface,IsUnitSelected,sink,,,
+UserInterface,selectUnit,sink,,,
+UserInterface,selectGroup,sink,,,
+UserInterface,selectAll,sink,,,
+UserInterface,RemoveFromSelectionList,sink,,,
+UserInterface,makeSelectionListDirty,sink,,,
+UserInterface,CanSelectionListFound,sink,,,
+UserInterface,getLastSelectedUnit,sink,,,
+UserInterface,setLastSelectedUnit,sink,,,
+UserInterface,changePlotListColumn,sink,,,
+UserInterface,getOriginalPlotIndex,sink,,,
+UserInterface,ClearSelectionList,sink,,,
+UserInterface,InsertIntoSelectionList,sink,,,
+UserInterface,GetLengthSelectionList,sink,,,
+UserInterface,VisuallyDeselectUnit,sink,,,
+UserInterface,GetSelectedUnits,sink,,,
+UserInterface,selectCity,sink,,,
+UserInterface,selectLookAtCity,sink,,,
+UserInterface,addSelectedCity,sink,,,
+UserInterface,clearSelectedCities,sink,,,
+UserInterface,isCitySelected,sink,,,
+UserInterface,getHeadSelectedCity,sink,,,
+UserInterface,isCitySelection,sink,,,
+UserInterface,nextSelectedCitiesNode,sink,,,
+UserInterface,headSelectedCitiesNode,sink,,,
+UserInterface,updateCityScreen,sink,,,
+UserInterface,AddMessage,sink,,,
+UserInterface,AddUnitMessage,sink,,,
+UserInterface,AddPlotMessage,sink,,,
+UserInterface,AddCityMessage,sink,,,
+UserInterface,clearEventMessages,sink,,,
+UserInterface,AddPopup,sink,,,
+UserInterface,AddPopupText,sink,,,
+UserInterface,PublishActivePlayerTurnStart,sink,,,
+UserInterface,PublishActivePlayerTurnEnd,sink,,,
+UserInterface,PublishRemotePlayerTurnEnd,sink,,,
+UserInterface,PublishPlayerTurnStatus,sink,,,
+UserInterface,AddNotification,sink,,,
+UserInterface,RemoveNotification,sink,,,
+UserInterface,ActivateNotification,sink,,,
+UserInterface,getCycleSelectionCounter,sink,,,
+UserInterface,setCycleSelectionCounter,sink,,,
+UserInterface,changeCycleSelectionCounter,sink,,,
+UserInterface,IsSelectedUnitRevealingNewPlots,sink,,,
+UserInterface,SetSelectedUnitRevealingNewPlots,sink,,,
+UserInterface,getEndTurnCounter,sink,,,
+UserInterface,setEndTurnCounter,sink,,,
+UserInterface,changeEndTurnCounter,sink,,,
+UserInterface,isCombatFocus,sink,,,
+UserInterface,setCombatFocus,sink,,,
+UserInterface,isDirty,sink,,,
+UserInterface,setDirty,sink,,,
+UserInterface,makeInterfaceDirty,sink,,,
+UserInterface,updateCursorType,sink,,,
+UserInterface,lookAt,sink,,,
+UserInterface,centerCamera,sink,,,
+UserInterface,releaseLockedCamera,sink,,,
+UserInterface,isFocusedWidget,query,false,,
+UserInterface,isFocused,query,false,,
+UserInterface,refreshYieldVisibleMode,sink,,,
+UserInterface,toggleYieldVisibleMode,sink,,,
+UserInterface,toggleResourceVisibleMode,sink,,,
+UserInterface,toggleGridVisibleMode,sink,,,
+UserInterface,getOriginalPlotCount,sink,,,
+UserInterface,isCityScreenUp,query,false,,
+UserInterface,setCityScreenUp,sink,,,
+UserInterface,setNoSelectionListCycle,sink,,,
+UserInterface,canEndTurn,query,true,,
+UserInterface,UpdateEndTurn,sink,,,
+UserInterface,SetEndTurnBlockingChanged,sink,,,
+UserInterface,setInterfaceMode,sink,,,
+UserInterface,getInterfaceMode,sink,,,
+UserInterface,GetInterfaceModeValue,sink,,,
+UserInterface,setFlashing,sink,,,
+UserInterface,isFlashing,sink,,,
+UserInterface,setDiplomacyLocked,sink,,,
+UserInterface,isDiplomacyLocked,sink,,,
+UserInterface,setCanEndTurn,sink,,,
+UserInterface,updateEndTurnTimer,sink,,,
+UserInterface,waitingForRemotePlayers,query,false,,
+UserInterface,isHasMovedUnit,sink,,,
+UserInterface,setHasMovedUnit,sink,,,
+UserInterface,isForcePopup,sink,,,
+UserInterface,setForcePopup,sink,,,
+UserInterface,lookAtCityOffset,sink,,,
+UserInterface,getPlotListColumn,sink,,,
+UserInterface,verifyPlotListColumn,sink,,,
+UserInterface,getPlotListOffset,sink,,,
+UserInterface,exitingToMainMenu,sink,,,
+UserInterface,isInAdvancedStart,query,false,,
+UserInterface,setInAdvancedStart,sink,,,
+UserInterface,setBusy,sink,,,
+UserInterface,UpdateCountryBorder,sink,,,
+UserInterface,UpdateAllCountryBorders,sink,,,
+UserInterface,DebugCityRoutePlots,sink,,,
+UserInterface,DirectionAction,sink,,,
+UserInterface,SetSpecificCityInfoDirty,sink,,,
+UserInterface,AddHexToUIRange,sink,,,
+UserInterface,OpenEndGameMenu,sink,,,
+UserInterface,doTurn,sink,,,
+UserInterface,IsOptionNoRewardPopups,query,true,,
+UserInterface,IsAIRequestingConcessions,sink,,,
+UserInterface,SetAIRequestingConcessions,sink,,,
+UserInterface,IsHumanMakingDemand,sink,,,
+UserInterface,SetHumanMakingDemand,sink,,,
+UserInterface,GetStartDiploRepeatCount,sink,,,
+UserInterface,SetStartDiploRepeatCount,sink,,,
+UserInterface,ChangeStartDiploRepeatCount,sink,,,
+UserInterface,GetOfferTradeRepeatCount,sink,,,
+UserInterface,SetOfferTradeRepeatCount,sink,,,
+UserInterface,ChangeOfferTradeRepeatCount,sink,,,
+UserInterface,OpenTechTree,sink,,,
+UserInterface,OpenPlayerDealScreen,sink,,,
+UserInterface,IsPolicyNotificationSeen,query,true,,
+UserInterface,SetPolicyNotificationSeen,sink,,,
+UserInterface,IsForceDiscussionModeQuitOnBack,sink,,,
+UserInterface,SetForceDiscussionModeQuitOnBack,sink,,,
+UserInterface,SetTempString,sink,,,
+UserInterface,PublishEndTurnDirty,sink,,,
+UserInterface,AddDeferredWonderCommand,sink,,,
+UserInterface,IsLoadedGame,query,false,,
+UserInterface,ToggleStrategicView,sink,,,
+UserInterface,IsPopupQueueEmpty,query,true,,
+UserInterface,IsModalStackEmpty,query,true,,
+UserInterface,IsDontShowPopups,query,true,,
+UserInterface,SetDontShowPopups,sink,,,
+UserInterface,IsDealInTransit,query,false,,
+UserInterface,SetDealInTransit,sink,,,
+UserInterface,IsSPAutoEndTurnEnabled,query,true,,
+UserInterface,SetSPAutoEndTurnEnabled,sink,,,
+UserInterface,IsMPAutoEndTurnEnabled,query,true,,
+UserInterface,SetMPAutoEndTurnEnabled,sink,,,
+UserInterface,IsSPQuickCombatEnabled,query,true,,
+UserInterface,SetSPQuickCombatEnabled,sink,,,
+UserInterface,IsMPQuickCombatEnabled,query,true,,
+UserInterface,SetMPQuickCombatEnabled,sink,,,
+UserInterface,PublishRemotePlayerTurnStart,sink,,,
+ScriptSystem,CreateLuaThread,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,FreeLuaThread,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,LoadFile,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CreateArgs,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,DestroyArgs,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CallCFunction,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CallFunction,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CallHook,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CallAccumulator,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CallTestAll,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)
+ScriptSystem,CallTestAny,sim,,,HstScriptSystem (M2); Call* value semantics GUESS (design R4)

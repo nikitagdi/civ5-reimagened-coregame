@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "corpus": "starter",
+  "note": "smoke corpus: Lekmap Pangaea 6 civs standard, 2-civ duel, vanilla Continents 8 civs; 20 turns each",
+  "groups": [
+    { "base": "../scenarios/base/pangaea-std.json", "set": { "turns": 20 } },
+    { "base": "../scenarios/base/duel.json", "set": { "turns": 20 } },
+    { "base": "../scenarios/base/continents8.json", "set": { "turns": 20 } }
+  ]
+}

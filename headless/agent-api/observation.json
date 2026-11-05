@@ -1,0 +1,810 @@
+{
+  "api": "1.0",
+  "delta": {
+    "cursor": "frame number of the last state sent to this client",
+    "remove": "ids of vanished objects",
+    "snapshot": "sent on connect, on request and when the cursor is lost; every response carries state_hash",
+    "upsert": "objects by stable id (units, cities, notifications, deals) and changed plots"
+  },
+  "parts": [
+    {
+      "fields": [
+        {
+          "bin": "u16",
+          "name": "turn",
+          "source": "CvGame::getGameTurn()",
+          "type": "int",
+          "visible": "always"
+        },
+        {
+          "bin": "u8",
+          "name": "era",
+          "source": "CvTeam::GetCurrentEra() of the player's team",
+          "type": "enum:Eras",
+          "visible": "always"
+        },
+        {
+          "bin": "u8",
+          "name": "speed",
+          "source": "CvGame::getGameSpeedType()",
+          "type": "enum:GameSpeeds",
+          "visible": "always"
+        },
+        {
+          "bin": "bitset",
+          "name": "options",
+          "source": "CvGame::isOption(name) for every GameOption",
+          "type": "map:string->bool",
+          "visible": "always"
+        },
+        {
+          "bin": "u8[]",
+          "name": "victories",
+          "source": "CvGame::isVictoryValid(victory)",
+          "type": "list:enum:Victories",
+          "visible": "always"
+        },
+        {
+          "bin": "u8",
+          "name": "turn_mode",
+          "source": "pregame turn mode (simultaneous / dynamic / sequential)",
+          "type": "enum:TurnModes",
+          "visible": "always"
+        },
+        {
+          "bin": "f32,f32,u8",
+          "name": "timer",
+          "source": "CvGame::getTimeElapsed(), getMaxTurnLen(), m_bIsPaused",
+          "type": "obj{elapsed,max,paused}",
+          "visible": "always"
+        },
+        {
+          "bin": "u8[32]",
+          "name": "state_hash",
+          "source": "determinism-lab 'turn' level digest",
+          "type": "string(hex)",
+          "visible": "always"
+        }
+      ],
+      "name": "game",
+      "source": "CvGame",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "i32",
+          "name": "gold",
+          "source": "CvPlayer::GetTreasury()->GetGold()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "gold_per_turn",
+          "source": "CvPlayer::calculateGoldRate()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "science_per_turn",
+          "source": "CvPlayer::GetScience()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "culture",
+          "source": "CvPlayer::getJONSCulture()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "culture_per_turn",
+          "source": "CvPlayer::GetTotalJONSCulturePerTurn()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "faith",
+          "source": "CvPlayer::GetFaith()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "faith_per_turn",
+          "source": "CvPlayer::GetTotalFaithPerTurn()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "happiness",
+          "source": "CvPlayer::GetExcessHappiness()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i16",
+          "name": "golden_age_turns",
+          "source": "CvPlayer::getGoldenAgeTurns()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "u16[]",
+          "name": "policies",
+          "source": "CvPlayerPolicies::HasPolicy(policy)",
+          "type": "list:enum:Policies",
+          "visible": "own"
+        },
+        {
+          "bin": "u8[]",
+          "name": "branches",
+          "source": "CvPlayerPolicies::IsPolicyBranchUnlocked(branch)",
+          "type": "list:enum:PolicyBranches",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "next_policy_cost",
+          "source": "CvPlayer::getNextPolicyCost()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i16",
+          "name": "free_policies",
+          "source": "CvPlayer::GetNumFreePolicies()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "u16[]",
+          "name": "techs",
+          "source": "CvTeamTechs::HasTech(tech) of the player's team",
+          "type": "list:enum:Technologies",
+          "visible": "own"
+        },
+        {
+          "bin": "u16[]",
+          "name": "research_queue",
+          "source": "CvPlayerTechs (current research and queue)",
+          "type": "list:enum:Technologies",
+          "visible": "own"
+        },
+        {
+          "bin": "i16",
+          "name": "free_techs",
+          "source": "CvPlayer::GetNumFreeTechs()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i16",
+          "name": "free_great_people",
+          "source": "CvPlayer::GetNumFreeGreatPeople()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i16",
+          "name": "faith_great_people",
+          "source": "CvPlayer::GetNumFaithGreatPeople()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "i16",
+          "name": "maya_boosts",
+          "source": "CvPlayer::GetNumMayaBoosts()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "struct",
+          "name": "religion",
+          "source": "CvPlayerReligions::GetReligionCreatedByPlayer(), pantheon, beliefs",
+          "type": "obj",
+          "visible": "own"
+        },
+        {
+          "bin": "i8",
+          "name": "ideology",
+          "source": "CvPlayerPolicies::GetLateGamePolicyTree()",
+          "type": "enum:PolicyBranches|null",
+          "visible": "own"
+        },
+        {
+          "bin": "struct[]",
+          "name": "spies",
+          "source": "CvPlayer::GetEspionage() spy list",
+          "type": "list:obj",
+          "visible": "own"
+        },
+        {
+          "bin": "struct[]",
+          "name": "trade_routes",
+          "source": "CvPlayer::GetTrade()",
+          "type": "list:obj",
+          "visible": "own"
+        },
+        {
+          "bin": "i32",
+          "name": "score",
+          "source": "CvPlayer::GetScore()",
+          "type": "int",
+          "visible": "own"
+        }
+      ],
+      "name": "me",
+      "source": "CvPlayer of the session player",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "u8",
+          "name": "id",
+          "source": "CvPlayer::GetID()",
+          "type": "player",
+          "visible": "met"
+        },
+        {
+          "bin": "u8",
+          "name": "team",
+          "source": "CvPlayer::getTeam()",
+          "type": "team",
+          "visible": "met"
+        },
+        {
+          "bin": "u8",
+          "name": "civ",
+          "source": "CvPlayer::getCivilizationType()",
+          "type": "enum:Civilizations",
+          "visible": "met"
+        },
+        {
+          "bin": "u8",
+          "name": "alive",
+          "source": "CvPlayer::isAlive()",
+          "type": "bool",
+          "visible": "met"
+        },
+        {
+          "bin": "u8",
+          "name": "human",
+          "source": "CvPlayer::isHuman()",
+          "type": "bool",
+          "visible": "met"
+        },
+        {
+          "bin": "u8",
+          "name": "at_war",
+          "source": "CvTeam::isAtWar(team of the viewer)",
+          "type": "bool",
+          "visible": "met"
+        },
+        {
+          "bin": "i32",
+          "name": "score",
+          "source": "CvPlayer::GetScore() (the public score only)",
+          "type": "int",
+          "visible": "met"
+        },
+        {
+          "bin": "struct",
+          "name": "diplomacy",
+          "source": "CvDiplomacyAI approach/attitude as shown on the diplomacy screen",
+          "type": "obj",
+          "visible": "met"
+        }
+      ],
+      "name": "players",
+      "note": "Only players the viewer's team has met (CvTeam::isHasMet).",
+      "source": "CvPlayer/CvTeam of met players",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "u8,u8",
+          "name": "x,y",
+          "source": "CvPlot::getX(), getY()",
+          "type": "plot",
+          "visible": "revealed"
+        },
+        {
+          "bin": "u8",
+          "name": "terrain",
+          "source": "CvPlot::getTerrainType()",
+          "type": "enum:Terrains",
+          "visible": "revealed"
+        },
+        {
+          "bin": "i8",
+          "name": "feature",
+          "source": "CvPlot::getFeatureType()",
+          "type": "enum:Features",
+          "visible": "revealed"
+        },
+        {
+          "bin": "i8",
+          "name": "resource",
+          "source": "CvPlot::getResourceType(viewer team) (tech-gated)",
+          "type": "enum:Resources|null",
+          "visible": "revealed"
+        },
+        {
+          "bin": "i8",
+          "name": "improvement",
+          "source": "CvPlot::getRevealedImprovementType(viewer team)",
+          "type": "enum:Improvements|null",
+          "visible": "revealed"
+        },
+        {
+          "bin": "i8",
+          "name": "route",
+          "source": "CvPlot::getRevealedRouteType(viewer team)",
+          "type": "enum:Routes|null",
+          "visible": "revealed"
+        },
+        {
+          "bin": "i8",
+          "name": "owner",
+          "source": "CvPlot::getRevealedOwner(viewer team)",
+          "type": "player|null",
+          "visible": "revealed"
+        },
+        {
+          "bin": "u8",
+          "name": "visible",
+          "source": "CvPlot::isVisible(viewer team)",
+          "type": "bool",
+          "visible": "revealed"
+        }
+      ],
+      "name": "plots",
+      "note": "Only plots with isRevealed(viewer team); unrevealed plots are absent, not null.",
+      "source": "CvPlot revealed accessors",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "u16,u8",
+          "name": "id,owner",
+          "source": "CvUnit::GetID(), getOwner()",
+          "type": "unit_ref",
+          "visible": "own | visible"
+        },
+        {
+          "bin": "u16",
+          "name": "type",
+          "source": "CvUnit::getUnitType()",
+          "type": "enum:Units",
+          "visible": "own | visible"
+        },
+        {
+          "bin": "u8,u8",
+          "name": "x,y",
+          "source": "CvUnit::getX(), getY()",
+          "type": "plot",
+          "visible": "own | visible"
+        },
+        {
+          "bin": "u8",
+          "name": "hp",
+          "source": "100 - CvUnit::getDamage()",
+          "type": "int",
+          "visible": "own | visible"
+        },
+        {
+          "bin": "i16",
+          "name": "moves",
+          "source": "CvUnit::movesLeft()",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "u16[]",
+          "name": "promotions",
+          "source": "CvUnit::isHasPromotion(promotion)",
+          "type": "list:enum:Promotions",
+          "visible": "own"
+        },
+        {
+          "bin": "struct[]",
+          "name": "orders",
+          "source": "CvUnit mission queue (CvUnitMission)",
+          "type": "list:obj",
+          "visible": "own"
+        }
+      ],
+      "name": "units",
+      "note": "Foreign units only on visible plots and not invisible to the viewer's team (CvUnit::isInvisible).",
+      "source": "CvPlayer::firstUnit/nextUnit",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "u16,u8",
+          "name": "id,owner",
+          "source": "CvCity::GetID(), getOwner()",
+          "type": "city_ref",
+          "visible": "own | revealed"
+        },
+        {
+          "bin": "struct",
+          "name": "name,x,y",
+          "source": "CvCity::getName(), getX(), getY()",
+          "type": "obj",
+          "visible": "own | revealed"
+        },
+        {
+          "bin": "u8",
+          "name": "population",
+          "source": "CvCity::getPopulation()",
+          "type": "int",
+          "visible": "own | revealed"
+        },
+        {
+          "bin": "u16,u16",
+          "name": "defense",
+          "source": "CvCity::getDamage(), GetStrengthValue()",
+          "type": "obj{hp,strength}",
+          "visible": "own | revealed"
+        },
+        {
+          "bin": "struct[]",
+          "name": "queue",
+          "source": "CvCity order queue (getOrderQueueLength() entries)",
+          "type": "list:obj",
+          "visible": "own"
+        },
+        {
+          "bin": "u16[]",
+          "name": "buildings",
+          "source": "CvCity::GetCityBuildings()",
+          "type": "list:enum:Buildings",
+          "visible": "own"
+        },
+        {
+          "bin": "struct",
+          "name": "citizens",
+          "source": "CvCity::GetCityCitizens() focus and worked plots",
+          "type": "obj",
+          "visible": "own"
+        }
+      ],
+      "name": "cities",
+      "note": "Foreign cities on revealed plots: banner-level information only.",
+      "source": "CvPlayer::firstCity/nextCity",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "struct[]",
+          "name": "blocking",
+          "source": "table 'pending' of this document",
+          "type": "list:obj{type,args}",
+          "visible": "own"
+        }
+      ],
+      "name": "pending",
+      "source": "see 'pending' table",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "u32",
+          "name": "id",
+          "source": "CvNotifications lookup index",
+          "type": "int",
+          "visible": "own"
+        },
+        {
+          "bin": "u16",
+          "name": "type",
+          "source": "CvNotifications::GetNotificationType",
+          "type": "enum:NotificationTypes",
+          "visible": "own"
+        },
+        {
+          "bin": "str,str",
+          "name": "summary,text",
+          "source": "CvNotifications::GetNotificationSummary/GetNotificationStr",
+          "type": "string,string",
+          "visible": "own"
+        },
+        {
+          "bin": "i32x4",
+          "name": "x,y,data1,data2",
+          "source": "notification payload",
+          "type": "int,int,int,int",
+          "visible": "own"
+        },
+        {
+          "bin": "u8",
+          "name": "dismissed",
+          "source": "CvNotifications dismissed flag",
+          "type": "bool",
+          "visible": "own"
+        }
+      ],
+      "name": "notifications",
+      "source": "CvNotifications of the session player",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "struct[]",
+          "name": "deals",
+          "source": "CvGameDeals current/proposed deals that involve the viewer",
+          "type": "list:obj",
+          "visible": "own"
+        },
+        {
+          "bin": "struct[]",
+          "name": "ai_offers",
+          "source": "pending AI offers/demands to the viewer (OPEN: popup state, OQ 7/8)",
+          "type": "list:obj",
+          "visible": "own"
+        }
+      ],
+      "name": "deals",
+      "source": "CvGameDeals",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "struct",
+          "name": "league",
+          "source": "CvGameLeagues active league: members, proposals, votes, host",
+          "type": "obj|null",
+          "visible": "member"
+        }
+      ],
+      "name": "league",
+      "source": "CvGameLeagues",
+      "view": "player"
+    },
+    {
+      "fields": [
+        {
+          "bin": "bitset",
+          "name": "unit",
+          "source": "CvUnitMission::CanStartMission / CvUnit::canDoCommand per mission/command, on request",
+          "type": "list:enum:Missions",
+          "visible": "own, on request"
+        },
+        {
+          "bin": "bitsets",
+          "name": "city",
+          "source": "CvCity::canTrain/canConstruct/canCreate/canMaintain, IsCanPurchase, CanBuyPlot, on request",
+          "type": "obj",
+          "visible": "own, on request"
+        },
+        {
+          "bin": "bitsets",
+          "name": "player",
+          "source": "CvPlayerTechs::CanResearch, CvPlayer::canAdoptPolicy, CanUnlockPolicyBranch, on request",
+          "type": "obj",
+          "visible": "own, on request"
+        }
+      ],
+      "name": "legal",
+      "note": "Expensive: only for the objects named in observe.legal_for.",
+      "source": "can* functions",
+      "view": "player"
+    }
+  ],
+  "pending": [
+    {
+      "args": "policies adoptable now (CvPlayer::canAdoptPolicy) and unlockable branches",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_POLICY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_POLICY"
+    },
+    {
+      "args": "researchable techs (CvPlayerTechs::CanResearch)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_RESEARCH"
+    },
+    {
+      "args": "city id from the notification and its legal orders (canTrain/canConstruct/canCreate/canMaintain)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_PRODUCTION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_PRODUCTION"
+    },
+    {
+      "args": "ready units (CvPlayer::GetFirstReadyUnit, hasReadyUnit)",
+      "kind": "unit_check",
+      "non_active": "CvGame::updateTestEndTurn runs only for the active player, but its inputs are const CvPlayer/CvUnit queries valid for any player",
+      "open": null,
+      "source": "CvPlayer::hasReadyUnit() and canHold(plot) in CvGame::updateTestEndTurn (CvGame.cpp:2366)",
+      "type": "ENDTURN_BLOCKING_UNITS"
+    },
+    {
+      "args": "candidate players for diplo.vote",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_DIPLO_VOTE in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_DIPLO_VOTE"
+    },
+    {
+      "args": "-",
+      "kind": "unused",
+      "non_active": "-",
+      "open": "never assigned in v34.15: no source, cannot block",
+      "source": "no code assigns this type in v34.15",
+      "type": "ENDTURN_BLOCKING_MINOR_QUEST"
+    },
+    {
+      "args": "free tech count (GetNumFreeTechs) and techs with CanResearchForFree",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_FREE_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_FREE_TECH"
+    },
+    {
+      "args": "the ready unit that cannot hold its plot (CvUnit::canHold)",
+      "kind": "unit_check",
+      "non_active": "CvGame::updateTestEndTurn runs only for the active player, but its inputs are const CvPlayer/CvUnit queries valid for any player",
+      "open": null,
+      "source": "CvPlayer::hasReadyUnit() and !GetFirstReadyUnit()->canHold(plot) in CvGame::updateTestEndTurn (CvGame.cpp:2362)",
+      "type": "ENDTURN_BLOCKING_STACKED_UNITS"
+    },
+    {
+      "args": "-",
+      "kind": "unused",
+      "non_active": "-",
+      "open": "never assigned in v34.15: no source, cannot block",
+      "source": "no code assigns this type in v34.15",
+      "type": "ENDTURN_BLOCKING_UNIT_NEEDS_ORDERS"
+    },
+    {
+      "args": "promotable units and their legal promotions (CvUnit::canPromote)",
+      "kind": "unit_check",
+      "non_active": "CvGame::updateTestEndTurn runs only for the active player, but its inputs are const CvPlayer/CvUnit queries valid for any player",
+      "open": "also depends on GAMEOPTION_PROMOTION_SAVING (a game option, readable)",
+      "source": "CvPlayer::hasPromotableUnit() in CvGame::updateTestEndTurn (CvGame.cpp:2352)",
+      "type": "ENDTURN_BLOCKING_UNIT_PROMOTION"
+    },
+    {
+      "args": "the city that can shoot (notification data)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": "blocks only if the UI auto-end-turn preference is on (IsMPAutoEndTurnEnabled/IsSPAutoEndTurnEnabled, UI state of the active player): make it a session option, do not read the UI",
+      "source": "NOTIFICATION_CITY_RANGE_ATTACK in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_CITY_RANGE_ATTACK"
+    },
+    {
+      "args": "free policy count (GetNumFreePolicies) and adoptable policies",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_FREE_POLICY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_FREE_POLICY"
+    },
+    {
+      "args": "free great person count (GetNumFreeGreatPeople) and choosable great people",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_FREE_GREAT_PERSON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_FREE_ITEMS"
+    },
+    {
+      "args": "available pantheon beliefs (CvGameReligions::IsPantheonBeliefAvailable)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_FOUND_PANTHEON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_FOUND_PANTHEON"
+    },
+    {
+      "args": "holy city from the notification (x, y), free religions and beliefs",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_FOUND_RELIGION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_FOUND_RELIGION"
+    },
+    {
+      "args": "enhance-able religion and available beliefs",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_ENHANCE_RELIGION in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_ENHANCE_RELIGION"
+    },
+    {
+      "args": "steal-able techs per target (CvPlayerEspionage stealable list)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_SPY_STOLE_TECH in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_STEAL_TECH"
+    },
+    {
+      "args": "Maya boost count (GetNumMayaBoosts) and choosable great people",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_MAYA_LONG_COUNT in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_MAYA_LONG_COUNT"
+    },
+    {
+      "args": "faith great person count (GetNumFaithGreatPeople) and choosable great people",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_FAITH_GREAT_PERSON in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_FAITH_GREAT_PERSON"
+    },
+    {
+      "args": "available reformation beliefs (CvGameReligions::CanAddReformationBelief)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_ADD_REFORMATION_BELIEF in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_ADD_REFORMATION_BELIEF"
+    },
+    {
+      "args": "proposable resolutions (CvLeague::CanProposeEnact/CanProposeRepeal)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_LEAGUE_CALL_FOR_PROPOSALS in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_LEAGUE_CALL_FOR_PROPOSALS"
+    },
+    {
+      "args": "archaeology choices of the pending dig",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_CHOOSE_ARCHAEOLOGY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_CHOOSE_ARCHAEOLOGY"
+    },
+    {
+      "args": "votable resolutions and the player's votes (CvLeague::CanVote)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_LEAGUE_CALL_FOR_VOTES in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_LEAGUE_CALL_FOR_VOTES"
+    },
+    {
+      "args": "selectable ideology branches (CanUnlockPolicyBranch)",
+      "kind": "notification",
+      "non_active": "computed from the player's own CvNotifications list: no active-player or UI dependency",
+      "open": null,
+      "source": "NOTIFICATION_CHOOSE_IDEOLOGY in CvNotifications::GetEndTurnBlockedType (CvNotifications.cpp:621)",
+      "type": "ENDTURN_BLOCKING_CHOOSE_IDEOLOGY"
+    }
+  ],
+  "schema": 1,
+  "views": {
+    "full": "the whole authoritative state; roles observer/admin only, never role 'player'",
+    "player": "what the session player would see in the real game (fog of war applied on the server); default for role 'player'"
+  }
+}

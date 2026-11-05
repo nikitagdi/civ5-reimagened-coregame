@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "corpus": "early",
+  "note": "early turns without degradation: 6 civs, Lekmap Pangaea standard, 6 seeds x 20/50 turns",
+  "base": "../scenarios/base/pangaea-std.json",
+  "matrix": { "seed": [101, 102, 103, 104, 105, 106], "turns": [20, 50] }
+}
