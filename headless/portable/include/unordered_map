@@ -1,0 +1,3 @@
+// Portable <unordered_map>: deterministic ordered stand-ins (lekmod_portable/det_containers.h).
+#pragma once
+#include "lekmod_portable/det_containers.h"

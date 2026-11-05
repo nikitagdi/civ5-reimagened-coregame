@@ -1,0 +1,145 @@
+# GameInfo / DB.Query reference: the GI| lines civhost printed for gameinfo_probe.lua (scenario `gameinfo` compares them).
+# civhost = headless\out\host\Release\civhost.exe (original CvGameDatabase PushDatabase, golden
+# CvGameCore_Expansion2.dll, gameplay DB of the oracle cache, the same DB as the game-data export db/gameplay.db).
+# Regenerate after any change of gameinfo_probe.lua (Windows; OUT = an empty temp folder, OVERLAY = a folder holding only the probe):
+#   civhost.exe --stage map --scenario civhost_scenario.json --lua-overlay OVERLAY --out OUT
+#   then keep the lines of OUT\lua.log that start with "gameinfo_probe: GI|", without that prefix (GI# lines: row dumps, not compared).
+# The probe runs as the only gameplay context ("lua_contexts" in civhost_scenario.json), after map generation.
+GI|Q01|Units["UNIT_WARRIOR"]|rows=1|fields=92|h=2813527676
+GI|Q02|Units.UNIT_WORKER|rows=1|fields=91|h=3292210837
+GI|Q03|Units.UNIT_AIRSHIP|rows=1|fields=92|h=2242659750
+GI|Q04|Units.UNIT_ARGENTINA_WORKER|rows=0|fields=0|h=3740128616
+GI|Q05|Units.UNIT_HELICOPTER_GUNSHIP|rows=1|fields=91|h=81866309
+GI|Q06|Units[UNIT_WARRIOR.ID]|rows=1|fields=92|h=2813527676
+GI|Q07|Units[0]|rows=1|fields=92|h=900587604
+GI|Q08|Units[229]|rows=0|fields=0|h=3740128616
+GI|Q09|Civilizations["CIVILIZATION_TONGA"]|rows=1|fields=22|h=2024343297
+GI|Q10|Civilizations["CIVILIZATION_ASSYRIA"]|rows=1|fields=22|h=27315835
+GI|Q11|Civilizations["CIVILIZATION_IROQUOIS"]|rows=1|fields=21|h=2447626003
+GI|Q12|Civilizations["CIVILIZATION_KILWA"]|rows=1|fields=22|h=203092129
+GI|Q13|Civilizations[0]|rows=1|fields=21|h=2763699253
+GI|Q14|Policies["POLICY_MERCHANT_NAVY"]|rows=1|fields=173|h=2364212233
+GI|Q15|Policies["POLICY_TREASURE_FLEETS"]|rows=1|fields=173|h=1175559811
+GI|Q16|Policies[10]|rows=1|fields=173|h=2806842396
+GI|Q17|PolicyBranchTypes[policy.PolicyBranchType]|rows=1|fields=17|h=1464991400
+GI|Q18|Buildings[0]|rows=1|fields=141|h=3135875561
+GI|Q19|BuildingClasses[building.BuildingClass]|rows=1|fields=10|h=195494295
+GI|Q20|InterfaceModes[0]|rows=1|fields=19|h=2672573099
+GI|Q21|Buildings()|rows=262|fields=37468|h=2368929906
+GI|Q22|Global_Dummy_Buildings()|rows=12|fields=58|h=1919297840
+GI|Q23|Civilization_Dummy_Policies()|rows=4|fields=8|h=2349633653
+GI|Q24|Improvement_Adjacency_Yields()|error
+GI|Q25|Policy_FreePromotionUnitCombats()|rows=4|fields=12|h=2905262172
+GI|Q26|Worlds.WORLDSIZE_DUEL|rows=1|fields=26|h=1545356696
+GI|Q27|Worlds.WORLDSIZE_HUGE|rows=1|fields=26|h=1655285326
+GI|Q28|Worlds[3]|rows=1|fields=26|h=295872268
+GI|Q29|Worlds()|rows=6|fields=156|h=3255563953
+GI|Q30|Terrains.TERRAIN_GRASS|rows=1|fields=22|h=623873501
+GI|Q31|Eras[0]|rows=1|fields=46|h=2343144572
+GI|Q32|Climates[1]|rows=1|fields=14|h=2545863575
+GI|Q33|GameSpeeds[GAMESPEED_STANDARD.ID]|rows=1|fields=36|h=2062822339
+GI|Q34|Regions["REGION_JUNGLE"]|rows=1|fields=3|h=602339397
+GI|Q35|Features()|rows=25|fields=892|h=1705320401
+GI|Q36|Improvements()|rows=45|fields=2560|h=1980050697
+GI|Q37|Resources()|rows=57|fields=2433|h=3263578681
+GI|Q38|Natural_Wonder_Placement()|rows=17|fields=2159|h=2658818799
+GI|Q39|Natural_Wonder_Placement[1]|rows=1|fields=127|h=3027936020
+GI|Q40|Civilization_Start_Along_Ocean{CARTHAGE}|rows=1|fields=2|h=3673004207
+GI|Q41|Civilization_Start_Along_River{AKKAD}|rows=1|fields=2|h=725534540
+GI|Q42|Civilization_Start_Place_First_Along_Ocean{CARTHAGE}|rows=0|fields=0|h=7
+GI|Q43|Civilization_Start_Region_Priority {VIETNAM}|rows=2|fields=4|h=107740588
+GI|Q44|Civilization_Start_Region_Avoid{EGYPT}|rows=2|fields=4|h=2084312231
+GI|Q45|DB.Query count Region_Priority ?|rows=1|fields=1|h=533087084
+GI|Q46|DB.Query count Region_Avoid ?|rows=1|fields=1|h=533087084
+GI|Q47|Units{Combat=8}|rows=12|fields=1101|h=2783540756
+GI|Q48|Units()|rows=230|fields=21201|h=106882832
+GI|Q49|NoSuchTable|rows=0|fields=0|h=3740128616
+GI|Q50|DB.Query Units Combat > ?|rows=59|fields=236|h=373992729
+GI|S|type_GameInfo|table
+GI|S|type_table|userdata
+GI|S|table_cached|true
+GI|S|table_by_bracket|true
+GI|S|table_lowercase|false
+GI|S|type_row|table
+GI|S|row_cached|true
+GI|S|row_type_eq_id|true
+GI|S|row_iter_eq_index|true
+GI|S|row_metatable|true
+GI|S|row_missing_type|nil
+GI|S|row_missing_id|nil
+GI|S|row_negative_id|nil
+GI|S|row_fraction_id|UNIT_WORKBOAT
+GI|S|row_numeric_string|nil
+GI|S|row_bool_key|error
+GI|S|row_by_id_field_string|nil
+GI|S|call_returns|1
+GI|S|call_type|function
+GI|S|call_empty_filter|error
+GI|S|call_where_string|59
+GI|S|call_where_string_and|10
+GI|S|call_multi_filter|10
+GI|S|call_filter_numeric_string|12
+GI|S|call_filter_bool|1
+GI|S|call_filter_bool_false|1
+GI|S|call_filter_nomatch|0
+GI|S|call_where_bad_sql|error
+GI|S|call_where_empty_string|error
+GI|S|call_number_arg|error
+GI|S|call_filter_fraction|1
+GI|S|call_filter_bool_id|1
+GI|S|call_filter_two_bools|1
+GI|S|row_filter_eq_index|true
+GI|S|row_where_eq_index|true
+GI|S|row_nil_key|error
+GI|S|row_mt_keys|__index __newindex
+GI|S|table_mt_keys|__call __db __index __len __newindex __rowdata __tablename
+GI|S|gameinfo_mt_keys|__db __index
+GI|S|gameinfo_raw_units|true
+GI|S|gameinfo_pairs_ge_400|false
+GI|S|row_rawset|2
+GI|S|row_iter_missing_field|nil
+GI|S|defines_mt_index|error
+GI|S|call_error_deferred|true
+GI|S|row_index_half|2
+GI|S|row_index_neg_fraction|0
+GI|S|call_filter_round|0
+GI|S|call_filter_half|2
+GI|S|table_newindex|error
+GI|S|gameinfo_assign|1
+GI|S|gameinfo_number_key|nil
+GI|S|row_lower_field|nil
+GI|S|dbrow_metatable|true
+GI|S|dbrow_write|5
+GI|S|db_query_text_bool|sfalse
+GI|S|row_text_in_bool_column|sfalse
+GI|S|type_key_with_quote|nil
+GI|S|len_no_id_table|547
+GI|S|no_id_rowid_eq_first|false
+GI|S|call_extra_arg|12
+GI|S|where_type_range_order|83,2,1,147
+GI|S|filter_type_order|2,12,13,14
+GI|S|db_query_two_params|10
+GI|S|db_query_param_fraction|0
+GI|S|call_iter_after_end|truenilnil
+GI|S|len_table|230
+GI|S|pairs_table|error
+GI|S|row_write_persists|error
+GI|S|defines_by_name|error
+GI|S|defines_iter|1717
+GI|S|defines_first|sName=sPOLICY_YIELD_CAP,sValue=n30
+GI|S|defines_real|f1.5
+GI|S|defines_text|sQuickSave
+GI|S|no_id_table_index|sPromotionType=sPROMOTION_JAGUAR,sUnitType=sUNIT_AZTEC_JAGUAR
+GI|S|no_id_table_type_index|error
+GI|S|missing_table_call|error
+GI|S|localization_table|false
+GI|S|db_query_type|function
+GI|S|db_query_noresult|0
+GI|S|db_query_bad_sql|error
+GI|S|db_query_null|sb=n1
+GI|S|db_query_bool_column|F
+GI|S|db_query_bool_param|7
+GI|S|db_query_float|f1.5n2
+GI|S|db_query_dup_names|n2
+GI|S|bool_null_column|none
+GI|done

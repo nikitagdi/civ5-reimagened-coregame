@@ -1,0 +1,30 @@
+// Microsoft SAL annotations used by the Firaxis interface headers; they carry no meaning for clang.
+#ifndef LEKMOD_PORTABLE_SAL_H
+#define LEKMOD_PORTABLE_SAL_H
+#define _In_
+#define _In_z_
+#define _In_opt_
+#define _In_opt_z_
+#define _In_bytecount_(n)
+#define _In_count_(n)
+#define _Inout_
+#define _Inout_z_
+#define _Inout_opt_
+#define _Inout_z_cap_(n)
+#define _Inout_z_cap_c_(n)
+#define _Out_
+#define _Out_opt_
+#define _Out_z_cap_(n)
+#define _Out_cap_(n)
+#define _Ret_
+#define _Ret_z_
+#define _Ret_opt_
+#define _Ret_opt_z_
+#define _Ret_maybenull_
+#define _Ret_notnull_
+#define _Check_return_
+#define _Printf_format_string_
+#define _Success_(x)
+#define _CRTIMP
+#define __checkReturn
+#endif
