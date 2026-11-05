@@ -16,6 +16,85 @@
 // include this after all other headers!
 #include "LintFree.h"
 
+#if defined(LEKMOD_HEADLESS_OPT_SITE_RING_TABLE) && !defined(AUI_HEXSPACE_DX_LOOPS) && !defined(AUI_FIX_HEX_DISTANCE_INSTEAD_OF_PLOT_DISTANCE)
+#define LEKMOD_HEADLESS_SITE_RING_ACTIVE
+// OPT-0051: CvCitySiteEvaluator::PlotFoundValue visits plotXY(x, y, dx, dy) for dx = -7..7 (outer), dy = -7..7 (inner)
+// and keeps the plots with plotDistance(anchor, plot) <= 7. For an anchor whose whole offset box stays inside the map
+// without touching a wrap seam or an edge (rows y-7..y+7 exist; the target columns x-11..x+11 exist, i.e. no wrap; the
+// map is wider than 24 columns so |x2 - x1| <= 11 never reaches the half-width special cases of plotDistance), every
+// plotXY is non-NULL and plotDistance(anchor, plotXY(...)) == hexDistance(dx, dy): the accepted offsets and their
+// distances are this fixed table, in golden's order. Other anchors (near an edge or a seam) run golden's 225 offsets
+// with golden's plotDistance.
+namespace
+{
+struct HeadlessSiteRing
+{
+	int m_iCount;
+	int m_aiDX[15 * 15];
+	int m_aiDY[15 * 15];
+	int m_aiDist[15 * 15];
+};
+
+const HeadlessSiteRing& HeadlessSiteRingTable()
+{
+	static HeadlessSiteRing s_kRing;
+	static bool s_bBuilt = false;
+	if(!s_bBuilt)
+	{
+		s_kRing.m_iCount = 0;
+		for(int iDX = -7; iDX <= 7; iDX++)
+		{
+			for(int iDY = -7; iDY <= 7; iDY++)
+			{
+				const int iDist = hexDistance(iDX, iDY);
+				if(iDist <= 7)
+				{
+					s_kRing.m_aiDX[s_kRing.m_iCount] = iDX;
+					s_kRing.m_aiDY[s_kRing.m_iCount] = iDY;
+					s_kRing.m_aiDist[s_kRing.m_iCount] = iDist;
+					s_kRing.m_iCount++;
+				}
+			}
+		}
+		s_bBuilt = true;
+	}
+	return s_kRing;
+}
+
+bool HeadlessSiteIsInterior(int iX, int iY)
+{
+	const CvMap& kMap = GC.getMap();
+	const int iW = kMap.getGridWidth();
+	const int iH = kMap.getGridHeight();
+	return iW > 24 && iY - 7 >= 0 && iY + 7 < iH && iX - 11 >= 0 && iX + 11 < iW;
+}
+
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+// golden's loop for an interior anchor: the accepted (dx, dy, distance) sequence must be the table
+bool HeadlessSiteRingMatchesGolden(int iX, int iY, const HeadlessSiteRing& kRing)
+{
+	int iPos = 0;
+	for(int iDX = -7; iDX <= 7; iDX++)
+	{
+		for(int iDY = -7; iDY <= 7; iDY++)
+		{
+			CvPlot* pLoopPlot = plotXY(iX, iY, iDX, iDY);
+			if(pLoopPlot == NULL)
+				continue;
+			const int iDistance = plotDistance(iX, iY, pLoopPlot->getX(), pLoopPlot->getY());
+			if(iDistance > 7)
+				continue;
+			if(iPos >= kRing.m_iCount || kRing.m_aiDX[iPos] != iDX || kRing.m_aiDY[iPos] != iDY || kRing.m_aiDist[iPos] != iDistance)
+				return false;
+			iPos++;
+		}
+	}
+	return iPos == kRing.m_iCount;
+}
+#endif
+}
+#endif
+
 //=====================================
 // CvCitySiteEvaluator
 //=====================================
@@ -24,7 +103,53 @@ CvCitySiteEvaluator::CvCitySiteEvaluator(void)
 {
 	m_iExpansionIndex = 12;
 	m_iGrowthIndex = 13;
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	m_iPlotValueMemoGen = 0;
+	m_pPlotValueMemoPlayer = NULL;
+	m_eMemoIncaImprovement = NO_IMPROVEMENT;
+	m_eMemoBrazilImprovement = NO_IMPROVEMENT;
+	m_eMemoMoroccoImprovement = NO_IMPROVEMENT;
+	m_eMemoPolderImprovement = NO_IMPROVEMENT;
+#endif
 }
+
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+// OPT-0014: start a memo pass for pPlayer. The memoised terms (ComputeFood/Production/Gold/Science/Faith/Happiness/
+// TradeableResourceValue of one plot for pPlayer) depend only on the plot, the player and m_iFlavorMultiplier, and the
+// AI_updateFoundValues loop between Begin and End writes nothing they read (only CvPlot::m_aiFoundValue and
+// CvArea::m_iTotalFoundValue). The generation counter empties the memo for each pass; the four improvement ids are
+// GC.getInfoTypeForString lookups, constant while the database is loaded.
+void CvCitySiteEvaluator::BeginPlotValueMemo(const CvPlayer* pPlayer)
+{
+	const int iNumPlots = GC.getMap().numPlots();
+	if((int)m_aPlotValueMemo.size() != iNumPlots)
+	{
+		PlotValueMemo kEmpty;
+		memset(&kEmpty, 0, sizeof(kEmpty));
+		m_aPlotValueMemo.assign(iNumPlots, kEmpty);
+		m_iPlotValueMemoGen = 0;
+	}
+	if(++m_iPlotValueMemoGen <= 0)	// wrapped: clear and restart
+	{
+		for(size_t i = 0; i < m_aPlotValueMemo.size(); i++)
+		{
+			m_aPlotValueMemo[i].iYieldGen = 0;
+			m_aPlotValueMemo[i].iUnownedGen = 0;
+		}
+		m_iPlotValueMemoGen = 1;
+	}
+	m_pPlotValueMemoPlayer = pPlayer;
+	m_eMemoIncaImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_TERRACE_FARM", true);
+	m_eMemoBrazilImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_BRAZILWOOD_CAMP", true);
+	m_eMemoMoroccoImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_KASBAH", true);
+	m_eMemoPolderImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_POLDER", true);
+}
+
+void CvCitySiteEvaluator::EndPlotValueMemo()
+{
+	m_pPlotValueMemoPlayer = NULL;
+}
+#endif
 
 /// Destructor
 CvCitySiteEvaluator::~CvCitySiteEvaluator(void)
@@ -71,7 +196,13 @@ bool CvCitySiteEvaluator::CanFound(CvPlot* pPlot, const CvPlayer* pPlayer, bool 
 	if(GC.getGame().isFinalInitialized())
 	{
 #ifdef NQM_AI_GIMP_NO_BUILDING_SETTLERS
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+		static CvPreGame::HeadlessOptionSite s_kHeadlessAITweaks = { 0, false };	// OPT-0046
+		static CvPreGame::HeadlessOptionSite s_kHeadlessNoBuildingSettlers = { 0, false };	// OPT-0046
+		if (pPlayer && (pPlayer->isHuman() && GC.getGame().isOption(GAMEOPTION_ONE_CITY_CHALLENGE)) || (!pPlayer->isHuman() && (CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessAITweaks, "GAMEOPTION_AI_TWEAKS") || CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessNoBuildingSettlers, "GAMEOPTION_AI_GIMP_NO_BUILDING_SETTLERS"))))
+#else
 		if (pPlayer && (pPlayer->isHuman() && GC.getGame().isOption(GAMEOPTION_ONE_CITY_CHALLENGE)) || (!pPlayer->isHuman() && (GC.getGame().isOption("GAMEOPTION_AI_TWEAKS") || GC.getGame().isOption("GAMEOPTION_AI_GIMP_NO_BUILDING_SETTLERS"))))
+#endif
 #else
 		if(GC.getGame().isOption(GAMEOPTION_ONE_CITY_CHALLENGE) && pPlayer && pPlayer->isHuman())
 #endif
@@ -193,6 +324,9 @@ bool CvCitySiteEvaluator::CanFound(CvPlot* pPlot, const CvPlayer* pPlayer, bool 
 /// Setup flavor multipliers - call once per player before PlotFoundValue() or PlotFertilityValue()
 void CvCitySiteEvaluator::ComputeFlavorMultipliers(CvPlayer* pPlayer)
 {
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	m_pPlotValueMemoPlayer = NULL;	// OPT-0014: the memoised terms depend on m_iFlavorMultiplier
+#endif
 	// Set all to 0
 	for(int iI = 0; iI < NUM_YIELD_TYPES; iI++)
 	{
@@ -337,8 +471,17 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 	if ( pPlayer->getCapitalCity() )
 		iCapitalArea = pPlayer->getCapitalCity()->getArea();
 
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	// OPT-0014: inside an AI_updateFoundValues pass the improvement ids come from the pass (same lookups, done once),
+	// and for the pass's player the per-plot terms come from the memo (same virtual Compute* calls, done once per plot).
+	const bool bMemoPass = (m_pPlotValueMemoPlayer != NULL);
+	const bool bMemo = bMemoPass && m_pPlotValueMemoPlayer == pPlayer && eYield == NO_YIELD;
+	// Custom code for Inca ideal terrace farm locations
+	ImprovementTypes eIncaImprovement = bMemoPass ? m_eMemoIncaImprovement : (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_TERRACE_FARM", true);
+#else
 	// Custom code for Inca ideal terrace farm locations
 	ImprovementTypes eIncaImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_TERRACE_FARM", true);  
+#endif
 	if(eIncaImprovement != NO_IMPROVEMENT)
 	{
 		CvImprovementEntry* pkEntry = GC.getImprovementInfo(eIncaImprovement);
@@ -358,6 +501,19 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 	{
 		iMaxDX = 7 - MAX(0, iDY);
 		for (iDX = -7 - MIN(0, iDY); iDX <= iMaxDX; iDX++) // MIN() and MAX() stuff is to reduce loops (hexspace!)
+#elif defined(LEKMOD_HEADLESS_SITE_RING_ACTIVE)
+	// OPT-0051: interior anchors walk the fixed table (same offsets, order and distances); others golden's 15 x 15 offsets
+	const HeadlessSiteRing& kHeadlessRing = HeadlessSiteRingTable();
+	const bool bHeadlessInterior = HeadlessSiteIsInterior(pPlot->getX(), pPlot->getY());
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	if (bHeadlessInterior)
+		HEADLESS_OPT_VERIFY(HeadlessSiteRingMatchesGolden(pPlot->getX(), pPlot->getY(), kHeadlessRing), 51, "CvCitySiteEvaluator::PlotFoundValue ring table");
+#endif
+	const int iHeadlessCount = bHeadlessInterior ? kHeadlessRing.m_iCount : 15 * 15;
+	for (int iHeadlessPos = 0; iHeadlessPos < iHeadlessCount; iHeadlessPos++)
+	{
+		const int iDX = bHeadlessInterior ? kHeadlessRing.m_aiDX[iHeadlessPos] : iHeadlessPos / 15 - 7;
+		const int iDY = bHeadlessInterior ? kHeadlessRing.m_aiDY[iHeadlessPos] : iHeadlessPos % 15 - 7;
 #else
 	for (int iDX = -7; iDX <= 7; iDX++)
 	{
@@ -370,6 +526,8 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 			{
 #ifdef AUI_FIX_HEX_DISTANCE_INSTEAD_OF_PLOT_DISTANCE
 				int iDistance = hexDistance(iDX, iDY);
+#elif defined(LEKMOD_HEADLESS_SITE_RING_ACTIVE)
+				int iDistance = bHeadlessInterior ? kHeadlessRing.m_aiDist[iHeadlessPos] : plotDistance(pPlot->getX(), pPlot->getY(), pLoopPlot->getX(), pLoopPlot->getY());	// OPT-0051
 #else
 				int iDistance = plotDistance(pPlot->getX(), pPlot->getY(), pLoopPlot->getX(), pLoopPlot->getY());
 #endif
@@ -402,6 +560,33 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 							iStrategicValue = 0;
 
 							if (iDistance > 0 && iDistance <= NUM_CITY_RINGS)
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+							if (bMemo)
+							{
+								// OPT-0014: eYield == NO_YIELD, so golden computes all five terms below, in this order
+								PlotValueMemo& kMemo = m_aPlotValueMemo[pLoopPlot->GetPlotIndex()];
+								if (kMemo.iYieldGen != m_iPlotValueMemoGen)
+								{
+									kMemo.aiYield[0] = ComputeFoodValue(pLoopPlot, pPlayer);
+									kMemo.aiYield[1] = ComputeProductionValue(pLoopPlot, pPlayer);
+									kMemo.aiYield[2] = ComputeGoldValue(pLoopPlot, pPlayer);
+									kMemo.aiYield[3] = ComputeScienceValue(pLoopPlot, pPlayer);
+									kMemo.aiYield[4] = ComputeFaithValue(pLoopPlot, pPlayer);
+									kMemo.iYieldGen = m_iPlotValueMemoGen;
+								}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+								HEADLESS_OPT_VERIFY(kMemo.aiYield[0] == ComputeFoodValue(pLoopPlot, pPlayer) && kMemo.aiYield[1] == ComputeProductionValue(pLoopPlot, pPlayer)
+									&& kMemo.aiYield[2] == ComputeGoldValue(pLoopPlot, pPlayer) && kMemo.aiYield[3] == ComputeScienceValue(pLoopPlot, pPlayer)
+									&& kMemo.aiYield[4] == ComputeFaithValue(pLoopPlot, pPlayer), 14, "CvCitySiteEvaluator::PlotFoundValue yield memo");
+#endif
+								iFoodValue = iRingModifier * kMemo.aiYield[0] * /*15*/ GC.getSETTLER_FOOD_MULTIPLIER();
+								iProductionValue = iRingModifier * kMemo.aiYield[1] * /*3*/ GC.getSETTLER_PRODUCTION_MULTIPLIER();
+								iGoldValue = iRingModifier * kMemo.aiYield[2] * /*2*/ GC.getSETTLER_GOLD_MULTIPLIER();
+								iScienceValue = iRingModifier * kMemo.aiYield[3] * /*1*/ GC.getSETTLER_SCIENCE_MULTIPLIER();
+								iFaithValue = iRingModifier * kMemo.aiYield[4] * /*1*/ GC.getSETTLER_FAITH_MULTIPLIER();
+							}
+							else
+#endif
 							{
 								if (eYield == NO_YIELD || eYield == YIELD_FOOD)
 								{
@@ -428,8 +613,30 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 							// whether or not we are working these we get the benefit as long as culture can grow to take them
 							if (iDistance <= 5 && pLoopPlot->getOwner() == NO_PLAYER) // there is no benefit if we already own these tiles
 							{
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+								if (bMemo)
+								{
+									// OPT-0014
+									PlotValueMemo& kMemo = m_aPlotValueMemo[pLoopPlot->GetPlotIndex()];
+									if (kMemo.iUnownedGen != m_iPlotValueMemoGen)
+									{
+										kMemo.iHappiness = ComputeHappinessValue(pLoopPlot, pPlayer);
+										kMemo.iResource = ComputeTradeableResourceValue(pLoopPlot, pPlayer);
+										kMemo.iUnownedGen = m_iPlotValueMemoGen;
+									}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+									HEADLESS_OPT_VERIFY(kMemo.iHappiness == ComputeHappinessValue(pLoopPlot, pPlayer) && kMemo.iResource == ComputeTradeableResourceValue(pLoopPlot, pPlayer),
+										14, "CvCitySiteEvaluator::PlotFoundValue unowned memo");
+#endif
+									iHappinessValue = iRingModifier * kMemo.iHappiness * /*6*/ GC.getSETTLER_HAPPINESS_MULTIPLIER();
+									iResourceValue = iRingModifier * kMemo.iResource * /*1*/ GC.getSETTLER_RESOURCE_MULTIPLIER();
+								}
+								else
+#endif
+								{
 								iHappinessValue = iRingModifier * ComputeHappinessValue(pLoopPlot, pPlayer) * /*6*/ GC.getSETTLER_HAPPINESS_MULTIPLIER();
 								iResourceValue = iRingModifier * ComputeTradeableResourceValue(pLoopPlot, pPlayer) * /*1*/ GC.getSETTLER_RESOURCE_MULTIPLIER();
+								}
 								if (iDistance)
 									iStrategicValue = ComputeStrategicValue(pLoopPlot, pPlayer, iDistance) * /*1*/ GC.getSETTLER_STRATEGIC_MULTIPLIER();  // the ring is included in the computation
 							}
@@ -575,7 +782,11 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 	}
 
 	// Custom code for Brazil
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	ImprovementTypes eBrazilImprovement = bMemoPass ? m_eMemoBrazilImprovement : (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_BRAZILWOOD_CAMP", true);	// OPT-0014
+#else
 	ImprovementTypes eBrazilImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_BRAZILWOOD_CAMP", true);  
+#endif
 	if(eBrazilImprovement != NO_IMPROVEMENT)
 	{
 		CvImprovementEntry* pkEntry = GC.getImprovementInfo(eBrazilImprovement);
@@ -590,7 +801,11 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 	}
 
 	// Custom code for Morocco
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	ImprovementTypes eMoroccoImprovement = bMemoPass ? m_eMemoMoroccoImprovement : (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_KASBAH", true);	// OPT-0014
+#else
 	ImprovementTypes eMoroccoImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_KASBAH", true);  
+#endif
 	if(eMoroccoImprovement != NO_IMPROVEMENT)
 	{
 		CvImprovementEntry* pkEntry = GC.getImprovementInfo(eMoroccoImprovement);
@@ -605,7 +820,11 @@ int CvCitySiteEvaluator::PlotFoundValue(CvPlot* pPlot, CvPlayer* pPlayer, YieldT
 	}
 
 	//Custom code for Netherlands
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	ImprovementTypes ePolderImprovement = bMemoPass ? m_eMemoPolderImprovement : (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_POLDER", true);	// OPT-0014
+#else
 	ImprovementTypes ePolderImprovement = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_POLDER", true);  
+#endif
 	if(ePolderImprovement != NO_IMPROVEMENT)
 	{
 		CvImprovementEntry* pkEntry = GC.getImprovementInfo(ePolderImprovement);

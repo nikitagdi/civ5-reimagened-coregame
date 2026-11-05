@@ -764,10 +764,12 @@ int CvUnitEntry::GetUnitCombatType() const
 }
 
 /// What domain does this unit operate in (land, air or sea)
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 int CvUnitEntry::GetDomainType() const
 {
 	return m_iDomainType;
 }
+#endif
 
 /// If this is a civilian, what is our priority to attack it?
 int CvUnitEntry::GetCivilianAttackPriority() const
@@ -1199,7 +1201,11 @@ const char* CvUnitEntry::GetUnitNames(int i) const
 {
 	CvAssertMsg(i < GetNumUnitNames(), "Index out of bounds");
 	CvAssertMsg(i > -1, "Index out of bounds");
+#if defined(LEKMOD_PORTABLE)	// NULL is not an int outside MSVC; the CvString/NULL conditional is ambiguous
+	return (m_paszUnitNames) ? m_paszUnitNames[i].c_str() : NULL;
+#else
 	return (m_paszUnitNames) ? m_paszUnitNames[i] : NULL;
+#endif
 }
 
 /// Unique great works created by individual units.
@@ -1500,12 +1506,15 @@ CvUnitXMLEntries::~CvUnitXMLEntries(void)
 }
 
 /// Returns vector of policy entries
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 std::vector<CvUnitEntry*>& CvUnitXMLEntries::GetUnitEntries()
 {
 	return m_paUnitEntries;
 }
+#endif
 
 /// Number of defined policies
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvUnitXMLEntries::GetNumUnits() const
 #else
@@ -1514,6 +1523,7 @@ int CvUnitXMLEntries::GetNumUnits()
 {
 	return m_paUnitEntries.size();
 }
+#endif
 
 
 /// Clear policy entries
@@ -1528,6 +1538,7 @@ void CvUnitXMLEntries::DeleteArray()
 }
 
 /// Get a specific entry
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvUnitEntry* CvUnitXMLEntries::GetEntry(uint index)
 #else
@@ -1536,6 +1547,7 @@ CvUnitEntry* CvUnitXMLEntries::GetEntry(int index)
 {
 	return m_paUnitEntries[index];
 }
+#endif
 
 /// Helper function to read in an integer array of data sized according to number of unit types
 void UnitArrayHelpers::Read(FDataStream& kStream, int* paiUnitArray)

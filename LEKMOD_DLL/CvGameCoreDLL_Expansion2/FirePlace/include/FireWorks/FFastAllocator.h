@@ -353,7 +353,11 @@ template<
 	class T,
 	unsigned int AllocPool = c_eMPoolTypeContainer, 
 	unsigned int nSubID = 0,
+#if defined(LEKMOD_PORTABLE)	// bPODType is not a parameter here; MSVC never parsed this default
+	class BASE_ALLOC = typename BaseVector< T, false >::FDefaultFastVectorAllocator
+#else
 	class BASE_ALLOC = typename BaseVector< T, bPODType >::FDefaultFastVectorAllocator
+#endif
 > class FFixedBlockAllocator
 {
 	const static unsigned int ms_uiAnchorNodeIndex = 0x0fffffff;
@@ -554,7 +558,11 @@ public:
 
 	//Don't allow copying
 private:
+#if defined(LEKMOD_PORTABLE)
+	void operator = (const FFixedBlockAllocator& rhs){}
+#else
 	void operator = (const FFastAllocator& rhs){}
+#endif
 
 
 public:

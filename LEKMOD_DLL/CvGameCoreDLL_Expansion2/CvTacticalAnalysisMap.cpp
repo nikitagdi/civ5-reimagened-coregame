@@ -218,6 +218,9 @@ void CvTacticalAnalysisMap::Init(int iNumPlots)
 /// Fill the map with data for this AI player's turn
 void CvTacticalAnalysisMap::RefreshDataForNextPlayer(CvPlayer* pPlayer)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_TACTICAL_MAP);
+#endif
 	if(m_pPlots)
 	{
 		if(pPlayer != m_pPlayer || m_iTurnBuilt < GC.getGame().getGameTurn())

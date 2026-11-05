@@ -89,7 +89,7 @@ public:
 	CvPlot* addFreeUnit(UnitTypes eUnit, UnitAITypes eUnitAI = NO_UNITAI);
 
 	CvCity* initCity(int iX, int iY, bool bBumpUnits = true, bool bInitialFounding = true);
-#if !defined
+#if defined(LEKMOD_MERCHANT_BUYOUT_NOT_NOANNEXING)	// was a bare "#if !defined", which MSVC evaluates as true
 	void acquireCity(CvCity* pCity, bool bConquest, bool bGift, bool bPurchased = false);
 #else
 	void acquireCity(CvCity* pCity, bool bConquest, bool bGift);
@@ -1182,6 +1182,9 @@ public:
 	int getPower() const;
 	int GetMilitaryMight() const;
 	int GetEconomicMight() const;
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	void HeadlessUiMight(int& iMilitaryMight, int& iEconomicMight) const;	// FIX-0022: Lua/UI read of the might cache, writes no synced state
+#endif
 	int calculateMilitaryMight() const;
 	int calculateEconomicMight() const;
 	int calculateProductionMight() const;
@@ -2523,6 +2526,13 @@ protected:
 #endif
 #ifdef PENALTY_FOR_DELAYING_POLICIES
 	bool m_bIsDelayedPolicy;
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	// FIX-0022 / DS-0034: might values the UI computed itself this turn (HeadlessUiMight). Plain members: not saved, not in the
+	// sync archive, never read by the simulation.
+	mutable int m_iHeadlessUiMightTurn;
+	mutable int m_iHeadlessUiMilitaryMight;
+	mutable int m_iHeadlessUiEconomicMight;
 #endif
 };
 

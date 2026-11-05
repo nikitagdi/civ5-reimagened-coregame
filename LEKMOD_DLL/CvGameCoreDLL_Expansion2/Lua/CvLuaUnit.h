@@ -107,6 +107,7 @@ protected:
 	static int lCanPillage(lua_State* L);
 
 	static int lIsSelected(lua_State* L);
+	static int lIsFirstTimeSelected(lua_State* L);
 
 	static int lCanFound(lua_State* L);
 	static int lCanSpread(lua_State* L);

@@ -102,6 +102,7 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(CanPillage);
 
 	Method(IsSelected);
+	Method(IsFirstTimeSelected);
 
 	Method(CanFound);
 	Method(CanJoin);
@@ -1219,6 +1220,17 @@ int CvLuaUnit::lIsSelected(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 	const bool bResult = pkUnit->IsSelected();
+
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+//------------------------------------------------------------------------------
+//bool IsFirstTimeSelected();
+// (the exe's audio picks the unit's first-selection sound by this; the counter is saved with the unit)
+int CvLuaUnit::lIsFirstTimeSelected(lua_State* L)
+{
+	CvUnit* pkUnit = GetInstance(L);
+	const bool bResult = pkUnit->IsFirstTimeSelected();
 
 	lua_pushboolean(L, bResult);
 	return 1;

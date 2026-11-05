@@ -446,6 +446,48 @@ void CvCityCitizens::DoTurn()
 }
 
 /// What is the overall value of the current Plot?
+#if defined(LEKMOD_HEADLESS_OPT_CITIZEN_FOOD_MEMO)
+namespace
+{
+// OPT-0047: GetBestCityPlotWithValue evaluates GetPlotValue for every plot of the city; the city's surplus food term
+// (getYieldRateTimes100(YIELD_FOOD, false) - foodConsumption() * 100, both const integer reads of the city) does not
+// depend on the plot, and nothing in that loop writes game state (IsWorkingPlot / IsCanWork / IsForcedWorkingPlot /
+// GetPlotValue are reads; no RNG, no Lua). The value is computed by the golden expression on the first plot of the scan
+// and reused for the rest of that scan only.
+struct HeadlessExcessFoodMemo
+{
+	const CvCityCitizens* m_pOwner;
+	bool m_bValid;
+	int m_iValue;
+};
+HeadlessExcessFoodMemo s_kHeadlessExcessFoodMemo = { NULL, false, 0 };
+
+class CvHeadlessExcessFoodScope
+{
+public:
+	explicit CvHeadlessExcessFoodScope(const CvCityCitizens* pOwner) : m_bOpened(false)
+	{
+		if(s_kHeadlessExcessFoodMemo.m_pOwner == NULL)
+		{
+			s_kHeadlessExcessFoodMemo.m_pOwner = pOwner;
+			s_kHeadlessExcessFoodMemo.m_bValid = false;
+			m_bOpened = true;
+		}
+	}
+	~CvHeadlessExcessFoodScope()
+	{
+		if(m_bOpened)
+		{
+			s_kHeadlessExcessFoodMemo.m_pOwner = NULL;
+			s_kHeadlessExcessFoodMemo.m_bValid = false;
+		}
+	}
+private:
+	bool m_bOpened;
+};
+}
+#endif
+
 int CvCityCitizens::GetPlotValue(CvPlot* pPlot, bool bUseAllowGrowthFlag)
 {
 	int iValue = 0;
@@ -494,7 +536,27 @@ int CvCityCitizens::GetPlotValue(CvPlot* pPlot, bool bUseAllowGrowthFlag)
 #endif
 
 	// How much surplus food are we making?
+#if defined(LEKMOD_HEADLESS_OPT_CITIZEN_FOOD_MEMO)
+	int iExcessFoodTimes100;
+	if(s_kHeadlessExcessFoodMemo.m_pOwner == this && s_kHeadlessExcessFoodMemo.m_bValid)
+	{
+		iExcessFoodTimes100 = s_kHeadlessExcessFoodMemo.m_iValue;	// OPT-0047
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		HEADLESS_OPT_VERIFY(iExcessFoodTimes100 == m_pCity->getYieldRateTimes100(YIELD_FOOD, false) - (m_pCity->foodConsumption() * 100), 47, "CvCityCitizens::GetPlotValue excess food memo");
+#endif
+	}
+	else
+	{
+		iExcessFoodTimes100 = m_pCity->getYieldRateTimes100(YIELD_FOOD, false) - (m_pCity->foodConsumption() * 100);
+		if(s_kHeadlessExcessFoodMemo.m_pOwner == this)
+		{
+			s_kHeadlessExcessFoodMemo.m_iValue = iExcessFoodTimes100;
+			s_kHeadlessExcessFoodMemo.m_bValid = true;
+		}
+	}
+#else
 	int iExcessFoodTimes100 = m_pCity->getYieldRateTimes100(YIELD_FOOD, false) - (m_pCity->foodConsumption() * 100);
+#endif
 #if defined(AUI_CITIZENS_GET_VALUE_SPLIT_EXCESS_FOOD_MUTLIPLIER) || defined(AUI_CITIZENS_GET_VALUE_ALTER_FOOD_VALUE_IF_FOOD_PRODUCTION) || defined(AUI_CITIZENS_GET_VALUE_CONSIDER_GROWTH_MODIFIERS)
 	int iExcessFoodWithPlotTimes100 = iExcessFoodTimes100;
 	if (IsWorkingPlot(pPlot))
@@ -2160,6 +2222,9 @@ bool CvCityCitizens::DoRemoveWorstCitizen(bool bRemoveForcedStatus, SpecialistTy
 /// Find a Plot the City is either working or not, and the best/worst value for it - this function does "double duty" depending on what the user wants to find
 CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iValue, bool bWantBest, bool bWantWorked)
 {
+#if defined(LEKMOD_HEADLESS_OPT_CITIZEN_FOOD_MEMO)
+	CvHeadlessExcessFoodScope kHeadlessExcessFood(this);	// OPT-0047
+#endif
 	bool bPlotForceWorked;
 
 	int iBestPlotValue = -1;
@@ -2236,6 +2301,9 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iValue, bool bWantBest, bo
 /// Optimize our Citizen Placement
 void CvCityCitizens::DoReallocateCitizens()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_CITY_CITIZENS);
+#endif
 	// Make sure we don't have more forced working plots than we have citizens working.  If so, clean it up before reallocating
 	DoValidateForcedWorkingPlots();
 

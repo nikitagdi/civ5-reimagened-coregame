@@ -341,7 +341,26 @@ int CvLuaTeam::lGetScore(lua_State* L)
 //int getPower();
 int CvLuaTeam::lGetPower(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	// FIX-0022 / DS-0034: CvTeam::getPower() (sum of the members' getPower()) without refreshing their synced might caches
+	CvTeam* pkTeam = GetInstance(L);
+	int iCount = 0;
+	for(int iI = 0; iI < MAX_PLAYERS; iI++)
+	{
+		CvPlayer& kLoopPlayer = GET_PLAYER((PlayerTypes)iI);
+		if(kLoopPlayer.isAlive() && kLoopPlayer.getTeam() == pkTeam->GetID())
+		{
+			int iMilitaryMight = 0;
+			int iEconomicMight = 0;
+			kLoopPlayer.HeadlessUiMight(iMilitaryMight, iEconomicMight);
+			iCount += iMilitaryMight + iEconomicMight;
+		}
+	}
+	lua_pushinteger(L, iCount);
+	return 1;
+#else
 	return BasicLuaMethod(L, &CvTeam::getPower);
+#endif
 }
 
 //------------------------------------------------------------------------------

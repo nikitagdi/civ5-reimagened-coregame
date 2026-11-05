@@ -85,7 +85,7 @@ struct FTimer
 };
 
 // The following is very x86 specific.
-#if			!defined( _XENON ) && !defined( _PS3 ) && !defined(_WIN64)
+#if			!defined( _XENON ) && !defined( _PS3 ) && !defined(_WIN64) && !defined(LEKMOD_PORTABLE)
 //---------------------------------------------------------------------------------------
 //  tmSTART / tmSTOP
 //---------------------------------------------------------------------------------------

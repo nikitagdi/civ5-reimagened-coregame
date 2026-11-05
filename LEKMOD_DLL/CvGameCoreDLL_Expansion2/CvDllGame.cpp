@@ -142,6 +142,9 @@ void CvDllGame::CycleUnits(bool bClear, bool bForward, bool bWorkers)
 //------------------------------------------------------------------------------
 void CvDllGame::DoGameStarted()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pGame->DoGameStarted();
 }
 //------------------------------------------------------------------------------
@@ -297,16 +300,25 @@ void CvDllGame::GetTurnTimerData(float& fCurTurnTime, float& fTurnStartTime)
 //------------------------------------------------------------------------------
 void CvDllGame::Init(HandicapTypes eHandicap)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pGame->init(eHandicap);
 }
 //------------------------------------------------------------------------------
 bool CvDllGame::Init2()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	return m_pGame->init2();
 }
 //------------------------------------------------------------------------------
 void CvDllGame::InitScoreCalculation()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pGame->initScoreCalculation();
 }
 //------------------------------------------------------------------------------
@@ -490,6 +502,9 @@ void CvDllGame::UnitIsMoving()
 //------------------------------------------------------------------------------
 void CvDllGame::Update()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pGame->update();
 }
 //------------------------------------------------------------------------------
@@ -505,6 +520,9 @@ void CvDllGame::UpdateTestEndTurn()
 //------------------------------------------------------------------------------
 void CvDllGame::Read(FDataStream& kStream)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pGame->Read(kStream);
 }
 //------------------------------------------------------------------------------
@@ -515,6 +533,9 @@ void CvDllGame::Write(FDataStream& kStream) const
 //------------------------------------------------------------------------------
 void CvDllGame::ReadSupportingClassData(FDataStream& kStream)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pGame->ReadSupportingClassData(kStream);
 }
 //------------------------------------------------------------------------------

@@ -75,7 +75,10 @@ function Lekmod_OnAdoptConsulates(playerID, policyID)
 
     local currentEra = player:GetCurrentEra()
     AwardConsulatesVotesForEra(player, currentEra)
-    GameEvents.PlayerAdoptPolicy.Remove(Lekmod_OnAdoptConsulates) -- This is a one-time event, so we remove it after processing
+    -- FIX-0004: the handler removed itself after the FIRST adoption of Consulates by ANY player, so every later player got
+    -- no catch-up votes, and after a load/resync the handler is registered again, so behaviour depended on the session
+    -- (out of sync after resync). The policyID check above already makes it once-per-player. Original line:
+    -- GameEvents.PlayerAdoptPolicy.Remove(Lekmod_OnAdoptConsulates) -- This is a one-time event, so we remove it after processing
 end
 -- 2) On era change: if you already have Consulates, give +1 vote for that new era
 function Lekmod_OnEraChangeGiveConsulatesVote(playerID, newEraID)

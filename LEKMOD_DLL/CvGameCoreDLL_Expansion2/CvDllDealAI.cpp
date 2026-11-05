@@ -93,11 +93,19 @@ ICvPlayer1* CvDllDealAI::GetPlayer()
 int CvDllDealAI::DoHumanOfferDealToThisAI(ICvDeal1* pDeal)
 {
 	CvDeal* pkDeal = (NULL != pDeal)? static_cast<CvDllDeal*>(pDeal)->GetInstance() : NULL;
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	// FIX-0030 / DS-0037: the exe calls this from the trade screen (UI.DoProposeDeal) on the proposing human's machine only;
+	// the deal valuation reaches calculateGoldRate, whose cost refresh would store the treasury's saved unit costs there only
+	HEADLESS_UI_TREASURY_SCOPE();
+#endif
 	return m_pDealAI->DoHumanOfferDealToThisAI(pkDeal);
 }
 //------------------------------------------------------------------------------
 void CvDllDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, ICvDeal1* pDeal, int iDealValueToMe, int iValueImOffering, int iValueTheyreOffering)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvDeal* pkDeal = (NULL != pDeal)? static_cast<CvDllDeal*>(pDeal)->GetInstance() : NULL;
 	if(pkDeal != NULL)
 		m_pDealAI->DoAcceptedDeal(eFromPlayer, *pkDeal, iDealValueToMe, iValueImOffering, iValueTheyreOffering);
@@ -106,11 +114,17 @@ void CvDllDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, ICvDeal1* pDeal, int i
 int CvDllDealAI::DoHumanDemand(ICvDeal1* pDeal)
 {
 	CvDeal* pkDeal = (NULL != pDeal)? static_cast<CvDllDeal*>(pDeal)->GetInstance() : NULL;
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: UI.DoDemand, demanding human's machine only (CalculateBaseNetGold)
+#endif
 	return m_pDealAI->DoHumanDemand(pkDeal);
 }
 //------------------------------------------------------------------------------
 void CvDllDealAI::DoAcceptedDemand(PlayerTypes eFromPlayer, ICvDeal1* pDeal)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvDeal* pkDeal = (NULL != pDeal)? static_cast<CvDllDeal*>(pDeal)->GetInstance() : NULL;
 	if(pkDeal != NULL)
 		m_pDealAI->DoAcceptedDemand(eFromPlayer, *pkDeal);
@@ -119,6 +133,9 @@ void CvDllDealAI::DoAcceptedDemand(PlayerTypes eFromPlayer, ICvDeal1* pDeal)
 bool CvDllDealAI::DoEqualizeDealWithHuman(ICvDeal1* pDeal, PlayerTypes eOtherPlayer, bool bDontChangeMyExistingItems, bool bDontChangeTheirExistingItems, bool& bDealGoodToBeginWith, bool& bCantMatchOffer)
 {
 	CvDeal* pkDeal = (NULL != pDeal)? static_cast<CvDllDeal*>(pDeal)->GetInstance() : NULL;
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: trade screen equalize / what-do-you-want buttons, local only
+#endif
 	return m_pDealAI->DoEqualizeDealWithHuman(pkDeal, eOtherPlayer, bDontChangeMyExistingItems, bDontChangeTheirExistingItems, bDealGoodToBeginWith, bCantMatchOffer);
 }
 //------------------------------------------------------------------------------

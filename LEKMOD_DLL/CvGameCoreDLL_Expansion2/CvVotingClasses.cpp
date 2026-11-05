@@ -16,6 +16,7 @@
 #include "CvEconomicAI.h"
 #include "CvTechAI.h"
 #include "cvStopWatch.h"
+#include "HeadlessMsgGuard.h"	// HYG-0013: league project notices to every human member
 
 #include "LintFree.h"
 
@@ -6481,7 +6482,9 @@ void CvLeague::NotifyProjectComplete(LeagueProjectTypes eProject)
 			CvPlayer& kPlayer = GET_PLAYER(eMember);
 			if (kPlayer.isHuman())
 			{
-				if (kPlayer.isLocalPlayer() && !kPlayer.isObserver())
+				// HYG-0013 (LEKMOD_HEADLESS_HYG_MESSAGES_TO_HUMANS): golden notifies the local player only; the server's active player is no human,
+				// so with the flag every human member gets the World Congress project notices (World's Fair, Games, Arts Funding, ...).
+				if (HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), eMember) && !kPlayer.isObserver())
 				{
 					CvNotifications* pNotifications = kPlayer.GetNotifications();
 					if (pNotifications)
@@ -6512,7 +6515,9 @@ void CvLeague::NotifyProjectProgress(LeagueProjectTypes eProject)
 			CvPlayer& kPlayer = GET_PLAYER(eMember);
 			if (kPlayer.isHuman())
 			{
-				if (kPlayer.isLocalPlayer() && !kPlayer.isObserver())
+				// HYG-0013 (LEKMOD_HEADLESS_HYG_MESSAGES_TO_HUMANS): golden notifies the local player only; the server's active player is no human,
+				// so with the flag every human member gets the World Congress project notices (World's Fair, Games, Arts Funding, ...).
+				if (HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), eMember) && !kPlayer.isObserver())
 				{
 					CvNotifications* pNotifications = kPlayer.GetNotifications();
 					if (pNotifications)

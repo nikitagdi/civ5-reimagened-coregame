@@ -1,0 +1,442 @@
+{
+  "schema": 1,
+  "hyg": [
+    {
+      "id": "HYG-0001",
+      "flag": "LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "CvTraitEntry leaks its arrays on every database reload",
+      "before": "The destructor of CvTraitEntry freed the 1D arrays only under AUI_WARNING_FIXES (off in v34.15): 13 arrays per trait entry leaked on every database reload, and CvTraitEntry::CacheResults allocated m_ppiCityTechYieldChange twice (first block leaked).",
+      "after": "The 1D arrays are freed, the duplicate allocation is skipped (same size and content, so no behaviour change). Three pointers that were only NULL-initialised under AUI_WARNING_FIXES are NULL-initialised too.",
+      "scope": "Memory only; digest unchanged. Matters for the warm-start host (C8).",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No behaviour change; mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp (ctor, destructor, CacheResults)"
+      ],
+      "notes": "The spec assumed AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION is active; it is commented out in _Defines.h, so the #else branch (single-block 2D arrays, already freed) is the compiled one and the real leak is the 1D arrays. With that switch on, the TRAITIFY/LEKMOD 2D arrays would need row counts (not handled).",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0002",
+      "flag": "LEKMOD_HEADLESS_HYG_REPLAY_MSG_INIT",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "Replay messages save uninitialised ExtraData1/ExtraData2",
+      "before": "REPLAY_MESSAGE_EXTENDED added m_iExtraData1/m_iExtraData2, but the 3-argument constructor used by CvGame::addReplayMessage(type, player, text, x, y) does not initialise them. The stack temporary is copied into m_listReplayMessages and written by CvGame::Write, so the game segment carries stack residue (a stack address 0x001AFxxx and a module address) in every plot/city replay message. The residue depends on the code layout, so golden, diag and optimized builds wrote different bytes for the same game.",
+      "after": "Both fields start at 0 in that constructor (the default constructor already did this; the 5-argument one sets them from its arguments).",
+      "scope": "Every replay message created without extra data (city founding, plot ownership, wars, ...). The fields are read only by Lua Game.GetReplayMessage(s) (Data1/Data2, replay viewer UI); no simulation code reads them. Digest of the game segment changes (garbage becomes 0); simulation unchanged.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; replay messages are not sync-checked. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReplayMessage.cpp (CvReplayMessage(int, ReplayMessageTypes, PlayerTypes))"
+      ],
+      "notes": "Found by detlab: golden vs diag diverged only in the game segment, 18 single-byte differences at turn 1 (offset 7413 = ExtraData1 of the first replay message: 0x1af13c golden vs 0x1af108 diag). Log: the investigation notes.",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0003",
+      "flag": "LEKMOD_HEADLESS_HYG_NOTIFICATION_INIT",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "Empty notification slots save uninitialised m_iExtraGameData/m_ePlayerID",
+      "before": "CvNotifications::Init does m_aNotifications.resize(100): VC9 copies a stack temporary Notification() whose int members are not value-initialised, and Notification::Clear() resets neither m_iExtraGameData nor m_ePlayerID. All 100 empty slots of every major player (AI included) were written by CvPlayer::Write with stack residue (det-heap addresses 0x8xxxxxxx under civhost). The residue depends on the code layout and allocation sequence, so golden and optimized builds wrote different player segments from turn 1.",
+      "after": "Init sets m_iExtraGameData = -1 and m_ePlayerID = NO_PLAYER on every slot after Clear(). Clear() itself is unchanged (Add() and RemoveOldestNotification() behave as before).",
+      "scope": "Only the slots outside the notification ring are affected: every reader iterates [begin, end) and Add() overwrites a whole slot, so the garbage was never read. Digest of player00..21 changes; simulation unchanged.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; notifications are per-machine UI state and not sync-checked. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp (Init)"
+      ],
+      "notes": "Same root cause as host finding 12 (host finding 12); the det heap and stack wipe made it deterministic per build but not across builds. Found by detlab equiv golden vs optimized-opt (all player00..21 segments, 41-byte records). Log: the investigation notes.",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0004",
+      "flag": "LEKMOD_HEADLESS_HYG_PANTHEON_HOLYCITY_INIT",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "Pantheons save uninitialised holy-city coordinates",
+      "before": "CvReligion(eReligion, eFounder, pHolyCity, bPantheon) sets m_iHolyCityX/Y only when pHolyCity != NULL. Pantheons are created with NULL, so the CvReligion copied into m_CurrentReligions carries stack residue (seen: 0 / 0x001AF04C, 0x27 / 0x708D0B85) that CvGame::Write saves. The residue changes with code layout and even between runs of the same DLL (system-DLL return addresses left on the stack), so the game segment diverged from the turn of the first pantheon (turn 25-33 in the starter scenarios at 100 turns).",
+      "after": "Both coordinates start at -1 (as in the default constructor); founding a real religion still sets them from the holy city.",
+      "scope": "Pantheon entries only. Simulation readers of the coordinates are all behind GetReligionCreatedByPlayer (excludes pantheons) or an eReligion > RELIGION_PANTHEON check; IsEligibleForFounderBenefits looks the plot up but returns false for pantheons before using it. Remaining readers are not simulation: Lua Game.GetHolyCityForReligion(RELIGION_PANTHEON, player) (no caller in the repo; now returns nil instead of whatever city sat at the garbage coordinates) and the active-player achievement check XP1_20. Digest of the game segment changes; simulation unchanged.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; CvGameReligions is not sync-checked. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp (CvReligion(ReligionTypes, PlayerTypes, CvCity*, bool))"
+      ],
+      "notes": "Found by detlab equiv golden-hyg vs opt-hyg at 100 turns (game segment only, from the pantheon turn); reruns of the SAME DLL also differed there (solo vs 4 parallel civhost processes), so this was also a run-to-run nondeterminism of the digest. Log: the investigation notes.",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0005",
+      "flag": "LEKMOD_HEADLESS_HYG_MILITARY_AI_LASTTURN_INIT",
+      "trigger_id": null,
+      "ds": "DS-0023",
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "CvMilitaryAI last-turn arrays save heap garbage behind the AI strategy count",
+      "before": "m_paeLastTurnWarState / MilitaryThreat / MilitaryStrength / TargetValue are int[MAX_CIV_PLAYERS] (63 entries) allocated without zeroing; Reset() filled them inside the loop over the number of military AI strategies (25), so entries 25..62 kept heap garbage that CvMilitaryAI::Write serialized into every player segment (all 64 slots).",
+      "after": "Reset() also clears the entries from the strategy count up to MAX_CIV_PLAYERS with 0, the value a zero-filled heap gave, so the digest of a zero-heap run is unchanged and peers with a dirty heap now agree.",
+      "scope": "Entries 25..62 of the four arrays. The only readers (UpdateThreats, UpdateWarStates) loop over MAX_MAJOR_CIVS (22), so no simulation code ever read the garbage. Digest of a zero-heap run unchanged; under --heap-fill the 64 player segments no longer differ at CvMilitaryAI::Write.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; the field is never read by simulation code. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp (Reset)"
+      ],
+      "notes": "Found by civhost --heap-fill 0xFF --trace-writes (perturbation-axes.md). The value is 0 rather than the NO_* constants on purpose: HYG entries must not move the canonical digest, or every golden-hyg baseline would be stale.",
+      "evidence": {
+        "traps": "civsim.detlab perturb --axis heap_fill=0x00,0xFF,0xA5, release set (gfix-rel): insensitive on lekmod6 50/100, pangaea6 100, continents8 100, duel / pangaea-std / continents8 20, early x6 (50), realistic x3 (100) (headless/out/detlab/gfix-H-rel-*, gfix-heapcorp-*); hyg + FIX-0002 (gfix-hyg2) insensitive on lekmod6 50 and starter x3; hyg only (gfix-hyg): exactly one differing byte per player segment, CvPlayer::Write offset 276 (DS-0002); before: headless/out/detlab/gfix-heap-rel0-lek6",
+        "scope_ok": "civsim.detlab equiv golden-hyg vs the hyg set (HYG-0001..0009): digest.bin equal, 131 segments per turn, lekmod6 50 and 100 turns, pangaea6 100, starter x3 (headless/out/detlab/gfix-E-hyg-*): a zero-heap run is unchanged",
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0006",
+      "flag": "LEKMOD_HEADLESS_HYG_MINOR_BULLY_TOTALS_INIT",
+      "trigger_id": null,
+      "ds": "DS-0024",
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "CvMinorCivAI bully totals save heap garbage for the non-major slots",
+      "before": "m_aiBullyGoldAmountTotalByPlayer / m_aiBullyWorkersAmountTotalByPlayer (ENHANCED_GRAPHS statistics) are int[MAX_CIV_PLAYERS] members; Reset() cleared them in a loop over MAX_MAJOR_CIVS, entries 22..62 kept heap garbage that CvMinorCivAI::Write serialized (164 bytes per array per player, all 64 slots).",
+      "after": "Reset() also clears entries MAX_MAJOR_CIVS..MAX_CIV_PLAYERS-1 with 0 (the value a zero-filled heap gave, digest of a zero-heap run unchanged).",
+      "scope": "Entries 22..62 of the two arrays. The accessors are indexed by the bully, always a major, so nothing reads them. Under --heap-fill the 64 player segments no longer differ at CvMinorCivAI::Write.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; the field is never read by simulation code. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp (Reset)"
+      ],
+      "notes": "Found by civhost --heap-fill 0xFF --trace-writes. Same convention as HYG-0005 (0, not a NO_* value).",
+      "evidence": {
+        "traps": "civsim.detlab perturb --axis heap_fill=0x00,0xFF,0xA5, release set (gfix-rel): insensitive on lekmod6 50/100, pangaea6 100, continents8 100, duel / pangaea-std / continents8 20, early x6 (50), realistic x3 (100) (headless/out/detlab/gfix-H-rel-*, gfix-heapcorp-*); hyg + FIX-0002 (gfix-hyg2) insensitive on lekmod6 50 and starter x3; hyg only (gfix-hyg): exactly one differing byte per player segment, CvPlayer::Write offset 276 (DS-0002); before: headless/out/detlab/gfix-heap-rel0-lek6",
+        "scope_ok": "civsim.detlab equiv golden-hyg vs the hyg set (HYG-0001..0009): digest.bin equal, 131 segments per turn, lekmod6 50 and 100 turns, pangaea6 100, starter x3 (headless/out/detlab/gfix-E-hyg-*): a zero-heap run is unchanged",
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0007",
+      "flag": "LEKMOD_HEADLESS_HYG_TRAIT_COMBAT_IMPROVEMENT_INIT",
+      "trigger_id": null,
+      "ds": "DS-0025",
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "CvTraitEntry::m_eCombatBonusImprovement is never initialised and is copied into the saved player traits",
+      "before": "The initialiser m_eCombatBonusImprovement(NO_IMPROVEMENT) sits in the AUI_WARNING_FIXES block of the constructor's initialiser list, which _Defines.h comments out. CacheResults assigns the member only for trait rows with CombatBonusImprovement text (MOAI), so every other trait entry held heap garbage; InitPlayerTraits copies it into CvPlayerTraits::m_eCombatBonusImprovement, which CvPlayerTraits::Write serializes (player00..05, 4 bytes).",
+      "after": "The constructor body sets the member to 0, the value a zero-filled heap gave (digest of a zero-heap run unchanged).",
+      "scope": "Every trait entry without CombatBonusImprovement text. The only reader, CvUnit::GetNearbyImprovementModifier, is guarded by GetNearbyImprovementCombatBonus() != 0, which only TRAIT_WAYFINDING (the MOAI trait) has, and that trait assigns the improvement itself. All 113 leaders of the profile database have exactly one trait, so the copied garbage is never the value a unit reads. A leader with a second trait processed after MOAI would still hide the improvement (the player-level value is assigned, the bonus is summed), as it did with a zero heap; that is a trait data question, not an initialisation one.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; the field is never read by simulation code. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp (CvTraitEntry constructor)"
+      ],
+      "notes": "Found by civhost --heap-fill 0xFF --trace-writes: -1 instead of 0 in player00..05. NO_IMPROVEMENT would be the tidier value but moves the canonical digest; 0 keeps golden-hyg baselines valid.",
+      "evidence": {
+        "traps": "civsim.detlab perturb --axis heap_fill=0x00,0xFF,0xA5, release set (gfix-rel): insensitive on lekmod6 50/100, pangaea6 100, continents8 100, duel / pangaea-std / continents8 20, early x6 (50), realistic x3 (100) (headless/out/detlab/gfix-H-rel-*, gfix-heapcorp-*); hyg + FIX-0002 (gfix-hyg2) insensitive on lekmod6 50 and starter x3; hyg only (gfix-hyg): exactly one differing byte per player segment, CvPlayer::Write offset 276 (DS-0002); before: headless/out/detlab/gfix-heap-rel0-lek6",
+        "scope_ok": "civsim.detlab equiv golden-hyg vs the hyg set (HYG-0001..0009): digest.bin equal, 131 segments per turn, lekmod6 50 and 100 turns, pangaea6 100, starter x3 (headless/out/detlab/gfix-E-hyg-*): a zero-heap run is unchanged",
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0008",
+      "flag": "LEKMOD_HEADLESS_HYG_CULTURE_OPINION_INIT",
+      "trigger_id": null,
+      "ds": "DS-0026",
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "CvPlayerCulture public-opinion fields save heap garbage for slots that never take a turn",
+      "before": "m_eOpinion, m_ePreferredIdeology and m_eOpinionBiggestInfluence are assigned at the top of DoPublicOpinion (once per turn of a player that takes turns) and nowhere in Init/Reset, but operator<< serializes them: the 58 slots of a lekmod6 game that never take a turn (unused majors, minors, barbarians) wrote heap garbage.",
+      "after": "CvPlayerCulture::Init sets the three fields to 0, the value a zero-filled heap gave (digest of a zero-heap run unchanged); DoPublicOpinion still overwrites them every turn.",
+      "scope": "player06..63 of a lekmod6 game. For players that take turns the fields are rewritten before any simulation read (the diplomacy readers sit behind both players having a late-game ideology branch).",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; the field is never read by simulation code. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp (CvPlayerCulture::Init)"
+      ],
+      "notes": "Found by civhost --heap-fill 0xFF --trace-writes. Same convention as HYG-0005 (0, not the NO_* values).",
+      "evidence": {
+        "traps": "civsim.detlab perturb --axis heap_fill=0x00,0xFF,0xA5, release set (gfix-rel): insensitive on lekmod6 50/100, pangaea6 100, continents8 100, duel / pangaea-std / continents8 20, early x6 (50), realistic x3 (100) (headless/out/detlab/gfix-H-rel-*, gfix-heapcorp-*); hyg + FIX-0002 (gfix-hyg2) insensitive on lekmod6 50 and starter x3; hyg only (gfix-hyg): exactly one differing byte per player segment, CvPlayer::Write offset 276 (DS-0002); before: headless/out/detlab/gfix-heap-rel0-lek6",
+        "scope_ok": "civsim.detlab equiv golden-hyg vs the hyg set (HYG-0001..0009): digest.bin equal, 131 segments per turn, lekmod6 50 and 100 turns, pangaea6 100, starter x3 (headless/out/detlab/gfix-E-hyg-*): a zero-heap run is unchanged",
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0009",
+      "flag": "LEKMOD_HEADLESS_HYG_AIOP_REPLACE_LOSSES_INIT",
+      "trigger_id": null,
+      "ds": "DS-0031",
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "CvAIOperation::m_bShouldReplaceLossesWithReinforcements saves heap garbage for most operation types",
+      "before": "The flag is cleared only in the base CvAIOperation::Init (outside AUI_WARNING_FIXES; Reset() clears it only inside AUI_WARNING_FIXES, which is off), and the Init() overrides of the derived operation classes do not call the base Init, so every operation of those types (city attack, naval, escort, found city, ...) saved whatever the heap held. Found by civhost --heap-fill at turn 20 of lekmod6, when the first operations exist.",
+      "after": "Reset() (called by the constructor and by Uninit) clears the flag with the same value Init() uses (false).",
+      "scope": "Every AI operation. The flag is never read (assignments, Read and Write only), so nothing simulated depends on it; the digest of a zero-heap run is unchanged (false is 0).",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; the field is never read by simulation code. Mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp (Reset)"
+      ],
+      "notes": "Transient state: only operations that exist at the turn of the snapshot show up, so it appears from the first operation (turn 20 in lekmod6) and a single late state dump can miss it; civsim.detlab perturb compares every turn.",
+      "evidence": {
+        "traps": "civsim.detlab perturb --axis heap_fill=0x00,0xFF,0xA5, release set (gfix-rel): insensitive on lekmod6 50/100, pangaea6 100, continents8 100, duel / pangaea-std / continents8 20, early x6 (50), realistic x3 (100) (headless/out/detlab/gfix-H-rel-*, gfix-heapcorp-*); hyg + FIX-0002 (gfix-hyg2) insensitive on lekmod6 50 and starter x3; hyg only (gfix-hyg): exactly one differing byte per player segment, CvPlayer::Write offset 276 (DS-0002); before: headless/out/detlab/gfix-heap-rel0-lek6",
+        "scope_ok": "civsim.detlab equiv golden-hyg vs the hyg set (HYG-0001..0009): digest.bin equal, 131 segments per turn, lekmod6 50 and 100 turns, pangaea6 100, starter x3 (headless/out/detlab/gfix-E-hyg-*): a zero-heap run is unchanged",
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0010",
+      "flag": "LEKMOD_HEADLESS_DIAG_TURN_LOG",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "n/a-hygiene",
+      "release": true,
+      "title": "Per-turn state checksum log (Logs\\LekmodNG-turns.log) for desync forensics in real MP games",
+      "before": "After a desync between players the only evidence was the exe's own logs (RNG seed mismatch line, FAutoVariable dumps of a few objects) and whatever autosaves were left; the turn at which the machines first diverged and the object class that diverged were unknown.",
+      "after": "At the start of every CvGame::doTurn (all commands and AI moves of the turn done, processing not started) the DLL appends a few LTL1 lines through the game's log manager: game turn, active player, jon and map RNG seed/calls/resets, hashes of game counters, plot state (owner, terrain, feature, resource, improvement, route, units per plot), plot visibility per team, per team (techs, research progress, war state) and per player (treasury, culture, faith, golden age, current research; cities: id, position, population, damage, food, production, culture, threat value, head order; units: id, type, position, damage, moves, XP, level, activity; policies and branches), plus the cost in microseconds. Written only when LoggingEnabled=1 (GC.getLogging() or the log manager is enabled); python -m civsim.detlab oos compares the logs of several machines.",
+      "scope": "Read only: plain member getters, no RNG, no cached getters (GetMilitaryMight, CalculateGoldRate), no writes to game state; integer math only (no FPU). Allocations: two std::string buffers per turn. Digest unchanged (checked with civhost, see evidence).",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change; mixing with a DLL without the flag is safe (the log is local to each machine).",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp (CvGame::LogTurnChecksums, call at the top of CvGame::doTurn)",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.h"
+      ],
+      "notes": "Kind 'hyg' because it is a no-behaviour-change diagnostic that ships in the release set; the flag keeps the DIAG name requested for it (civsim.improve.check accepts LEKMOD_HEADLESS_DIAG_*). Every N turns: /D LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY=N. Format and analysis: headless/tools/README.md (\"Desync reports\"). Not a full state hash: AI-internal state (diplomacy opinions, tactical/danger maps) is covered only through its effects (RNG call counts, units, cities).",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0011",
+      "flag": "LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "user 2026-10-21 (B1)",
+      "release": true,
+      "title": "IsFreePromotionUnitCombat relies on multimap::find returning the first element of the key",
+      "before": "CvTraitEntry::IsFreePromotionUnitCombat and CvPolicyEntry::IsFreePromotionUnitCombat call multimap::find and iterate to upper_bound. The standard lets find return any element of the key; MSVC and libc++ 18 return the first, the current libc++ (22, wasi-sdk) may return a later one, and the loop then skips entries (Songhai's TRAIT_AMPHIB_WARLORD promotion missing on the starting warrior in the WASM build, seed 1 / 1 AI).",
+      "after": "lower_bound, which is always the first element of the key (or the next key, and then the loop is empty).",
+      "scope": "Both accessors. On MSVC and libc++ 18 lower_bound and find give the same element, so the result is unchanged there; the portable WASM build no longer depends on _LIBCPP_USE_FROZEN_CXX03_HEADERS for these two loops.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change on MSVC; mixing with golden is safe.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp (IsFreePromotionUnitCombat)",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPolicyClasses.cpp (IsFreePromotionUnitCombat, branch without LEKMOD_UNITCOMBAT_FREE_PROMOTION)"
+      ],
+      "notes": "Found by the B1 linux/wasm determinism check (the portable runtime determinism check). These two find-then-upper_bound loops are the only ones in the gamecore. Enabled in the portable build (headless/tools/clang/build.sh).",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0012",
+      "flag": "LEKMOD_HEADLESS_HYG_COMBAT_MESSAGE_PLOT",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "user 2026-10-21 (B1)",
+      "release": false,
+      "title": "Combat lines reach the UI without a message type or plot",
+      "before": "CvUnitCombat's combat result lines call AddMessage with the text only; the type (MESSAGE_TYPE_COMBAT_MESSAGE / INFO), sound, icon, colour and plot are commented out, so the UI gets MESSAGE_TYPE_INFO and no plot and cannot place the line on the map.",
+      "after": "With the flag, the 48 combat lines pass MESSAGE_TYPE_COMBAT_MESSAGE and the plot named in Firaxis's commented-out arguments (the target plot, the unit or the city); the air-sweep 'found nothing' line stays INFO without a plot.",
+      "scope": "UI messages only (CvDLLInterface AddMessage); no game state read or written beyond plot coordinates. Digest unchanged.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitCombat.cpp (HEADLESS_COMBAT_AT at the AddMessage calls)"
+      ],
+      "notes": "Portable build only (headless/tools/clang/build.sh): the B1 client journal shows combat lines with a camera link. Not in the DLL flag sets: the exe's own message log is unchanged.",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    },
+    {
+      "id": "HYG-0013",
+      "flag": "LEKMOD_HEADLESS_HYG_MESSAGES_TO_HUMANS",
+      "trigger_id": null,
+      "ds": null,
+      "kind": "hyg",
+      "status": "implemented",
+      "approval": "user 2026-10-21 (B2)",
+      "release": false,
+      "title": "Core message lines reach every human, not only the active player",
+      "before": "The AddMessage branches of the core (combat lines, city founded / captured / razed, pillage, gifts, project and tech announcements and others) run only when the message's owner is the active player. A server whose active player is its own observer seat shows them to nobody; the humans of a network game never see them.",
+      "after": "With the flag the guard 'owner is the active player' also holds for every human owner (HEADLESS_MSG_TO in HeadlessMsgGuard.h), so each human gets the lines the active player gets. 73 guards in CvUnitCombat (46), CvPlayer (8), CvUnit (6), CvTeam (6), CvCity (5), CvPlot (2); the combat withdraw if / else-if pair became two ifs; the two 'getActivePlayer() as a boolean' tests (CvTeam first-to-tech, CvUnit world-unit created) became constant true. The turn-begins line of CvPlayer::setTurnActive (display only, once per human per turn) is left out: the client knows the turn from TURN_STARTED. Also (B4 night, 2026-10-31): the World Congress project notices (CvLeague::NotifyProjectComplete / NotifyProjectProgress, golden: the local player only) reach every human member, and a click on NOTIFICATION_LEAGUE_PROJECT_COMPLETE opens the results (BUTTONPOPUP_LEAGUE_PROJECT_COMPLETED) as the golden v34.15 build does (its AUI_WARNING_FIXES-off case, which Lekmod compiled out of CvNotifications::Activate). The notifications are player state that the server and the replicas compute alike.",
+      "scope": "UI messages only: every changed branch calls AddMessage / AddCityMessage / AddUnitMessage / AddPlotMessage (and in one branch setDirty of a UI bit). No game state is read beyond CvPlayer::isHuman(); simulation digest unchanged.",
+      "save_compat": {
+        "old_saves_load": true,
+        "new_saves_load_in_old": true,
+        "continuing_old_game_changes": false
+      },
+      "mp_compat": "No simulation change.",
+      "balance": "none",
+      "files": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/HeadlessMsgGuard.h (new: HEADLESS_MSG_TO, HEADLESS_ACTIVE_SET; included by the six files below)",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitCombat.cpp",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTeam.cpp",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp"
+      ],
+      "notes": "Portable build only (headless/tools/clang/build.sh), not in the DLL flag sets. Work list: the lockstep and audit notes (G1 and G4; G2 needs no change, the runtime filter in rt_ui.cpp decides; G3 stays with the server seat). Scenario mpmsg.",
+      "evidence": {
+        "traps": null,
+        "scope_ok": null,
+        "honest_equiv": null,
+        "negative_tests": null,
+        "peers": null,
+        "saveload": null
+      }
+    }
+  ]
+}

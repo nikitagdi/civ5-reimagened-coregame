@@ -20,6 +20,14 @@
 #include "SFMT\SFMT.h"
 #endif
 
+#if defined(LEKMOD_PORTABLE)
+// The generator state is 32 bit as with MSVC's unsigned long; a 64-bit long would keep high bits that
+// change getSeed(), operator== and every value derived from the seed.
+typedef unsigned int CvRandomWord;
+#else
+typedef unsigned long CvRandomWord;
+#endif
+
 class CvRandom
 {
 
@@ -87,11 +95,11 @@ protected:
 #ifdef AUI_USE_SFMT_RNG
 	SFMersenneTwister m_MersenneTwister;
 #endif
-	unsigned long m_ulRandomSeed;
+	CvRandomWord m_ulRandomSeed;
 
 	// for OOS checks/debugging
-	unsigned long m_ulCallCount;
-	unsigned long m_ulResetCount;
+	CvRandomWord m_ulCallCount;
+	CvRandomWord m_ulResetCount;
 	bool m_bSynchronous;		// If true, the instance is marked as being one that should be synchronous across multi-player games.
 
 #ifdef _DEBUG

@@ -7,6 +7,7 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#include "HeadlessMsgGuard.h"	// HYG-0013
 #include "CvPlot.h"
 #include "CvCity.h"
 #include "CvUnit.h"
@@ -35,9 +36,30 @@
 #include "CvUnitMovement.h"
 #include "CvTargeting.h"
 #include "CvTypes.h"
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+#include "HeadlessSparseLists.h"
+#endif
 
 // Include this after all other headers.
 #include "LintFree.h"
+
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+// OPT-0041: per yield, the buildings whose Same/DifferentLandMassYieldChange can be nonzero (ascending). The landmass loop of
+// calculateYield adds exactly one of the two values for every building a city has; buildings with both 0 add nothing, and
+// GetNumBuilding / getBuildingInfo are pure reads. See HeadlessSparseLists.h.
+namespace
+{
+struct HeadlessLandmassBuildingRel
+{
+	bool operator()(int iBuilding, int iYield) const
+	{
+		const CvBuildingEntry* pEntry = GC.getBuildingInfo((BuildingTypes)iBuilding);
+		return pEntry != NULL && (pEntry->GetSameLandMassYieldChange(iBuilding, iYield) != 0 || pEntry->GetDifferentLandMassYieldChange(iBuilding, iYield) != 0);
+	}
+};
+CvHeadlessSparseLists s_kHeadlessLandmassBuildingLists;
+}
+#endif
 
 // Public Functions...
 
@@ -332,6 +354,10 @@ void CvPlot::reset(int iX, int iY, bool bConstructorCall)
 	}
 
 	m_kArchaeologyData.Reset();
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	HeadlessTradePathBumpLand();	// OPT-0022: every trade-path input of this plot was reset
+	HeadlessTradePathBumpWater();
+#endif
 }
 
 //////////////////////////////////////
@@ -2285,7 +2311,18 @@ bool CvPlot::canHaveImprovement(ImprovementTypes eImprovement, TeamTypes eTeam, 
 
 	for(iI = 0; iI < NUM_YIELD_TYPES; ++iI)
 	{
+#if defined(LEKMOD_HEADLESS_OPT_NATURE_PREREQ_SKIP)
+		// OPT-0044: calculateNatureYield is a const read and returns std::max(0, ...) >= 0, so a prerequisite <= 0 (no
+		// requirement, or -1 for a missing array) can never fail: the call is made only when the prerequisite is positive.
+		const int iHeadlessPrereq = pkImprovementInfo->GetPrereqNatureYield(iI);
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		if(iHeadlessPrereq <= 0)
+			HEADLESS_OPT_VERIFY(!(calculateNatureYield(((YieldTypes)iI), eTeam) < iHeadlessPrereq), 44, "CvPlot::canHaveImprovement nature-yield prerequisite skip");
+#endif
+		if(iHeadlessPrereq > 0 && calculateNatureYield(((YieldTypes)iI), eTeam) < iHeadlessPrereq)
+#else
 		if(calculateNatureYield(((YieldTypes)iI), eTeam) < pkImprovementInfo->GetPrereqNatureYield(iI))
+#endif
 		{
 			return false;
 		}
@@ -3764,6 +3801,31 @@ bool CvPlot::isRevealedGoody(TeamTypes eTeam) const
 		return isGoody();
 	}
 
+#if defined(LEKMOD_HEADLESS_OPT_GOODY_TEST_ORDER)
+	// OPT-0050: the same three pure conditions (team neither barbarian nor minor, plot revealed, revealed improvement is a
+	// goody), plot reads first: CvTeam::isMinorCiv scans the 42 minor/barbarian player slots, and CvEconomicAI::UpdatePlots
+	// asks this for every revealed plot of every AI each turn, where a revealed goody hut is rare.
+	bool bHeadlessResult = false;
+	if(isRevealed(eTeam))
+	{
+		const ImprovementTypes eHeadlessRevealed = getRevealedImprovementType(eTeam);
+		if(eHeadlessRevealed != NO_IMPROVEMENT && GC.getImprovementInfo(eHeadlessRevealed)->IsGoody())
+			bHeadlessResult = !(GET_TEAM(eTeam).isBarbarian() || GET_TEAM(eTeam).isMinorCiv());
+	}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	{
+		bool bRef;
+		if(GET_TEAM(eTeam).isBarbarian() || GET_TEAM(eTeam).isMinorCiv())
+			bRef = false;
+		else if(!isRevealed(eTeam))
+			bRef = false;
+		else
+			bRef = ((getRevealedImprovementType(eTeam) == NO_IMPROVEMENT) ? false : GC.getImprovementInfo(getRevealedImprovementType(eTeam))->IsGoody());
+		HEADLESS_OPT_VERIFY(bRef == bHeadlessResult, 50, "CvPlot::isRevealedGoody test order");
+	}
+#endif
+	return bHeadlessResult;
+#else
 	if(GET_TEAM(eTeam).isBarbarian() || GET_TEAM(eTeam).isMinorCiv())
 	{
 		return false;
@@ -3775,6 +3837,7 @@ bool CvPlot::isRevealedGoody(TeamTypes eTeam) const
 	}
 
 	return ((getRevealedImprovementType(eTeam) == NO_IMPROVEMENT) ? false : GC.getImprovementInfo(getRevealedImprovementType(eTeam))->IsGoody());
+#endif
 }
 
 
@@ -4743,6 +4806,10 @@ void CvPlot::setArea(int iNewValue)
 		}
 
 		m_iArea = iNewValue;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		HeadlessTradePathBumpLand();	// OPT-0022: getArea() is read by both trade-route validators
+		HeadlessTradePathBumpWater();
+#endif
 
 		if(area() != NULL)
 		{
@@ -5462,6 +5529,11 @@ void CvPlot::setOwner(PlayerTypes eNewValue, int iAcquiringCityID, bool bCheckUn
 
 			// ACTUALLY CHANGE OWNERSHIP HERE
 			m_eOwner = eNewValue;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+			// OPT-0022: the owner's team is read only by the water trade-route cost, and only for water plots (land and city plots never)
+			if(isWater())
+				HeadlessTradePathBumpWaterPlot(getX(), getY());
+#endif
 
 			setWorkingCityOverride(NULL);
 			updateWorkingCity();
@@ -5832,6 +5904,10 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 		updateSeeFromSight(false);
 
 		m_ePlotType = eNewValue;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		HeadlessTradePathBumpLand();	// OPT-0022: isWater/isHills/isMountain are read by both trade-route pathfinders
+		HeadlessTradePathBumpWater();
+#endif
 
 		updateYield();
 
@@ -5845,11 +5921,17 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 				{
 					setTerrainType(((TerrainTypes)(GC.getSHALLOW_WATER_TERRAIN())), bRecalculate, bRebuildGraphics);
 					m_bIsAdjacentToLand = true;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+					HeadlessTradePathBumpWater();	// OPT-0022: isAdjacentToLand_Cached is read by the water trade-route cost
+#endif
 				}
 				else
 				{
 					setTerrainType(((TerrainTypes)(GC.getDEEP_WATER_TERRAIN())), bRecalculate, bRebuildGraphics);
 					m_bIsAdjacentToLand = false;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+					HeadlessTradePathBumpWater();	// OPT-0022: isAdjacentToLand_Cached is read by the water trade-route cost
+#endif
 				}
 			}
 			else
@@ -5876,11 +5958,17 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 							{
 								pLoopPlot->setTerrainType(((TerrainTypes)(GC.getSHALLOW_WATER_TERRAIN())), bRecalculate, bRebuildGraphics);
 								m_bIsAdjacentToLand = true;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+								HeadlessTradePathBumpWater();	// OPT-0022: isAdjacentToLand_Cached is read by the water trade-route cost
+#endif
 							}
 							else
 							{
 								pLoopPlot->setTerrainType(((TerrainTypes)(GC.getDEEP_WATER_TERRAIN())), bRecalculate, bRebuildGraphics);
 								m_bIsAdjacentToLand = false;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+								HeadlessTradePathBumpWater();	// OPT-0022: isAdjacentToLand_Cached is read by the water trade-route cost
+#endif
 							}
 						}
 					}
@@ -6073,6 +6161,10 @@ void CvPlot::setTerrainType(TerrainTypes eNewValue, bool bRecalculate, bool bReb
 		}
 
 		m_eTerrainType = eNewValue;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		HeadlessTradePathBumpLand();	// OPT-0022: terrain feeds isImpassable (both) and the shallow-water test (water)
+		HeadlessTradePathBumpWater();
+#endif
 
 		updateYield();
 		updateImpassable();
@@ -6124,6 +6216,9 @@ void CvPlot::setFeatureType(FeatureTypes eNewValue, int iVariety)
 		gDLL->GameplayFeatureChanged(pDllPlot.get(), eNewValue);
 
 		m_eFeatureType = eNewValue;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		HeadlessTradePathBumpLandPlot(getX(), getY());	// OPT-0022: forest/jungle/ice/oasis are read by the land trade-route cost (isImpassable: updateImpassable bumps both)
+#endif
 
 		updateYield();
 		updateImpassable();
@@ -7011,7 +7106,15 @@ void CvPlot::setRouteType(RouteTypes eNewValue)
 		}
 
 		// Route switch here!
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		const bool bHeadlessHadRoute = (getRouteType() != NO_ROUTE);
+#endif
 		m_eRouteType = eNewValue;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		// OPT-0022: the land trade-route cost reads only getRouteType() != NO_ROUTE (a pillaged or upgraded route keeps that answer)
+		if(bHeadlessHadRoute != (eNewValue != NO_ROUTE))
+			HeadlessTradePathBumpLandPlot(getX(), getY());
+#endif
 
 		// Apply new effects
 		if(isOwned() && eNewValue != NO_ROUTE && !isCity())
@@ -7358,6 +7461,9 @@ void CvPlot::setPlotCity(CvCity* pNewValue)
 		{
 			m_plotCity.reset();
 		}
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+		HeadlessTradePathBumpWater();	// OPT-0022: isCity() is read by the water trade-route validator and cost
+#endif
 
 		if(isCity())
 		{
@@ -7548,6 +7654,9 @@ int CvPlot::getRiverCrossingCount() const
 void CvPlot::changeRiverCrossingCount(int iChange)
 {
 	m_iRiverCrossingCount = (m_iRiverCrossingCount + iChange);
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	HeadlessTradePathBumpLand();	// OPT-0022: isRiver() is read by the land trade-route cost (river trade road trait)
+#endif
 	CvAssert(getRiverCrossingCount() >= 0);
 }
 
@@ -8587,6 +8696,63 @@ int CvPlot::calculateYield(YieldTypes eYield, bool bDisplay)
 			// Check all player cities to see if any have buildings that affect this city's yield
 			int iLoop;
 			CvCity *pLoopCity;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+			// OPT-0041: only the buildings with a nonzero landmass yield change for eYield, ascending; none -> nothing to add
+			if (!s_kHeadlessLandmassBuildingLists.IsValid(GC.getNumBuildingInfos(), NUM_YIELD_TYPES))
+				s_kHeadlessLandmassBuildingLists.Build(GC.getNumBuildingInfos(), NUM_YIELD_TYPES, HeadlessLandmassBuildingRel());
+			const int iHeadlessLandmassCount = s_kHeadlessLandmassBuildingLists.Count(eYield);
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+			const int iHeadlessYieldBefore = iYield;
+			int iHeadlessRef = 0;
+			for (pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
+			{
+				int iBuildingLandmass = pLoopCity->plot()->getLandmass();
+				for (int iBuildingLoop = 0; iBuildingLoop < GC.getNumBuildingInfos(); iBuildingLoop++)
+				{
+					BuildingTypes eBuilding = (BuildingTypes)iBuildingLoop;
+					if (pLoopCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
+					{
+						CvBuildingEntry *buildingEntry = GC.getBuildingInfo(eBuilding);
+						if (buildingEntry)
+							iHeadlessRef += (iCityLandmass == iBuildingLandmass) ? buildingEntry->GetSameLandMassYieldChange(eBuilding, eYield) : buildingEntry->GetDifferentLandMassYieldChange(eBuilding, eYield);
+					}
+				}
+			}
+#endif
+			if (iHeadlessLandmassCount > 0)
+			for (pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
+			{
+				int iBuildingLandmass = pLoopCity->plot()->getLandmass();
+
+				// Check the buildings of this city that can change the yield
+				for (int iHeadlessPos = 0; iHeadlessPos < iHeadlessLandmassCount; iHeadlessPos++)
+				{
+					BuildingTypes eBuilding = (BuildingTypes)s_kHeadlessLandmassBuildingLists.Id(eYield, iHeadlessPos);
+					if (pLoopCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
+					{
+						CvBuildingEntry *buildingEntry = GC.getBuildingInfo(eBuilding);
+						if (buildingEntry)
+						{
+							if (iCityLandmass == iBuildingLandmass)
+							{
+								// Same landmass
+								int iSameYield = buildingEntry->GetSameLandMassYieldChange(eBuilding, eYield);
+								iYield += iSameYield;
+							}
+							else
+							{
+								// Different landmass
+								int iDiffYield = buildingEntry->GetDifferentLandMassYieldChange(eBuilding, eYield);
+								iYield += iDiffYield;
+							}
+						}
+					}
+				}
+			}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+			HEADLESS_OPT_VERIFY(iYield - iHeadlessYieldBefore == iHeadlessRef, 41, "CvPlot::calculateYield landmass buildings sparse");
+#endif
+#else
 			for (pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
 			{
 				int iBuildingLandmass = pLoopCity->plot()->getLandmass();
@@ -8616,6 +8782,7 @@ int CvPlot::calculateYield(YieldTypes eYield, bool bDisplay)
 					}
 				}
 			}
+#endif
 		}
 #endif
 
@@ -10070,7 +10237,7 @@ bool CvPlot::changeBuildProgress(BuildTypes eBuild, int iChange, PlayerTypes ePl
 						GET_PLAYER(pCity->getOwner()).ChangeNumChops(iProduction);
 #endif
 						pCity->changeFeatureProduction(iProduction);
-						if(pCity->getOwner() == GC.getGame().getActivePlayer())
+						if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), pCity->getOwner()))
 						{
 							strBuffer = GetLocalizedText("TXT_KEY_MISC_CLEARING_FEATURE_RESOURCE", GC.getFeatureInfo(getFeatureType())->GetTextKey(), iProduction, pCity->getNameKey());
 							GC.GetEngineUserInterface()->AddCityMessage(0, pCity->GetIDInfo(), pCity->getOwner(), false, GC.getEVENT_MESSAGE_TIME(), strBuffer);
@@ -10081,7 +10248,7 @@ bool CvPlot::changeBuildProgress(BuildTypes eBuild, int iChange, PlayerTypes ePl
 					if (iFood > 0)
 					{
 						pCity->changeFood(iFood);
-						if(pCity->getOwner() == GC.getGame().getActivePlayer())
+						if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), pCity->getOwner()))
 						{
 							strBuffer = GetLocalizedText("TXT_KEY_MISC_CLEARING_FEATURE_FOOD", GC.getFeatureInfo(getFeatureType())->GetTextKey(), iFood, pCity->getNameKey());
 							GC.GetEngineUserInterface()->AddCityMessage(0, pCity->GetIDInfo(), pCity->getOwner(), false, GC.getEVENT_MESSAGE_TIME(), strBuffer);
@@ -11851,6 +12018,7 @@ void CvPlot::SetBuilderAIScratchPadValue(short sNewValue)
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvPlot::GetPlotIndex() const
 #else
@@ -11859,6 +12027,7 @@ int CvPlot::GetPlotIndex() const
 {
 	return GC.getMap().plotNum(getX(),getY());
 }
+#endif
 
 //	--------------------------------------------------------------------------------
 #ifdef AUI_WARNING_FIXES
@@ -12044,6 +12213,9 @@ bool CvPlot::HasWrittenArtifact() const
 //	---------------------------------------------------------------------------
 void CvPlot::updateImpassable()
 {
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	const bool bHeadlessWasImpassable = m_bIsImpassable;
+#endif
 	const TerrainTypes eTerrain = getTerrainType();
 	const FeatureTypes eFeature = getFeatureType();
 
@@ -12064,4 +12236,11 @@ void CvPlot::updateImpassable()
 				m_bIsImpassable = pkFeatureInfo->isImpassable();
 		}
 	}
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	if(m_bIsImpassable != bHeadlessWasImpassable)
+	{
+		HeadlessTradePathBumpLand();	// OPT-0022: isImpassable() is read by both trade-route pathfinders
+		HeadlessTradePathBumpWater();
+	}
+#endif
 }

@@ -1717,6 +1717,17 @@ void CvMinorCivAI::Reset()
 		m_abWaryOfTeam[iI] = false;
 	}
 
+#if defined(LEKMOD_HEADLESS_HYG_MINOR_BULLY_TOTALS_INIT) && defined(ENHANCED_GRAPHS)
+	// HYG-0006 / DS-0024: the bully totals have MAX_CIV_PLAYERS entries, the loop above stops at MAX_MAJOR_CIVS; the other
+	// entries kept heap garbage that Write serializes. The index of the accessors is always a major (the bully), so 0, the
+	// value a zero-filled heap gave, keeps the canonical digest unchanged.
+	for(iI = MAX_MAJOR_CIVS; iI < MAX_CIV_PLAYERS; iI++)
+	{
+		m_aiBullyGoldAmountTotalByPlayer[iI] = 0;
+		m_aiBullyWorkersAmountTotalByPlayer[iI] = 0;
+	}
+#endif
+
 	ResetQuestList();
 
 	if(GetPlayer()->isMinorCiv())
@@ -8940,6 +8951,423 @@ bool CvMinorCivAI::CanMajorBullyGold(PlayerTypes ePlayer, int iSpecifiedBullyMet
 
 	return (iSpecifiedBullyMetric >= 0);
 }
+
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+// OPT-0011: CanMajorBullyGold for every (major, minor) pair of the bully-icon block of CvUnit::setXY / setDamage
+// (UPDATE_MINOR_BG_ICON_ON_UNIT_MOVE_OR_SET_DAMAGE), with the same values as calling CanMajorBullyGold per pair:
+//  - CalculateBullyMetric(bForUnit=false, no tooltip) writes no state except GetMilitaryMight's lazy per-turn refresh,
+//    so within one block every pair sees the same military ranking. It is built once (GetBullyGlobalMilitaryScores,
+//    golden code and float expression), at the point and under the condition where golden makes its first
+//    CalculateBullyMetric call: at least one alive major and one alive minor in the block's index range.
+//  - The local power scan around a minor's capital sums integer unit power per owner, so one scan per minor serves
+//    every major (same plots, same units, same IsCombatUnit filter; integer sums do not depend on the order).
+//  - The major's policy and trait bully modifiers (pure getters of the major) are read once per table.
+//  - Everything else is copied from CalculateBullyMetric(eMajor, false, NULL), including both float expressions.
+void CvMinorCivAI::FillBullyGoldIconTable(bool* abCanBully)
+{
+	const int iNumMinorSlots = MAX_MINOR_CIVS - MAX_MAJOR_CIVS;
+	bool abMajorAlive[MAX_MAJOR_CIVS];
+	bool bAnyMajorAlive = false;
+	bool bAnyMinorAlive = false;
+	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+	{
+		abMajorAlive[iI] = GET_PLAYER((PlayerTypes)iI).isAlive();
+		bAnyMajorAlive = bAnyMajorAlive || abMajorAlive[iI];
+		for(int jJ = MAX_MAJOR_CIVS; jJ < MAX_MINOR_CIVS; jJ++)
+			abCanBully[iI * iNumMinorSlots + jJ - MAX_MAJOR_CIVS] = false;
+	}
+	for(int jJ = MAX_MAJOR_CIVS; jJ < MAX_MINOR_CIVS; jJ++)
+	{
+		if(GET_PLAYER((PlayerTypes)jJ).isAlive())
+		{
+			bAnyMinorAlive = true;
+			break;
+		}
+	}
+	// Golden calls CalculateBullyMetric (and so GetMilitaryMight) only for an alive major and an alive minor.
+	if(!bAnyMajorAlive || !bAnyMinorAlive)
+		return;
+
+	int aiGlobalMilitaryScore[MAX_MAJOR_CIVS];
+	GetBullyGlobalMilitaryScores(aiGlobalMilitaryScore);
+
+	int aiPoliciesMod[MAX_MAJOR_CIVS];
+	int aiTraitMod[MAX_MAJOR_CIVS];
+	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+	{
+		aiPoliciesMod[iI] = 0;
+		aiTraitMod[iI] = 0;
+		if(!abMajorAlive[iI])
+			continue;
+		aiPoliciesMod[iI] = GET_PLAYER((PlayerTypes)iI).GetPlayerPolicies()->GetNumericModifier(POLICYMOD_MINOR_BULLY_SCORE_MODIFIER);
+#if defined(TRAITIFY)
+		aiTraitMod[iI] = GET_PLAYER((PlayerTypes)iI).GetPlayerTraits()->GetMinorBullyModifier();
+#endif
+	}
+
+	for(int jJ = MAX_MAJOR_CIVS; jJ < MAX_MINOR_CIVS; jJ++)
+	{
+		bool abMinorCanBully[MAX_MAJOR_CIVS];
+		GET_PLAYER((PlayerTypes)jJ).GetMinorCivAI()->GetCanMajorBullyGoldForAllMajors(aiGlobalMilitaryScore, aiPoliciesMod, aiTraitMod, abMajorAlive, abMinorCanBully);
+		for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+		{
+			if(abMajorAlive[iI])
+				abCanBully[iI * iNumMinorSlots + jJ - MAX_MAJOR_CIVS] = abMinorCanBully[iI];
+		}
+	}
+
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+	{
+		if(!abMajorAlive[iI])
+			continue;
+		for(int jJ = MAX_MAJOR_CIVS; jJ < MAX_MINOR_CIVS; jJ++)
+		{
+			HEADLESS_OPT_VERIFY(abCanBully[iI * iNumMinorSlots + jJ - MAX_MAJOR_CIVS] == GET_PLAYER((PlayerTypes)jJ).GetMinorCivAI()->CanMajorBullyGold((PlayerTypes)iI),
+				11, "CvMinorCivAI::FillBullyGoldIconTable");
+		}
+	}
+#endif
+}
+
+// OPT-0011: the "global military power ranking" part of CalculateBullyMetric for every major (0 if not ranked).
+void CvMinorCivAI::GetBullyGlobalMilitaryScores(int* aiGlobalMilitaryScore)
+{
+	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+		aiGlobalMilitaryScore[iI] = 0;
+
+	CvWeightedVector<PlayerTypes, MAX_MAJOR_CIVS, true> veMilitaryRankings;
+	PlayerTypes eMajorLoop;
+	for(int iMajorLoop = 0; iMajorLoop < MAX_MAJOR_CIVS; iMajorLoop++)
+	{
+		eMajorLoop = (PlayerTypes) iMajorLoop;
+		if(GET_PLAYER(eMajorLoop).isAlive() && !GET_PLAYER(eMajorLoop).isMinorCiv())
+		{
+			veMilitaryRankings.push_back(eMajorLoop, GET_PLAYER(eMajorLoop).GetMilitaryMight()); // Don't recalculate within a turn, can cause inconsistency
+		}
+	}
+	veMilitaryRankings.SortItems();
+	for(int iRanking = 0; iRanking < veMilitaryRankings.size(); iRanking++)
+	{
+		// golden: the first (only) ranking entry equal to eBullyPlayer
+		float fRankRatio = (float)(veMilitaryRankings.size() - iRanking) / (float)(veMilitaryRankings.size());
+#ifdef NQ_TRIBUTE_EASIER_WITH_LOCAL_POWER
+		aiGlobalMilitaryScore[veMilitaryRankings.GetElement(iRanking)] = (int)(fRankRatio * 50); // A score between 50*(1 / num majors alive) and 50, with the highest rank major getting 50
+#else
+		aiGlobalMilitaryScore[veMilitaryRankings.GetElement(iRanking)] = (int)(fRankRatio * 75); // A score between 75*(1 / num majors alive) and 75, with the highest rank major getting 75
+#endif
+	}
+}
+
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_DISK_LISTS)
+// OPT-0048 (on top of OPT-0011): the local power scan visits the plots plotXYWithRangeCheck returns for the offsets
+// dx = -r..r (outer), dy = -r..r (inner) around the minor's capital. That sequence (including repeats on tiny wrapped maps)
+// is a pure function of (capital x, y, map width, height, wrap flags, r): it is built once with golden's loop and stored
+// as plot indices; it is rebuilt whenever any of those inputs differs. Never keyed or ordered by pointer.
+namespace
+{
+struct HeadlessBullyDisk
+{
+	int m_aiKey[7];	// capital x, y, grid width, grid height, wrap x, wrap y, radius
+	std::vector<int> m_aiPlots;	// plot indices in golden's visiting order, terminated by -1
+};
+HeadlessBullyDisk s_akHeadlessBullyDisk[MAX_PLAYERS];
+
+const std::vector<int>& HeadlessBullyDiskPlots(PlayerTypes eMinor, int iX, int iY, int iRadius)
+{
+	CvMap& kMap = GC.getMap();
+	const int aiKey[7] = { iX, iY, kMap.getGridWidth(), kMap.getGridHeight(), kMap.isWrapX() ? 1 : 0, kMap.isWrapY() ? 1 : 0, iRadius };
+	HeadlessBullyDisk& kDisk = s_akHeadlessBullyDisk[eMinor];
+	bool bSame = !kDisk.m_aiPlots.empty();
+	for(int i = 0; i < 7; i++)
+		bSame = bSame && kDisk.m_aiKey[i] == aiKey[i];
+	if(!bSame)
+	{
+		kDisk.m_aiPlots.clear();
+		for(int i = 0; i < 7; i++)
+			kDisk.m_aiKey[i] = aiKey[i];
+		// golden's loop and range check (the non-AUI_HEXSPACE_DX_LOOPS branch of the scan)
+		for(int iDX = -iRadius; iDX <= iRadius; iDX++)
+		{
+			for(int iDY = -iRadius; iDY <= iRadius; iDY++)
+			{
+				CvPlot* pLoopPlot = ::plotXYWithRangeCheck(iX, iY, iDX, iDY, iRadius);
+				if(pLoopPlot != NULL)
+					kDisk.m_aiPlots.push_back((int)pLoopPlot->GetPlotIndex());
+			}
+		}
+		kDisk.m_aiPlots.push_back(-1);
+	}
+	return kDisk.m_aiPlots;
+}
+}
+#endif
+
+// OPT-0011: CanMajorBullyGold(eMajor) of this minor for every alive major, one local power scan.
+void CvMinorCivAI::GetCanMajorBullyGoldForAllMajors(const int* aiGlobalMilitaryScore, const int* aiPoliciesMod, const int* aiTraitMod, const bool* abMajorAlive, bool* abCanBully)
+{
+	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+		abCanBully[iI] = false;
+
+	// CanMajorBullyGold: Can't bully us if we're dead!
+	if(!GetPlayer()->isAlive())
+		return;
+
+	// CalculateBullyMetric returns iFailScore (negative) for every major without a capital or its plot
+	CvCity* pMinorCapital = GetPlayer()->getCapitalCity();
+	if(pMinorCapital == NULL)
+		return;
+	CvPlot* pMinorCapitalPlot = pMinorCapital->plot();
+	if(pMinorCapitalPlot == NULL)
+		return;
+
+#ifdef AUI_WARNING_FIXES
+	int iComparisonRadius = MAX(GC.getMap().getGridWidth() / 10, uint(5));
+#else
+	int iComparisonRadius = std::max(GC.getMap().getGridWidth() / 10, 5);
+#endif
+	int iMinorCapitalX = pMinorCapitalPlot->getX();
+	int iMinorCapitalY = pMinorCapitalPlot->getY();
+	const PlayerTypes eMinor = GetPlayer()->GetID();
+	int aiBullyLocalPower[MAX_MAJOR_CIVS];
+	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+		aiBullyLocalPower[iI] = 0;
+	int iMinorLocalPower = 0;
+	CvPlot* pLoopPlot;
+	IDInfo* pUnitNode;
+	CvUnit* pLoopUnit;
+
+	// Include the minor's city power
+	iMinorLocalPower += pMinorCapital->GetPower();
+
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_DISK_LISTS) && !defined(AUI_HEXSPACE_DX_LOOPS)
+	// OPT-0048: the same plots in the same order, from the stored disk (see HeadlessBullyDiskPlots)
+	const std::vector<int>& aiHeadlessDisk = HeadlessBullyDiskPlots(eMinor, iMinorCapitalX, iMinorCapitalY, iComparisonRadius);
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	{
+		size_t uiPos = 0;
+		bool bSameDisk = true;
+		for(int iDX = -iComparisonRadius; iDX <= iComparisonRadius; iDX++)
+		{
+			for(int iDY = -iComparisonRadius; iDY <= iComparisonRadius; iDY++)
+			{
+				CvPlot* pRef = ::plotXYWithRangeCheck(iMinorCapitalX, iMinorCapitalY, iDX, iDY, iComparisonRadius);
+				if(pRef != NULL)
+				{
+					bSameDisk = bSameDisk && uiPos < aiHeadlessDisk.size() && aiHeadlessDisk[uiPos] == (int)pRef->GetPlotIndex();
+					uiPos++;
+				}
+			}
+		}
+		HEADLESS_OPT_VERIFY(bSameDisk && uiPos + 1 == aiHeadlessDisk.size(), 48, "CvMinorCivAI bully local-power disk");
+	}
+#endif
+	CvMap& kHeadlessMap = GC.getMap();
+	for(size_t uiHeadlessPos = 0; aiHeadlessDisk[uiHeadlessPos] >= 0; uiHeadlessPos++)
+	{
+		{
+			pLoopPlot = kHeadlessMap.plotByIndexUnchecked(aiHeadlessDisk[uiHeadlessPos]);
+#elif defined(AUI_HEXSPACE_DX_LOOPS)
+	int iMaxDX, iDX;
+	for (int iDY = -iComparisonRadius; iDY <= iComparisonRadius; iDY++)
+	{
+		iMaxDX = iComparisonRadius - MAX(0, iDY);
+		for (iDX = -iComparisonRadius - MIN(0, iDY); iDX <= iMaxDX; iDX++) // MIN() and MAX() stuff is to reduce loops (hexspace!)
+		{
+			// No need for range check because loops are set up properly
+			pLoopPlot = plotXY(iMinorCapitalX, iMinorCapitalY, iDX, iDY);
+#else
+	for(int iDX = -iComparisonRadius; iDX <= iComparisonRadius; iDX++)
+	{
+		for(int iDY = -iComparisonRadius; iDY <= iComparisonRadius; iDY++)
+		{
+			pLoopPlot = ::plotXYWithRangeCheck(iMinorCapitalX, iMinorCapitalY, iDX, iDY, iComparisonRadius);
+#endif
+
+			if(pLoopPlot != NULL)
+			{
+				// If there are Units here, loop through them
+				if(pLoopPlot->getNumUnits() > 0)
+				{
+					pUnitNode = pLoopPlot->headUnitNode();
+
+					while(pUnitNode != NULL)
+					{
+						pLoopUnit = ::getUnit(*pUnitNode);
+						pUnitNode = pLoopPlot->nextUnitNode(pUnitNode);
+
+						// Is a combat unit
+						if(pLoopUnit && pLoopUnit->IsCombatUnit())
+						{
+							// golden: owner == eBullyPlayer -> bully power, else owner == minor -> minor power
+							const PlayerTypes eOwner = pLoopUnit->getOwner();
+							if(eOwner >= 0 && eOwner < MAX_MAJOR_CIVS)
+							{
+								aiBullyLocalPower[eOwner] += pLoopUnit->GetPower();
+							}
+							else if(eOwner == eMinor)
+							{
+								iMinorLocalPower += pLoopUnit->GetPower();
+							}
+						}
+					}
+				}
+
+			}
+		}
+	}
+
+	const int iFailScore = -300;
+	for(int iMajor = 0; iMajor < MAX_MAJOR_CIVS; iMajor++)
+	{
+		if(!abMajorAlive[iMajor])
+			continue;
+		const PlayerTypes eBullyPlayer = (PlayerTypes)iMajor;
+		int iScore = 0;
+
+		// Global military power ranking of major
+		int iGlobalMilitaryScore = aiGlobalMilitaryScore[iMajor];
+		iScore += iGlobalMilitaryScore;
+
+		// Local military power comparison
+		int iBullyLocalPower = aiBullyLocalPower[iMajor];
+		float fLocalPowerRatio = (float)iBullyLocalPower / (float)iMinorLocalPower;
+		int iLocalPowerScore = 0;
+		if(fLocalPowerRatio >= 3.0)
+		{
+#ifdef NQ_TRIBUTE_EASIER_WITH_LOCAL_POWER
+			iLocalPowerScore += 150;
+#else
+			iLocalPowerScore += 125;
+#endif
+		}
+		else if(fLocalPowerRatio >= 2.0)
+		{
+#ifdef NQ_TRIBUTE_EASIER_WITH_LOCAL_POWER
+			iLocalPowerScore += 120;
+#else
+			iLocalPowerScore += 100;
+#endif
+		}
+		else if(fLocalPowerRatio >= 1.5)
+		{
+#ifdef NQ_TRIBUTE_EASIER_WITH_LOCAL_POWER
+			iLocalPowerScore += 90;
+#else
+			iLocalPowerScore += 75;
+#endif
+		}
+		else if(fLocalPowerRatio >= 1.0)
+		{
+#ifdef NQ_TRIBUTE_EASIER_WITH_LOCAL_POWER
+			iLocalPowerScore += 60;
+#else
+			iLocalPowerScore += 50;
+#endif
+		}
+		else if(fLocalPowerRatio >= 0.5)
+		{
+#ifdef NQ_TRIBUTE_EASIER_WITH_LOCAL_POWER
+			iLocalPowerScore += 30;
+#else
+			iLocalPowerScore += 25;
+#endif
+		}
+		iScore += iLocalPowerScore;
+
+		// Social Policies
+		int iPoliciesScore = 0;
+		int iPoliciesMod = aiPoliciesMod[iMajor];	// GetNumericModifier(POLICYMOD_MINOR_BULLY_SCORE_MODIFIER), read once per table
+		if (iPoliciesMod != 0)
+		{
+			iPoliciesScore += iGlobalMilitaryScore;
+			iPoliciesScore += iLocalPowerScore;
+
+			iPoliciesScore *= iPoliciesMod;
+			iPoliciesScore /= 100;
+		}
+		iScore += iPoliciesScore;
+
+#if defined(TRAITIFY)
+		// Player Trait
+		int iTraitScore = 0;
+		int iTraitMod = aiTraitMod[iMajor];	// GetMinorBullyModifier(), read once per table
+		if (iTraitMod != 0)
+		{
+			iTraitScore += iGlobalMilitaryScore;
+			iTraitScore += iLocalPowerScore;
+			iTraitScore *= iTraitMod;
+			iTraitScore /= 100;
+		}
+		iScore += iTraitScore;
+#endif
+		// Base Reluctance
+		const int iBaseReluctanceScore = -110;
+		iScore += iBaseReluctanceScore;
+
+		// Current influence of major
+		if(GetEffectiveFriendshipWithMajor(eBullyPlayer) < GC.getFRIENDSHIP_THRESHOLD_CAN_BULLY())
+		{
+			int iInfluenceScore = iFailScore;
+			iScore += iInfluenceScore;
+		}
+
+		// Previous bully attempts
+		int iLastBullyTurn = GetTurnLastBulliedByMajor(eBullyPlayer);
+		if(iLastBullyTurn >= 0)
+		{
+			if(iLastBullyTurn + 10 >= GC.getGame().getGameTurn())
+			{
+				int iBulliedVeryRecentlyScore = iFailScore;
+				iScore += iBulliedVeryRecentlyScore;
+			}
+			else if(iLastBullyTurn + 20 >= GC.getGame().getGameTurn())
+			{
+				int iBulliedRecentlyScore = -40;
+				iScore += iBulliedRecentlyScore;
+			}
+		}
+
+		// (bForUnit == false: no tribute-type and population terms)
+
+		// Passive Support from other majors
+		if(GetAlly() != NO_PLAYER && GetAlly() != eBullyPlayer)
+		{
+			int iAllyScore = -10;
+			iScore += iAllyScore;
+		}
+
+		// Pledges of Protection from other majors
+		PlayerTypes eMajorLoop;
+		for(int iMajorLoop = 0; iMajorLoop < MAX_MAJOR_CIVS; iMajorLoop++)
+		{
+			int iProtectionScore = 0;
+			eMajorLoop = (PlayerTypes) iMajorLoop;
+			if(eMajorLoop != eBullyPlayer && IsProtectedByMajor(eMajorLoop))
+			{
+				iProtectionScore += -20;
+				iScore += iProtectionScore;
+				break;
+			}
+		}
+
+		// Minor Civ Type
+		if(GetPersonality() == MINOR_CIV_PERSONALITY_HOSTILE)
+		{
+			int iHostileScore = -10;
+			iScore += iHostileScore;
+		}
+		if(GetTrait() == MINOR_CIV_TRAIT_MILITARISTIC)
+		{
+			int iMilitaristicScore = -10;
+			iScore += iMilitaristicScore;
+		}
+
+		// CanMajorBullyGold(ePlayer, iScore)
+		abCanBully[iMajor] = (iScore >= 0);
+	}
+}
+#endif
 
 CvString CvMinorCivAI::GetMajorBullyGoldDetails(PlayerTypes ePlayer)
 {

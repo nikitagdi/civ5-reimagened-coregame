@@ -424,8 +424,11 @@ public:
 #else
 	int	ScoreInternationalTR (const TradeConnection& kTradeConnection);
 	int ScoreFoodTR(const TradeConnection& kTradeConnection, CvCity* pSmallestCity);
+#if defined(LEKMOD_HEADLESS_OPT_TRADEAI_SCOREPROD_BYREF)
+	int ScoreProductionTR (const TradeConnection& kTradeConnection, const std::vector<CvCity*>& aTargetCityList); // OPT-0009
+#else
 	int ScoreProductionTR (const TradeConnection& kTradeConnection, std::vector<CvCity*> aTargetCityList);
-
+#endif
 	bool ChooseTradeUnitTargetPlot(CvUnit* pUnit, int& iOriginPlotIndex, int& iDestPlotIndex, TradeConnectionType& eTradeConnectionType, bool& bDisband, const TradeConnectionList& aTradeConnections);
 #endif
 

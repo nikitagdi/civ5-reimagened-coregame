@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	ï¿½ 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -106,17 +106,30 @@ public:
 		m_pPrev = NULL;
 		m_pStack = NULL;
 #endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS)
+		m_iOpenKey = 0;
+#endif
 #ifdef AUI_ASTAR_PRECALCULATE_NEIGHBORS_ON_INITIALIZE
 		for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
 		{
 			m_apNeighbors[iI] = NULL;
 		}
 #endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO)
+		m_iHeadlessCacheEpoch = 0;
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO)
+		m_iHeadlessWalkVersion = 0;
+		m_bHeadlessWalkOK = false;
+#endif
 	}
 
 	void clear()
 	{
 		m_iTotalCost = 0;
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS)
+		m_iOpenKey = 0;
+#endif
 		m_iKnownCost = 0;
 		m_iHeuristicCost = 0;
 #ifdef AUI_ASTAR_MINOR_OPTIMIZATION
@@ -156,6 +169,9 @@ public:
 	}
 
 	int m_iTotalCost;	  // Fitness (f)
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS)
+	int m_iOpenKey;		  // headless OPT-0086: the cost the open list index (CvAStar::m_aOpenBuckets) holds this node under while it is open
+#endif
 	int m_iKnownCost;	  // Goal (g)
 	int m_iHeuristicCost; // Heuristic (h)
 	int m_iData1;
@@ -212,6 +228,17 @@ public:
 
 #ifndef AUI_ASTAR_MINOR_OPTIMIZATION
 	CvPathNodeCacheData m_kCostCacheData;
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO)
+	// headless OPT-0013: search epoch (CvAStar::HeadlessSearchEpoch) in which PathValid/TacticalAnalysisMapPathValid last
+	// filled m_kCostCacheData for this node; 0 = not filled in any search. Not reset by clear() (epochs never repeat).
+	int m_iHeadlessCacheEpoch;
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO)
+	// headless OPT-0015: memoised result of the PathValid/TacticalAnalysisMapPathValid parent-chain checks from this node's
+	// parent upward (valid while m_iHeadlessWalkVersion == CvAStar::HeadlessTreeVersion(); 0 = none)
+	int m_iHeadlessWalkVersion;
+	bool m_bHeadlessWalkOK;
 #endif
 };
 

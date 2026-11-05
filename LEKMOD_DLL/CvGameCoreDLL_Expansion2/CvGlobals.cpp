@@ -1984,7 +1984,9 @@ CvGlobals::~CvGlobals()
 /************************************************************************************************/
 // Originally for Civ 4, ported by ls612 to Civ 5
 #include <dbghelp.h>
+#if !defined(LEKMOD_PORTABLE)
 #pragma comment (lib, "dbghelp.lib")
+#endif
 
 void CreateMiniDump(EXCEPTION_POINTERS *pep)
 {
@@ -2344,6 +2346,9 @@ void CvGlobals::uninit()
 	SAFE_DELETE(m_internationalTradeRouteLandFinder);
 	SAFE_DELETE(m_internationalTradeRouteWaterFinder);
 	SAFE_DELETE(m_tacticalAnalysisMapFinder);
+#if defined(LEKMOD_HEADLESS_OPT_PAR_CLOSEST_OP_UNIT)
+	HeadlessParShutdown();	// OPT-0080: stop the worker threads, free the per-thread finder clones
+#endif
 
 	// already deleted outside of the dll, set to null for safety
 	m_pathFinder=NULL;
@@ -2820,6 +2825,7 @@ std::vector<CvTerrainInfo*>& CvGlobals::getTerrainInfo()
 	return m_paTerrainInfo;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvTerrainInfo* CvGlobals::getTerrainInfo(TerrainTypes eTerrainNum)
 {
 	CvAssert(eTerrainNum > -1);
@@ -2829,6 +2835,7 @@ CvTerrainInfo* CvGlobals::getTerrainInfo(TerrainTypes eTerrainNum)
 	else
 		return NULL;
 }
+#endif
 
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumResourceClassInfos() const
@@ -2877,6 +2884,7 @@ std::vector<CvResourceInfo*>& CvGlobals::getResourceInfo()
 	return m_paResourceInfo;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvResourceInfo* CvGlobals::getResourceInfo(ResourceTypes eResourceNum)
 {
 	CvAssert(eResourceNum > -1);
@@ -2886,6 +2894,7 @@ CvResourceInfo* CvGlobals::getResourceInfo(ResourceTypes eResourceNum)
 	else
 		return NULL;
 }
+#endif
 
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumFeatureInfos() const
@@ -2903,6 +2912,7 @@ std::vector<CvFeatureInfo*>& CvGlobals::getFeatureInfo()
 	return m_paFeatureInfo;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvFeatureInfo* CvGlobals::getFeatureInfo(FeatureTypes eFeatureNum)
 {
 	CvAssert(eFeatureNum > -1);
@@ -2912,6 +2922,7 @@ CvFeatureInfo* CvGlobals::getFeatureInfo(FeatureTypes eFeatureNum)
 	else
 		return NULL;
 }
+#endif
 
 int& CvGlobals::getNumPlayableCivilizationInfos()
 {
@@ -2939,6 +2950,7 @@ std::vector<CvCivilizationInfo*>& CvGlobals::getCivilizationInfo()
 	return m_paCivilizationInfo;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvCivilizationInfo* CvGlobals::getCivilizationInfo(CivilizationTypes eCivilizationNum)
 #else
@@ -2952,6 +2964,7 @@ CvCivilizationInfo* CvGlobals::getCivilizationInfo(CivilizationTypes eCivilizati
 	else
 		return NULL;
 }
+#endif
 
 CivilizationTypes CvGlobals::getCivilizationInfoIndex(const char* pszType)
 {
@@ -3049,6 +3062,7 @@ CvLeaderHeadInfo* CvGlobals::getLeaderHeadInfo(LeaderHeadTypes eLeaderHeadNum)
 		return NULL;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumUnitInfos() const
 #else
@@ -3057,12 +3071,14 @@ int CvGlobals::getNumUnitInfos()
 {
 	return m_pUnits->GetNumUnits();
 }
+#endif
 
 std::vector<CvUnitEntry*>& CvGlobals::getUnitInfo()
 {
 	return m_pUnits->GetUnitEntries();
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_CONSTIFY
 _Ret_maybenull_ CvUnitEntry* CvGlobals::getUnitInfo(UnitTypes eUnitNum) const
 #else
@@ -3083,6 +3099,7 @@ CvUnitEntry* CvGlobals::getUnitInfo(UnitTypes eUnitNum)
 	else
 		return NULL;
 }
+#endif
 
 CvUnitXMLEntries* CvGlobals::GetGameUnits() const
 {
@@ -3374,6 +3391,7 @@ CvRouteInfo* CvGlobals::getRouteInfo(RouteTypes eRouteNum)
 		return NULL;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumImprovementInfos() const
 #else
@@ -3382,12 +3400,14 @@ int CvGlobals::getNumImprovementInfos()
 {
 	return m_pImprovements->GetNumImprovements();
 }
+#endif
 
 std::vector<CvImprovementEntry*>& CvGlobals::getImprovementInfo()
 {
 	return m_pImprovements->GetImprovementEntries();
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvImprovementEntry* CvGlobals::getImprovementInfo(ImprovementTypes eImprovementNum)
 {
 #ifdef AUI_WARNING_FIXES
@@ -3404,6 +3424,7 @@ CvImprovementEntry* CvGlobals::getImprovementInfo(ImprovementTypes eImprovementN
 	else
 		return NULL;
 }
+#endif
 
 CvImprovementXMLEntries* CvGlobals::GetGameImprovements() const
 {
@@ -3426,6 +3447,7 @@ std::vector<CvBuildInfo*>& CvGlobals::getBuildInfo()
 	return m_paBuildInfo;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvBuildInfo* CvGlobals::getBuildInfo(BuildTypes eBuildNum)
 {
 #ifdef AUI_WARNING_FIXES
@@ -3442,6 +3464,7 @@ CvBuildInfo* CvGlobals::getBuildInfo(BuildTypes eBuildNum)
 	else
 		return NULL;
 }
+#endif
 
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumHandicapInfos() const
@@ -3615,6 +3638,7 @@ CvProjectXMLEntries* CvGlobals::GetGameProjects() const
 	return m_pProjects;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumBuildingClassInfos() const
 {
@@ -3625,12 +3649,14 @@ int CvGlobals::getNumBuildingClassInfos()
 	return (int)m_paBuildingClassInfo.size();
 #endif
 }
+#endif
 
 std::vector<CvBuildingClassInfo*>& CvGlobals::getBuildingClassInfo()
 {
 	return m_paBuildingClassInfo;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvBuildingClassInfo* CvGlobals::getBuildingClassInfo(BuildingClassTypes eBuildingClassNum)
 {
@@ -3649,7 +3675,9 @@ CvBuildingClassInfo* CvGlobals::getBuildingClassInfo(BuildingClassTypes eBuildin
 	else
 		return NULL;
 }
+#endif
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumBuildingInfos() const
 #else
@@ -3658,12 +3686,14 @@ int CvGlobals::getNumBuildingInfos()
 {
 	return m_pBuildings->GetNumBuildings();
 }
+#endif
 
 std::vector<CvBuildingEntry*>& CvGlobals::getBuildingInfo()
 {
 	return m_pBuildings->GetBuildingEntries();
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvBuildingEntry* CvGlobals::getBuildingInfo(BuildingTypes eBuildingNum)
 {
@@ -3682,6 +3712,7 @@ CvBuildingEntry* CvGlobals::getBuildingInfo(BuildingTypes eBuildingNum)
 	else
 		return NULL;
 }
+#endif
 
 CvBuildingXMLEntries* CvGlobals::GetGameBuildings() const
 {
@@ -3869,6 +3900,7 @@ CvAutomateInfo* CvGlobals::getAutomateInfo(int iAutomateNum)
 		return NULL;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvGlobals::getNumPromotionInfos() const
 {
@@ -3879,12 +3911,14 @@ int CvGlobals::getNumPromotionInfos()
 	return (int)m_pPromotions->GetPromotionEntries().size();
 #endif
 }
+#endif
 
 std::vector<CvPromotionEntry*>& CvGlobals::getPromotionInfo()
 {
 	return m_pPromotions->GetPromotionEntries();
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvPromotionEntry* CvGlobals::getPromotionInfo(PromotionTypes ePromotionNum)
 {
@@ -3903,6 +3937,7 @@ CvPromotionEntry* CvGlobals::getPromotionInfo(PromotionTypes ePromotionNum)
 	else
 		return NULL;
 }
+#endif
 
 CvPromotionXMLEntries* CvGlobals::GetGamePromotions() const
 {
@@ -7078,6 +7113,42 @@ const CvGlobals::InfosMap& CvGlobals::GetInfoTypes() const
 	return m_infosMap;
 }
 //------------------------------------------------------------------------------
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+// OPT-0041: bumped whenever the game database or the info entries built from it may have been (re)loaded or written;
+// the sparse entry lists of HeadlessSparseLists.h compare it and rebuild.
+unsigned int g_uiHeadlessDbStaticEpoch = 1;
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO)
+// OPT-0019: memo of getInfoTypeForString. The result is a pure function of m_infosMap and the name's contents
+// (find() on a hash_map<std::string,int>; the not-found branch only formats a string for an assert that is compiled
+// out in release). m_infosMap is written only by setInfoTypeFromString and infoTypeFromStringReset, which invalidate;
+// CvDllDatabaseUtility::CacheGameDatabaseData invalidates once more after its prefetch so the loading-time lookups do
+// not occupy the table. Keyed by contents (FNV-1a + memcmp), never by pointer; bounded probing, else the golden path.
+namespace
+{
+struct InfoTypeMemo
+{
+	unsigned int uiGen;	// valid while == s_uiInfoTypeMemoGen
+	unsigned int uiHash;
+	int iValue;
+	char szName[64];
+};
+const unsigned int INFOTYPE_MEMO_SLOTS = 2048;	// power of two
+const unsigned int INFOTYPE_MEMO_MAX_PROBES = 32;
+InfoTypeMemo s_aInfoTypeMemo[INFOTYPE_MEMO_SLOTS];
+unsigned int s_uiInfoTypeMemoGen = 1;
+}
+
+void CvGlobals::InvalidateInfoTypeMemo()
+{
+	if(++s_uiInfoTypeMemoGen == 0)
+	{
+		memset(s_aInfoTypeMemo, 0, sizeof(s_aInfoTypeMemo));
+		s_uiInfoTypeMemoGen = 1;
+	}
+}
+#endif
+
 int CvGlobals::getInfoTypeForString(const char* szType, bool hideAssert) const
 {
 	if(!hideAssert)
@@ -7088,6 +7159,40 @@ int CvGlobals::getInfoTypeForString(const char* szType, bool hideAssert) const
 	if(szType == NULL)
 		return -1;
 
+#if defined(LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO)
+	// OPT-0019: memoised lookup; a miss computes the golden result (getInfoTypeForStringUncached) and stores it.
+	unsigned int uiHash = 2166136261U;
+	size_t uLen = 0;
+	for(const char* p = szType; *p != 0; ++p, ++uLen)
+		uiHash = (uiHash ^ (unsigned char)*p) * 16777619U;
+	if(uLen < sizeof(s_aInfoTypeMemo[0].szName))
+	{
+		for(unsigned int uiProbe = 0; uiProbe < INFOTYPE_MEMO_MAX_PROBES; ++uiProbe)
+		{
+			InfoTypeMemo& kMemo = s_aInfoTypeMemo[(uiHash + uiProbe) & (INFOTYPE_MEMO_SLOTS - 1)];
+			if(kMemo.uiGen != s_uiInfoTypeMemoGen)
+			{
+				const int iValue = getInfoTypeForStringUncached(szType, hideAssert);
+				kMemo.uiGen = s_uiInfoTypeMemoGen;
+				kMemo.uiHash = uiHash;
+				kMemo.iValue = iValue;
+				memcpy(kMemo.szName, szType, uLen + 1);
+				return iValue;
+			}
+			if(kMemo.uiHash == uiHash && memcmp(kMemo.szName, szType, uLen + 1) == 0)
+			{
+				HEADLESS_OPT_VERIFY(kMemo.iValue == getInfoTypeForStringUncached(szType, true), 19, "CvGlobals::getInfoTypeForString memo");
+				return kMemo.iValue;
+			}
+		}
+	}
+	return getInfoTypeForStringUncached(szType, hideAssert);
+}
+
+// OPT-0019: the golden body of getInfoTypeForString after the NULL check, unchanged.
+int CvGlobals::getInfoTypeForStringUncached(const char* szType, bool hideAssert) const
+{
+#endif
 
 	InfosMap::const_iterator it = m_infosMap.find(szType);
 	if(it!=m_infosMap.end())
@@ -7111,6 +7216,9 @@ int CvGlobals::getInfoTypeForString(const char* szType, bool hideAssert) const
 
 void CvGlobals::setInfoTypeFromString(const char* szType, int idx)
 {
+#if defined(LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO)
+	InvalidateInfoTypeMemo();	// OPT-0019: m_infosMap changes
+#endif
 	CvAssertMsg(szType, "null info type string");
 	uint uiHash = FString::Hash(szType);
 #ifdef _DEBUG
@@ -7128,6 +7236,12 @@ void CvGlobals::setInfoTypeFromString(const char* szType, int idx)
 
 void CvGlobals::infoTypeFromStringReset()
 {
+#if defined(LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO)
+	InvalidateInfoTypeMemo();	// OPT-0019: m_infosMap changes
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	++g_uiHeadlessDbStaticEpoch;	// OPT-0041: the info entries are about to be reloaded
+#endif
 	m_infosMap.clear();
 	m_infosHashMap.clear();
 }
@@ -7181,8 +7295,21 @@ int CvGlobals::getNumPlayerOptionInfos() const
 
 
 //------------------------------------------------------------------------------
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+// OPT-0016: bumped whenever the game database may have been (re)loaded or written; memos built from it compare it.
+unsigned int g_uiHeadlessGameDatabaseEpoch = 1;
+#endif
 void CvGlobals::SetGameDatabase(Database::Connection* pGameDatabase)
 {
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	++g_uiHeadlessDbStaticEpoch;	// OPT-0041
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	CvPreGame::InvalidateGameOptionCache();	// OPT-0010: memoised option defaults came from the previous database
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	++g_uiHeadlessGameDatabaseEpoch;	// OPT-0016
+#endif
 	if(m_pGameDatabase != pGameDatabase)
 	{
 		if(m_pGameDatabase)

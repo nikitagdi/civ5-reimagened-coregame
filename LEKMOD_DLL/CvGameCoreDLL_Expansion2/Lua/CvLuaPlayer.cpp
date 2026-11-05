@@ -1877,13 +1877,37 @@ int CvLuaPlayer::lGetImprovementGoldMaintenance(lua_State* L)
 //int calculateGoldRate();
 int CvLuaPlayer::lCalculateGoldRate(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	// FIX-0023 / DS-0037: same value, CvTreasury's saved unit maintenance/supply fields untouched (CvHeadlessUiTreasuryScope)
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	int iResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();
+		iResult = pkPlayer->calculateGoldRate();
+	}
+	lua_pushinteger(L, iResult);
+	return 1;
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::calculateGoldRate);
+#endif
 }
 //------------------------------------------------------------------------------
 //int CalculateGoldRateTimes100();
 int CvLuaPlayer::lCalculateGoldRateTimes100(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	// FIX-0023 / DS-0037: same value, CvTreasury's saved unit maintenance/supply fields untouched (CvHeadlessUiTreasuryScope)
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	int iResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();
+		iResult = pkPlayer->calculateGoldRateTimes100();
+	}
+	lua_pushinteger(L, iResult);
+	return 1;
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::calculateGoldRateTimes100);
+#endif
 }
 //------------------------------------------------------------------------------
 //int CalculateGrossGoldTimes100();
@@ -1901,7 +1925,15 @@ int CvLuaPlayer::lCalculateInflatedCosts(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	int iResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();	// FIX-0023 / DS-0037: same value, saved unit maintenance/supply fields untouched
+		iResult = pkPlayer->GetTreasury()->CalculateInflatedCosts();
+	}
+#else
 	const int iResult = pkPlayer->GetTreasury()->CalculateInflatedCosts();
+#endif
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -1996,8 +2028,16 @@ int CvLuaPlayer::lGetResearchTurnsLeft(lua_State* L)
 	const TechTypes eTech	= (TechTypes)lua_tointeger(L, 2);
 	const bool bOverflow	= lua_toboolean(L, 3);
 
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	int iResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();	// FIX-0023 / DS-0037: the turns left use GetScienceTimes100 (budget deficit -> treasury costs)
+		iResult = pkPlayer->GetPlayerTechs()->GetResearchTurnsLeft(eTech, bOverflow);
+	}
+#else
 	const int iResult
 	    = pkPlayer->GetPlayerTechs()->GetResearchTurnsLeft(eTech, bOverflow);
+#endif
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -6018,13 +6058,33 @@ int CvLuaPlayer::lGetCitiesLost(lua_State* L)
 //int getPower();
 int CvLuaPlayer::lGetPower(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	// FIX-0022 / DS-0034: same value as getPower() on this machine, without refreshing the synced might cache
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	int iMilitaryMight = 0;
+	int iEconomicMight = 0;
+	pkPlayer->HeadlessUiMight(iMilitaryMight, iEconomicMight);
+	lua_pushinteger(L, iMilitaryMight + iEconomicMight);
+	return 1;
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::getPower);
+#endif
 }
 //------------------------------------------------------------------------------
 //int GetMilitaryMight();
 int CvLuaPlayer::lGetMilitaryMight(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	// FIX-0022 / DS-0034: same value as GetMilitaryMight() on this machine, without refreshing the synced might cache
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	int iMilitaryMight = 0;
+	int iEconomicMight = 0;
+	pkPlayer->HeadlessUiMight(iMilitaryMight, iEconomicMight);
+	lua_pushinteger(L, iMilitaryMight);
+	return 1;
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::GetMilitaryMight);
+#endif
 }
 //------------------------------------------------------------------------------
 //int getTotalTimePlayed();
@@ -6650,11 +6710,28 @@ int CvLuaPlayer::lGetMinorCivFavoriteMajor(lua_State* L)
 int CvLuaPlayer::lGetMinorCivScienceFriendshipBonus(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	// FIX-0023 / DS-0037: the bonus is a share of the science total (GetScienceTimes100 -> budget deficit -> treasury costs)
+#if defined(LEKMOD_FIX_SCHOLASTICISM)
+	PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
+#endif
+	int iResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();
+#if defined(LEKMOD_FIX_SCHOLASTICISM)
+		iResult = pkPlayer->GetMinorCivAI()->GetScienceFriendshipBonus(ePlayer);
+#else
+		iResult = pkPlayer->GetMinorCivAI()->GetScienceFriendshipBonus();
+#endif
+	}
+	lua_pushinteger(L, iResult);
+#else
 #if defined(LEKMOD_FIX_SCHOLASTICISM) // Function Parameters changed with this define.
 	PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
 	lua_pushinteger(L, pkPlayer->GetMinorCivAI()->GetScienceFriendshipBonus(ePlayer));
 #else
 	lua_pushinteger(L, pkPlayer->GetMinorCivAI()->GetScienceFriendshipBonus());
+#endif
 #endif
 	return 1;
 }
@@ -7181,15 +7258,39 @@ int CvLuaPlayer::lGetExtraYieldThreshold(lua_State* L)
 }
 //------------------------------------------------------------------------------
 //int getScience();
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+// FIX-0023 / DS-0037: a no-argument int getter of the player run inside CvHeadlessUiTreasuryScope. The science total includes
+// GetScienceFromBudgetDeficitTimes100 -> calculateGoldRateTimes100 -> CalculatePreInflatedCosts, which stored the saved unit
+// maintenance/supply fields on the machine whose top panel asked. GetInstance reads the Lua argument before the scope opens.
+static int HeadlessUiTreasuryIntGetter(lua_State* L, int (CvPlayer::*pfnGetter)() const)
+{
+	CvPlayerAI* pkPlayer = CvLuaPlayer::GetInstance(L);
+	int iResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();
+		iResult = (pkPlayer->*pfnGetter)();
+	}
+	lua_pushinteger(L, iResult);
+	return 1;
+}
+#endif
 int CvLuaPlayer::lGetScience(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	return HeadlessUiTreasuryIntGetter(L, &CvPlayer::GetScience);	// FIX-0023
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::GetScience);
+#endif
 }
 //------------------------------------------------------------------------------
 //int GetScienceTimes100();
 int CvLuaPlayer::lGetScienceTimes100(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	return HeadlessUiTreasuryIntGetter(L, &CvPlayer::GetScienceTimes100);	// FIX-0023
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::GetScienceTimes100);
+#endif
 }
 //int GetScienceFromCitiesTimes100();
 int CvLuaPlayer::lGetScienceFromCitiesTimes100(lua_State* L)
@@ -7210,7 +7311,11 @@ int CvLuaPlayer::lGetScienceFromHappinessTimes100(lua_State* L)
 //int GetScienceFromGoldTimes100();
 int CvLuaPlayer::lGetScienceFromGoldTimes100(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	return HeadlessUiTreasuryIntGetter(L, &CvPlayer::GetScienceFromGoldTimes100);	// FIX-0023
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::GetScienceFromGoldTimes100);
+#endif
 }
 #endif
 #ifdef NQ_MINOR_FRIENDSHIP_GAIN_BULLY_GOLD_SUCCESS_FROM_POLICIES
@@ -7228,7 +7333,11 @@ int CvLuaPlayer::lGetScienceFromResearchAgreementsTimes100(lua_State* L)
 //int GetScienceFromBudgetDeficitTimes100();
 int CvLuaPlayer::lGetScienceFromBudgetDeficitTimes100(lua_State* L)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	return HeadlessUiTreasuryIntGetter(L, &CvPlayer::GetScienceFromBudgetDeficitTimes100);	// FIX-0023
+#else
 	return BasicLuaMethod(L, &CvPlayerAI::GetScienceFromBudgetDeficitTimes100);
+#endif
 }
 //------------------------------------------------------------------------------
 //int GetProximityToPlayer(PlayerTypes  eIndex);
@@ -7745,7 +7854,9 @@ int CvLuaPlayer::lGetReplayData(lua_State* L)
 
 		CvPlayer::TurnData data = pkPlayer->getReplayDataHistory(uiDataSet);
 
-		lua_createtable(L, data.size() - 1, 1);
+		// An empty data set (the Lua getters GetScoreHistory & co. create the set they look up) gives size() - 1 = -1: Lua 5.1
+		// luaH_new takes it as an array size of 2^32 - 1 and the allocation aborts the process (live crash, ReplayViewer, game 943).
+		lua_createtable(L, data.empty() ? 0 : static_cast<int>(data.size()) - 1, 1);
 
 		for(CvPlayer::TurnData::iterator it = data.begin(); it != data.end(); ++it)
 		{
@@ -7845,6 +7956,9 @@ int CvLuaPlayer::lDoTradeScreenOpened(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: trade screen, local only (peace valuation -> calculateGoldRate)
+#endif
 	pkPlayer->GetDealAI()->DoTradeScreenOpened();
 	return 1;
 }
@@ -8855,7 +8969,14 @@ int CvLuaPlayer::lGetRecommendedWorkerPlots(lua_State* L)
 	//Early out
 	if(pWorkerUnit == NULL)
 	{
+#ifdef LEKMOD_PORTABLE
+		// The UI Lua (InGame.lua OnUpdateSelection) walks the result with ipairs: no recommendation is an empty table
+		// (the portable engine UI has no selected units of its own to find the worker in).
+		lua_createtable(L, 0, 0);
+		return 1;
+#else
 		return 0;
+#endif
 	}
 
 	const size_t cuiMaxDirectives = 3;
@@ -8933,7 +9054,14 @@ int CvLuaPlayer::lGetRecommendedFoundCityPlots(lua_State* L)
 	}
 
 	if(pFoundingUnit == NULL)
+	{
+#ifdef LEKMOD_PORTABLE
+		lua_createtable(L, 0, 0);	// see lGetRecommendedWorkerPlots
+		return 1;
+#else
 		return 0;
+#endif
+	}
 
 	int iSettlerDistance;
 	int iDistanceDropoff;
@@ -10934,6 +11062,9 @@ int CvLuaPlayer::lGetDealValue (lua_State* L)
 	CvPlayerAI* pkThisPlayer = GetInstance(L);
 	CvDeal* pkDeal = CvLuaDeal::GetInstance(L, 2);
 	int iValueImOffering, iValueTheirOffering;
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: deal valuation from Lua (UI), local only
+#endif
 	lua_pushinteger(L, pkThisPlayer->GetDealAI()->GetDealValue(pkDeal, iValueImOffering, iValueTheirOffering, false));
 	return 1;
 }
@@ -10944,6 +11075,9 @@ int CvLuaPlayer::lGetDealMyValue(lua_State* L)
 	CvPlayerAI* pkThisPlayer = GetInstance(L);
 	CvDeal* pkDeal = CvLuaDeal::GetInstance(L, 2);
 	int iValueImOffering, iValueTheyreOffering;
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: TradeLogic request refusal value, local only
+#endif
 	pkThisPlayer->GetDealAI()->GetDealValue(pkDeal, iValueImOffering, iValueTheyreOffering, false);
 	lua_pushinteger(L, iValueImOffering);
 	return 1;
@@ -10955,6 +11089,9 @@ int CvLuaPlayer::lGetDealTheyreValue(lua_State* L)
 	CvPlayerAI* pkThisPlayer = GetInstance(L);
 	CvDeal* pkDeal = CvLuaDeal::GetInstance(L, 2);
 	int iValueImOffering, iValueTheyreOffering;
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: deal valuation from Lua (UI), local only
+#endif
 	pkThisPlayer->GetDealAI()->GetDealValue(pkDeal, iValueImOffering, iValueTheyreOffering, false);
 	lua_pushinteger(L, iValueTheyreOffering);
 	return 1;

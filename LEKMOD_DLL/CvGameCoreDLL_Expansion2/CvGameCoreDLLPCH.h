@@ -169,6 +169,10 @@ template<class T> inline T FastMin(const T& _Left, const T& _Right) { return (_D
 
 using namespace fastdelegate;
 
+#if defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)
+#include "HeadlessInlineAccessors.h"	// OPT-0061: inline definitions of hot trivial accessors (after every class definition)
+#endif
+
 #ifdef FINAL_RELEASE
 // Undefine OutputDebugString in final release builds
 #undef OutputDebugString

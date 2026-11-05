@@ -27,6 +27,353 @@
 #define TEMPORARY_POPUPROUTE_ID (-1) //m_aTradeConnections will never use this as an index
 #define MAX_PLOTS_TO_DISPLAY 256
 
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+//=====================================
+// headless OPT-0022: memo of the international trade-route pathfinder result
+//=====================================
+// Every search of the land and water trade-route finders (all GeneratePath calls in this file) passes bReuse = false, so it starts
+// from cleared nodes, and its outcome (success, the last node's m_iTotalCost and its parent chain) is a function of the origin and
+// destination plots, the finder info (origin player) and what the finder's callbacks read:
+//  - TradePathInitialize: the origin player's team, the team's canEmbarkAllWaterPassage and the player's RiverTradeRoad and
+//    MoveFriendlyWoodsAsRoad traits: part of the memo key, read fresh on every lookup;
+//  - TradeRouteHeuristic and PathDest: coordinates only;
+//  - TradeRouteLandValid/PathCost, of the parent and the child plot: getArea, isWater, isMountain, isImpassable, getRouteType != NO_ROUTE,
+//    getFeatureType, isRiver, isHills (water plots are invalid for the land finder, so IsAllowsWalkWater is never reached);
+//  - TradeRouteWaterValid/PathCost, of the parent and the child plot: isCity, isWater, getTerrainType, getArea, isImpassable,
+//    isAdjacentToLand_Cached and, for water plots, getTeam(); plus the origin team's isAtWar: the war bit set is part of the key.
+// While a memoised search runs, those four callbacks mark the map block (the map is cut into at most 16 x 16 blocks) of both plots
+// they read (HeadlessTradePathMark). The search reads nothing else, so while no input of a plot in a marked block is written, a new
+// search reads the same values and does exactly the same.
+// Writers: the frequent ones stamp the block of their plot with a change clock (per domain and block): CvPlot::setRouteType when the
+// route presence changes and setFeatureType (land), setOwner of a water plot (water). Every other writer is rare and voids the whole
+// domain (epoch): CvPlot::reset/setArea/setPlotType (and its isAdjacentToLand writes)/setTerrainType/changeRiverCrossingCount/
+// setPlotCity/updateImpassable, CvMap::setup (new map; every load, after the plots were read) and updateAdjacency,
+// CvPlayer::addCity/deleteCity (isCity also needs the city object) and CvPlayer::setTeam (getTeam of the player's plots).
+// An entry is used while its domain epoch is unchanged and no marked block was stamped after it was stored. Keys are plot indices
+// and ids (contents), never pointers; the table is 2-way set associative (replacement by last use, which only affects speed).
+// The finders' node state after a skipped search is never read: CreateTradeRoute and the route popup run their own search before
+// GetLastNode(), and CvTradeAI::GetAvailableTR copies the path from the memo entry (the last node's parent chain, stored by the
+// search) instead of walking the finder's last node.
+unsigned int* g_puiHeadlessTradePathRecord = NULL;
+const unsigned char* g_pucHeadlessTradePathBlock = NULL;
+int g_iHeadlessTradePathGridW = 0;
+
+namespace
+{
+const int HEADLESS_TRADE_PATH_WAR_WORDS = (MAX_TEAMS + 31) / 32;
+const int HEADLESS_TRADE_PATH_SETS = 4096;	// power of two
+const int HEADLESS_TRADE_PATH_WAYS = 2;
+const int HEADLESS_TRADE_PATH_AXIS_BLOCKS = 16;
+const int HEADLESS_TRADE_PATH_BLOCKS = HEADLESS_TRADE_PATH_AXIS_BLOCKS * HEADLESS_TRADE_PATH_AXIS_BLOCKS;	// <= 256: one byte per plot
+const int HEADLESS_TRADE_PATH_BLOCK_WORDS = HEADLESS_TRADE_PATH_BLOCKS / 32;
+
+struct HeadlessTradePathKey
+{
+	int iOrigin;
+	int iDest;
+	int iInfo;
+	int iTeam;
+	int iFlags;		// 1 water finder, 2 canEmbarkAllWaterPassage, 4 RiverTradeRoad, 8 MoveFriendlyWoodsAsRoad
+	unsigned int auiWar[HEADLESS_TRADE_PATH_WAR_WORDS];	// water finder only: origin team at war with team i
+};
+
+struct HeadlessTradePathEntry
+{
+	unsigned int uiEpoch;	// domain epoch when stored; 0 = empty (epochs start at 1 and skip 0)
+	unsigned int uiStamp;	// change clock when stored
+	unsigned int uiLastUse;	// replacement order only
+	HeadlessTradePathKey kKey;
+	unsigned int auiBlocks[HEADLESS_TRADE_PATH_BLOCK_WORDS];	// blocks of every plot the search read
+	bool bFound;			// GeneratePath succeeded and GetLastNode() != NULL
+	int iTotalCost;			// GetLastNode()->m_iTotalCost when found
+	std::vector<TradeConnectionPlot> aPath;	// when found: the last node's parent chain, origin first (as CopyPathIntoTradeConnection)
+};
+
+struct HeadlessTradePathDomain
+{
+	unsigned int uiEpoch;
+	unsigned int auiBlockChange[HEADLESS_TRADE_PATH_BLOCKS];	// change clock of the last write in the block (0 = none)
+};
+
+HeadlessTradePathEntry s_aHeadlessTradePathMemo[HEADLESS_TRADE_PATH_SETS * HEADLESS_TRADE_PATH_WAYS];
+HeadlessTradePathDomain s_aHeadlessTradePathDomain[2] = { { 1 }, { 1 } };	// 0 land, 1 water
+unsigned int s_uiHeadlessTradePathClock = 0;
+unsigned int s_uiHeadlessTradePathUse = 0;
+int s_iHeadlessTradePathGridH = 0;
+std::vector<unsigned char> s_aucHeadlessTradePathBlock;
+
+
+void HeadlessTradePathBumpDomain(int iDomain)
+{
+	HeadlessTradePathDomain& kDomain = s_aHeadlessTradePathDomain[iDomain];
+	if (++kDomain.uiEpoch == 0)
+		kDomain.uiEpoch = 1;
+}
+
+// voids every entry and every block stamp of both domains
+void HeadlessTradePathVoidAll()
+{
+	for (int iDomain = 0; iDomain < 2; iDomain++)
+	{
+		HeadlessTradePathBumpDomain(iDomain);
+		memset(s_aHeadlessTradePathDomain[iDomain].auiBlockChange, 0, sizeof(s_aHeadlessTradePathDomain[iDomain].auiBlockChange));
+	}
+}
+
+// (re)builds the block of every plot when the map size changed (entries of another geometry are void)
+void HeadlessTradePathGeometry()
+{
+	CvMap& kMap = GC.getMap();
+	const int iW = kMap.getGridWidth();
+	const int iH = kMap.getGridHeight();
+	if (iW == g_iHeadlessTradePathGridW && iH == s_iHeadlessTradePathGridH && g_pucHeadlessTradePathBlock != NULL)
+		return;
+
+	g_pucHeadlessTradePathBlock = NULL;
+	g_iHeadlessTradePathGridW = iW;
+	s_iHeadlessTradePathGridH = iH;
+	HeadlessTradePathVoidAll();
+	if (iW <= 0 || iH <= 0)
+		return;
+
+	const int iBlockW = (iW + HEADLESS_TRADE_PATH_AXIS_BLOCKS - 1) / HEADLESS_TRADE_PATH_AXIS_BLOCKS;
+	const int iBlockH = (iH + HEADLESS_TRADE_PATH_AXIS_BLOCKS - 1) / HEADLESS_TRADE_PATH_AXIS_BLOCKS;
+	const int iBlocksX = (iW + iBlockW - 1) / iBlockW;	// <= 16, and (iH - 1) / iBlockH <= 15
+	s_aucHeadlessTradePathBlock.assign(iW * iH, 0);
+	for (int iY = 0; iY < iH; iY++)
+	{
+		for (int iX = 0; iX < iW; iX++)
+			s_aucHeadlessTradePathBlock[iY * iW + iX] = (unsigned char)((iX / iBlockW) + (iY / iBlockH) * iBlocksX);
+	}
+	g_pucHeadlessTradePathBlock = &s_aucHeadlessTradePathBlock[0];
+}
+
+void HeadlessTradePathBumpPlot(int iDomain, int iX, int iY)
+{
+	if (g_pucHeadlessTradePathBlock == NULL || iX < 0 || iY < 0 || iX >= g_iHeadlessTradePathGridW || iY >= s_iHeadlessTradePathGridH)
+	{
+		HeadlessTradePathBumpDomain(iDomain);	// no block geometry for this plot: void the whole domain
+		return;
+	}
+	if (++s_uiHeadlessTradePathClock == 0)
+	{
+		// the clock wrapped: void everything and restart it
+		HeadlessTradePathVoidAll();
+		s_uiHeadlessTradePathClock = 1;
+	}
+	s_aHeadlessTradePathDomain[iDomain].auiBlockChange[g_pucHeadlessTradePathBlock[iY * g_iHeadlessTradePathGridW + iX]] = s_uiHeadlessTradePathClock;
+}
+
+bool HeadlessTradePathEntryValid(const HeadlessTradePathEntry& kEntry, const HeadlessTradePathDomain& kDomain)
+{
+	if (kEntry.uiEpoch != kDomain.uiEpoch)
+		return false;
+	for (int iWord = 0; iWord < HEADLESS_TRADE_PATH_BLOCK_WORDS; iWord++)
+	{
+		const unsigned int uiBits = kEntry.auiBlocks[iWord];
+		if (uiBits == 0)
+			continue;
+		for (int iBit = 0; iBit < 32; iBit++)
+		{
+			if ((uiBits & (1u << iBit)) != 0 && kDomain.auiBlockChange[iWord * 32 + iBit] > kEntry.uiStamp)
+				return false;
+		}
+	}
+	return true;
+}
+
+void HeadlessTradePathMakeKey(HeadlessTradePathKey& k, bool bWater, int iOriginX, int iOriginY, int iDestX, int iDestY, PlayerTypes eOriginPlayer)
+{
+	memset(&k, 0, sizeof(k));
+	const CvMap& kMap = GC.getMap();
+	k.iOrigin = (int)kMap.plotNum(iOriginX, iOriginY);
+	k.iDest = (int)kMap.plotNum(iDestX, iDestY);
+	k.iInfo = (int)eOriginPlayer;
+	CvPlayer& kPlayer = GET_PLAYER(eOriginPlayer);
+	const TeamTypes eTeam = kPlayer.getTeam();
+	k.iTeam = (int)eTeam;
+	const CvTeam& kTeam = GET_TEAM(eTeam);
+	CvPlayerTraits* pPlayerTraits = kPlayer.GetPlayerTraits();
+	k.iFlags = (bWater ? 1 : 0) | (kTeam.canEmbarkAllWaterPassage() ? 2 : 0);
+	if (pPlayerTraits)
+		k.iFlags |= (pPlayerTraits->IsRiverTradeRoad() ? 4 : 0) | (pPlayerTraits->IsMoveFriendlyWoodsAsRoad() ? 8 : 0);
+	if (bWater)
+	{
+		for (int iTeam = 0; iTeam < MAX_TEAMS; iTeam++)
+		{
+			if (kTeam.isAtWar((TeamTypes)iTeam))
+				k.auiWar[iTeam >> 5] |= (1u << (iTeam & 31));
+		}
+	}
+}
+
+HeadlessTradePathEntry* HeadlessTradePathSet(const HeadlessTradePathKey& k)
+{
+	// FNV-1a over the key bytes (contents only; the key is memset first, so there are no padding bytes of unknown value)
+	const unsigned char* p = reinterpret_cast<const unsigned char*>(&k);
+	unsigned int uiHash = 2166136261u;
+	for (unsigned int i = 0; i < sizeof(k); i++)
+		uiHash = (uiHash ^ p[i]) * 16777619u;
+	return &s_aHeadlessTradePathMemo[(uiHash & (HEADLESS_TRADE_PATH_SETS - 1)) * HEADLESS_TRADE_PATH_WAYS];
+}
+
+// the search exactly as golden IsValidTradeRoutePath runs it: true when GeneratePath succeeded and GetLastNode() != NULL.
+// puiRecord (NULL: none): receives the blocks of the plots the callbacks read; aPath: the last node's parent chain, origin first.
+bool HeadlessTradePathSearch(bool bWater, int iOriginX, int iOriginY, int iDestX, int iDestY, PlayerTypes eOriginPlayer, unsigned int* puiRecord, int& iTotalCost, std::vector<TradeConnectionPlot>& aPath)
+{
+	CvAStar& kFinder = bWater ? GC.GetInternationalTradeRouteWaterFinder() : GC.GetInternationalTradeRouteLandFinder();
+	g_puiHeadlessTradePathRecord = puiRecord;
+	const bool bSuccess = kFinder.GeneratePath(iOriginX, iOriginY, iDestX, iDestY, eOriginPlayer, false);
+	g_puiHeadlessTradePathRecord = NULL;
+	CvAStarNode* pPathfinderNode = kFinder.GetLastNode();
+	iTotalCost = 0;
+	aPath.clear();
+	if (!bSuccess || pPathfinderNode == NULL)
+		return false;
+	iTotalCost = pPathfinderNode->m_iTotalCost;
+	unsigned int uiSteps = 0;
+	for (const CvAStarNode* pNode = pPathfinderNode; pNode != NULL; pNode = pNode->m_pParent)
+		uiSteps++;
+	aPath.resize(uiSteps);
+	unsigned int uiIndex = uiSteps;
+	for (const CvAStarNode* pNode = pPathfinderNode; pNode != NULL; pNode = pNode->m_pParent)
+	{
+		uiIndex--;
+		aPath[uiIndex].m_iX = pNode->m_iX;
+		aPath[uiIndex].m_iY = pNode->m_iY;
+	}
+	return true;
+}
+
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+bool HeadlessTradePathSame(bool bFoundA, int iCostA, const std::vector<TradeConnectionPlot>& aPathA, bool bFoundB, int iCostB, const std::vector<TradeConnectionPlot>& aPathB)
+{
+	if (bFoundA != bFoundB || iCostA != iCostB || aPathA.size() != aPathB.size())
+		return false;
+	for (size_t i = 0; i < aPathA.size(); i++)
+	{
+		if (aPathA[i].m_iX != aPathB[i].m_iX || aPathA[i].m_iY != aPathB[i].m_iY)
+			return false;
+	}
+	return true;
+}
+#endif
+
+// CvGameTrade::IsValidTradeRoutePath with the memo. pPathOut (CvTradeAI::GetAvailableTR, else NULL) receives, when the answer is
+// true, the path golden reads from the finder's last node.
+bool HeadlessIsValidTradeRoutePath(CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain, std::vector<TradeConnectionPlot>* pPathOut)
+{
+	PlayerTypes eOriginPlayer = pOriginCity->getOwner();
+
+	int iOriginX = pOriginCity->getX();
+	int iOriginY = pOriginCity->getY();
+	int iDestX = pDestCity->getX();
+	int iDestY = pDestCity->getY();
+
+	bool bWater = false;
+	if (eDomain == DOMAIN_SEA)
+	{
+		if (!(pOriginCity->isCoastal(0) && pDestCity->isCoastal(0)))	// golden: no search, bSuccess stays false
+			return false;
+		bWater = true;
+	}
+	else if (eDomain != DOMAIN_LAND)
+	{
+		return false;	// golden: no search, bSuccess stays false
+	}
+
+	HeadlessTradePathGeometry();
+	HeadlessTradePathKey kKey;
+	HeadlessTradePathMakeKey(kKey, bWater, iOriginX, iOriginY, iDestX, iDestY, eOriginPlayer);
+	const int iDomain = bWater ? 1 : 0;
+	const HeadlessTradePathDomain& kDomain = s_aHeadlessTradePathDomain[iDomain];
+	HeadlessTradePathEntry* pSet = HeadlessTradePathSet(kKey);
+	HeadlessTradePathEntry* pEntry = NULL;
+	for (int iWay = 0; iWay < HEADLESS_TRADE_PATH_WAYS; iWay++)
+	{
+		if (pSet[iWay].uiEpoch != 0 && memcmp(&pSet[iWay].kKey, &kKey, sizeof(kKey)) == 0)
+		{
+			pEntry = &pSet[iWay];
+			break;
+		}
+	}
+
+	if (pEntry != NULL && HeadlessTradePathEntryValid(*pEntry, kDomain))
+	{
+		pEntry->uiLastUse = ++s_uiHeadlessTradePathUse;
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		{
+			int iRealCost = 0;
+			std::vector<TradeConnectionPlot> aRealPath;
+			const bool bRealFound = HeadlessTradePathSearch(bWater, iOriginX, iOriginY, iDestX, iDestY, eOriginPlayer, NULL, iRealCost, aRealPath);
+			HEADLESS_OPT_VERIFY(HeadlessTradePathSame(bRealFound, iRealCost, aRealPath, pEntry->bFound, pEntry->iTotalCost, pEntry->aPath), 22, "CvGameTrade::IsValidTradeRoutePath memo");
+		}
+#endif
+	}
+	else
+	{
+		if (pEntry == NULL)
+		{
+			// a free way, else the least recently used one
+			pEntry = &pSet[0];
+			for (int iWay = 1; iWay < HEADLESS_TRADE_PATH_WAYS && pEntry->uiEpoch != 0; iWay++)
+			{
+				if (pSet[iWay].uiEpoch == 0 || pSet[iWay].uiLastUse < pEntry->uiLastUse)
+					pEntry = &pSet[iWay];
+			}
+		}
+		unsigned int auiBlocks[HEADLESS_TRADE_PATH_BLOCK_WORDS];
+		memset(auiBlocks, 0, sizeof(auiBlocks));
+		int iTotalCost = 0;
+		const bool bFound = HeadlessTradePathSearch(bWater, iOriginX, iOriginY, iDestX, iDestY, eOriginPlayer, auiBlocks, iTotalCost, pEntry->aPath);
+		pEntry->uiEpoch = kDomain.uiEpoch;
+		pEntry->uiStamp = s_uiHeadlessTradePathClock;
+		pEntry->uiLastUse = ++s_uiHeadlessTradePathUse;
+		pEntry->kKey = kKey;
+		memcpy(pEntry->auiBlocks, auiBlocks, sizeof(auiBlocks));
+		pEntry->bFound = bFound;
+		pEntry->iTotalCost = iTotalCost;
+	}
+
+	if (!pEntry->bFound)
+	{
+		return false;
+	}
+
+	// beyond the origin player's trade range
+	int iRange = GET_PLAYER(eOriginPlayer).GetTrade()->GetTradeRouteRange(eDomain, pOriginCity) * 100 + 99; // adding 99 so that any movement penalties are ignored
+	if (pEntry->iTotalCost > iRange)
+	{
+		return false;
+	}
+
+	if (pPathOut != NULL)
+		*pPathOut = pEntry->aPath;
+	return true;
+}
+}	// namespace
+
+void HeadlessTradePathBumpLand()
+{
+	HeadlessTradePathBumpDomain(0);
+}
+
+void HeadlessTradePathBumpWater()
+{
+	HeadlessTradePathBumpDomain(1);
+}
+
+void HeadlessTradePathBumpLandPlot(int iX, int iY)
+{
+	HeadlessTradePathBumpPlot(0, iX, iY);
+}
+
+void HeadlessTradePathBumpWaterPlot(int iX, int iY)
+{
+	HeadlessTradePathBumpPlot(1, iX, iY);
+}
+#endif
+
 //	--------------------------------------------------------------------------------
 /// Default constructor
 #ifdef AUI_WARNING_FIXES
@@ -463,6 +810,13 @@ bool CvGameTrade::CreateTradeRoute(CvCity* pOriginCity, CvCity* pDestCity, Domai
 }
 
 //	--------------------------------------------------------------------------------
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO) && !defined(AUI_CONSTIFY)
+// OPT-0022: memoised search (see HeadlessIsValidTradeRoutePath above); the golden body is in the #else branch
+bool CvGameTrade::IsValidTradeRoutePath (CvCity* pOriginCity, CvCity* pDestCity, DomainTypes eDomain)
+{
+	return HeadlessIsValidTradeRoutePath(pOriginCity, pDestCity, eDomain, NULL);
+}
+#else
 #ifdef AUI_CONSTIFY
 bool CvGameTrade::IsValidTradeRoutePath(const CvCity* pOriginCity, const CvCity* pDestCity, DomainTypes eDomain) const
 #else
@@ -526,6 +880,7 @@ bool CvGameTrade::IsValidTradeRoutePath (CvCity* pOriginCity, CvCity* pDestCity,
 
 	return true;
 }
+#endif
 
 //	--------------------------------------------------------------------------------
 #ifdef AUI_CONSTIFY
@@ -5046,6 +5401,9 @@ void CvTradeAI::GetAvailableTR(TradeConnectionList& aTradeConnectionList)
 					}
 
 					bool bCheckPath = true;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO) && !defined(AUI_CONSTIFY)
+					std::vector<TradeConnectionPlot> aHeadlessPath;	// OPT-0022: path of this origin, destination and domain, from the memo
+#endif
 					TradeConnectionType eConnection = NUM_TRADE_CONNECTION_TYPES;
 					for (uint uiConnectionTypes = 0; uiConnectionTypes < NUM_TRADE_CONNECTION_TYPES; uiConnectionTypes++)
 					{
@@ -5061,7 +5419,12 @@ void CvTradeAI::GetAvailableTR(TradeConnectionList& aTradeConnectionList)
 						// Now test the path
 						if (bCheckPath)
 						{
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO) && !defined(AUI_CONSTIFY)
+							// OPT-0022: memoised search; after a valid answer aHeadlessPath holds the path golden copies from GetLastNode()
+							bTradeAvailable = HeadlessIsValidTradeRoutePath(pOriginCity, pDestCity, eDomain, &aHeadlessPath);
+#else
 							bTradeAvailable = pGameTrade->IsValidTradeRoutePath(pOriginCity, pDestCity, eDomain);
+#endif
 							if (!bTradeAvailable)
 								break;		// If there is no path for this domain, just skip the rest of the connection tests.
 
@@ -5078,6 +5441,15 @@ void CvTradeAI::GetAvailableTR(TradeConnectionList& aTradeConnectionList)
 						kConnection.m_eOriginOwner = pOriginCity->getOwner();
 						kConnection.m_eDestOwner = pDestCity->getOwner();
 
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO) && !defined(AUI_CONSTIFY)
+						// OPT-0022: golden copies the parent chain of the domain finder's last node, left by the path test of this origin,
+						// destination and domain (nothing searches in between); the memo stored exactly that chain, origin first
+						for (size_t uiHeadless = 0; uiHeadless < aHeadlessPath.size(); uiHeadless++)
+						{
+							kConnection.m_aPlotList.push_back(aHeadlessPath[uiHeadless]);
+						}
+						aTradeConnectionList.push_back(kConnection);
+#else
 						CvAStarNode* pNode = NULL;
 						if (eDomain ==  DOMAIN_LAND)
 						{
@@ -5096,6 +5468,7 @@ void CvTradeAI::GetAvailableTR(TradeConnectionList& aTradeConnectionList)
 
 						GC.getGame().GetGameTrade()->CopyPathIntoTradeConnection(pNode, &kConnection);
 						aTradeConnectionList.push_back(kConnection);
+#endif
 					}
 				}
 			}
@@ -5291,6 +5664,9 @@ int CvTradeAI::ScoreFoodTR (const TradeConnection& kTradeConnection, CvCity* pSm
 /// Score Production TR
 #ifdef AUI_CONSTIFY
 int CvTradeAI::ScoreProductionTR(const TradeConnection& kTradeConnection, std::vector<const CvCity*>& aTargetCityList) const
+#elif defined(LEKMOD_HEADLESS_OPT_TRADEAI_SCOREPROD_BYREF)
+// OPT-0009: the list is only read (linear search for the destination city), so no per-call copy is needed
+int CvTradeAI::ScoreProductionTR (const TradeConnection& kTradeConnection, const std::vector<CvCity*>& aTargetCityList)
 #else
 int CvTradeAI::ScoreProductionTR (const TradeConnection& kTradeConnection, std::vector<CvCity*> aTargetCityList)
 #endif

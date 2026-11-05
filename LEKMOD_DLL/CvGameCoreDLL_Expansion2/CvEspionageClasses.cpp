@@ -70,7 +70,17 @@ FDataStream& operator>>(FDataStream& loadFrom, CvEspionageSpy& writeTo)
 	}
 	
 	loadFrom >> writeTo.m_bEvaluateReassignment;
+#if defined(LEKMOD_HEADLESS_FIX_0018)
+	// FIX-0018 / DS-0030: the golden reader forces every spy to "re-evaluate" after a load, so the loaded game's AI
+	// pulls spies that are not in a target city out of their city (MoveSpyTo NULL) while the continuous game leaves them.
+	// Keep the saved flag: a loaded game continues like the uninterrupted one. No save format change.
+	if(!writeTo.m_bEvaluateReassignment)
+	{
+		HEADLESS_FIX_TRIGGER(18);
+	}
+#else
 	writeTo.m_bEvaluateReassignment = true;
+#endif
 
 	return loadFrom;
 }
@@ -180,6 +190,11 @@ void CvPlayerEspionage::Reset()
 	m_iSpyListNameOrderIndex = -1;
 	m_aiNumTechsToStealList.clear();
 	m_aIntrigueNotificationMessages.clear();
+#if defined(LEKMOD_PORTABLE)
+	// B4 replay determinism (2026-10-31): the stock Reset left the pending spy messages, and the stream Read appends to them,
+	// so a load into an instance that had played (a replica's resync, a replay) doubled every message the save carried.
+	m_aSpyNotificationMessages.clear();
+#endif
 	m_aaPlayerStealableTechList.clear();
 #ifdef ESPIONAGE_SYSTEM_REWORK
 	m_aaPlayerScienceToStealList.clear();
@@ -6058,12 +6073,49 @@ void CvEspionageAI::EvaluateDiplomatSpies(void)
 	}
 }
 
+#if defined(LEKMOD_HEADLESS_FIX_0009)
+// FIX-0009 / DS-0019: CvPlayer::Read -> reset() -> CvEspionageAI::Init pre-fills these vectors with MAX_MAJOR_CIVS
+// defaults and golden then appended the saved values: the game kept using the defaults (entries 0..21), the saved
+// values were dead, and every save/load cycle grew each vector by MAX_MAJOR_CIVS entries. Read the saved values over
+// the defaults instead. A save written by golden after a load has extra stale entries; only the first MAX_MAJOR_CIVS
+// (the ones golden was using) are kept. Save format unchanged.
+template<class T>
+static void HeadlessReadEspionageArray(FDataStream& loadFrom, T& aiValues)
+{
+	uint uiCount;
+	loadFrom >> uiCount;
+	const uint uiDefaults = aiValues.size();
+	if(uiDefaults > 0)
+	{
+		HEADLESS_FIX_TRIGGER(9);
+	}
+	int iValue;
+	for(uint ui = 0; ui < uiCount; ui++)
+	{
+		loadFrom >> iValue;
+		if(ui < uiDefaults)
+			aiValues[ui] = iValue;
+		else if(uiDefaults == 0)
+			aiValues.push_back(iValue);	// not pre-filled: as golden
+	}
+}
+#endif
+
 // serialization read
 FDataStream& operator>>(FDataStream& loadFrom, CvEspionageAI& writeTo)
 {
 	uint uiVersion;
 	loadFrom >> uiVersion;
 
+#if defined(LEKMOD_HEADLESS_FIX_0009)
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiCivOutOfTechTurn);
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiNumSpiesCaught);
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiNumSpiesKilled);
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiNumSpiesDied);
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiTurnLastSpyCaught);
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiTurnLastSpyKilled);
+	HeadlessReadEspionageArray(loadFrom, writeTo.m_aiTurnLastSpyDied);
+#else
 	uint uiCount;
 	loadFrom >> uiCount;
 	int iValue;
@@ -6114,6 +6166,7 @@ FDataStream& operator>>(FDataStream& loadFrom, CvEspionageAI& writeTo)
 		loadFrom >> iValue;
 		writeTo.m_aiTurnLastSpyDied.push_back(iValue);
 	}
+#endif
 
 	loadFrom >> writeTo.m_bUNCountdownStarted;
 	loadFrom >> writeTo.m_iTurnEspionageStarted;

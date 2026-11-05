@@ -19,6 +19,25 @@
 // include this after all other headers!
 #include "LintFree.h"
 
+#if defined(LEKMOD_HEADLESS_DIAG)
+// Headless diag: classify a CvRandom by address. Safe before CvGame / CvGlobals::init (pointers are NULL then).
+static int HeadlessRngKindOf(const CvRandom* pRng, bool bSynchronous)
+{
+	CvGame* pGame = GC.getGamePointer();
+	if(pGame)
+	{
+		if(pRng == &pGame->getJonRand())
+			return HEADLESS_RNG_JON;
+		if(pRng == &pGame->getMapRand())
+			return HEADLESS_RNG_MAP;
+	}
+	// m_asyncRand is NULL until CvGlobals::init: the accessor then only returns NULL and the compare is false.
+	if(pRng == &GC.getASyncRand())
+		return HEADLESS_RNG_ASYNC;
+	return bSynchronous ? HEADLESS_RNG_OTHER_SYNC : HEADLESS_RNG_OTHER_ASYNC;
+}
+#endif
+
 #ifndef AUI_USE_SFMT_RNG
 #ifdef AUI_RANDOM_FIX_CONSTANTS_SET_TO_MODULUS_2_POW_32
 #define RANDOM_A      (214013u)
@@ -153,6 +172,10 @@ void CvRandom::reset(unsigned long ulSeed)
 	m_ulRandomSeed = ulSeed;
 #endif
 	m_ulResetCount++;
+#if defined(LEKMOD_HEADLESS_DIAG)
+	if(g_pHeadlessDiag)
+		g_pHeadlessDiag->OnRandReseed(HeadlessRngKindOf(this, m_bSynchronous), this, m_ulRandomSeed);
+#endif
 }
 
 #if defined(AUI_USE_SFMT_RNG) || defined(AUI_WARNING_FIXES)
@@ -161,6 +184,10 @@ unsigned int CvRandom::get(unsigned int uiNum, const char* pszLog)
 unsigned short CvRandom::get(unsigned short usNum, const char* pszLog)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	const unsigned long ulHeadlessSeedBefore = m_ulRandomSeed;
+	const unsigned long ulHeadlessCountBefore = m_ulCallCount;
+#endif
 #ifdef AUI_USE_SFMT_RNG
 	unsigned int uiRtnValue = 0;
 	if (uiNum > 1)
@@ -173,7 +200,7 @@ unsigned short CvRandom::get(unsigned short usNum, const char* pszLog)
 	recordCallStack();
 	m_ulCallCount++;
 
-	unsigned long ulNewSeed = ((RANDOM_A * m_ulRandomSeed) + RANDOM_C);
+	CvRandomWord ulNewSeed = ((RANDOM_A * m_ulRandomSeed) + RANDOM_C);
 #ifdef AUI_WARNING_FIXES
 	unsigned short us = ((unsigned short)((((ulNewSeed >> RANDOM_SHIFT) & MAX_UNSIGNED_SHORT) * (uiNum)) / (MAX_UNSIGNED_SHORT + 1)));
 #else
@@ -241,6 +268,25 @@ unsigned short CvRandom::get(unsigned short usNum, const char* pszLog)
 		}
 	}
 
+#if defined(LEKMOD_HEADLESS_DIAG)
+	if(g_pHeadlessDiag)
+	{
+#ifdef AUI_USE_SFMT_RNG
+		const unsigned int uiHeadlessResult = uiRtnValue;
+#else
+		const unsigned int uiHeadlessResult = (unsigned int)us;
+#endif
+#if defined(AUI_USE_SFMT_RNG) || defined(AUI_WARNING_FIXES)
+		const unsigned int uiHeadlessRange = uiNum;
+#else
+		const unsigned int uiHeadlessRange = (unsigned int)usNum;
+#endif
+		const void* pHeadlessCaller = g_pHeadlessRandCaller;
+		g_pHeadlessRandCaller = NULL;
+		g_pHeadlessDiag->OnRandCall(HeadlessRngKindOf(this, m_bSynchronous), this, ulHeadlessSeedBefore, ulHeadlessCountBefore,
+			uiHeadlessRange, uiHeadlessResult, pszLog, pHeadlessCaller ? pHeadlessCaller : _ReturnAddress());
+	}
+#endif
 #ifdef AUI_USE_SFMT_RNG
 	return uiRtnValue;
 #else
@@ -256,6 +302,10 @@ unsigned short CvRandom::get(unsigned short usNum, const char* pszLog)
 #ifdef AUI_BINOM_RNG
 unsigned int CvRandom::getBinom(unsigned int uiNum, const char* pszLog)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	const unsigned long ulHeadlessSeedBefore = m_ulRandomSeed;
+	const unsigned long ulHeadlessCountBefore = m_ulCallCount;
+#endif
 #ifdef AUI_USE_SFMT_RNG
 	unsigned int uiRtnValue = 0;
 	if (uiNum > 1)
@@ -269,7 +319,7 @@ unsigned int CvRandom::getBinom(unsigned int uiNum, const char* pszLog)
 	}
 #else
 	unsigned int uiRet = 0;
-	unsigned long ulNewSeed = m_ulRandomSeed;
+	CvRandomWord ulNewSeed = m_ulRandomSeed;
 	if (uiNum > 1)
 	{
 		recordCallStack();
@@ -341,6 +391,21 @@ unsigned int CvRandom::getBinom(unsigned int uiNum, const char* pszLog)
 		}
 	}
 
+#if defined(LEKMOD_HEADLESS_DIAG)
+	if(g_pHeadlessDiag)
+	{
+#ifdef AUI_USE_SFMT_RNG
+		const unsigned int uiHeadlessResult = uiRtnValue;
+#else
+		const unsigned int uiHeadlessResult = uiRet;
+#endif
+		const unsigned int uiHeadlessRange = uiNum;
+		const void* pHeadlessCaller = g_pHeadlessRandCaller;
+		g_pHeadlessRandCaller = NULL;
+		g_pHeadlessDiag->OnRandCall(HeadlessRngKindOf(this, m_bSynchronous), this, ulHeadlessSeedBefore, ulHeadlessCountBefore,
+			uiHeadlessRange, uiHeadlessResult, pszLog, pHeadlessCaller ? pHeadlessCaller : _ReturnAddress());
+	}
+#endif
 #ifdef AUI_USE_SFMT_RNG
 	return uiRtnValue;
 #else
@@ -375,6 +440,10 @@ void CvRandom::reseed(unsigned long ulNewValue)
 	m_ulRandomSeed = uiNewSeed;
 #else
 	m_ulRandomSeed = ulNewValue;
+#endif
+#if defined(LEKMOD_HEADLESS_DIAG)
+	if(g_pHeadlessDiag)
+		g_pHeadlessDiag->OnRandReseed(HeadlessRngKindOf(this, m_bSynchronous), this, m_ulRandomSeed);
 #endif
 }
 
@@ -426,6 +495,10 @@ void CvRandom::read(FDataStream& kStream)
 	bool b;
 	kStream >> b;
 #endif//_DEBUG
+#if defined(LEKMOD_HEADLESS_DIAG)
+	if(g_pHeadlessDiag)
+		g_pHeadlessDiag->OnRandReseed(HeadlessRngKindOf(this, m_bSynchronous), this, m_ulRandomSeed);
+#endif
 }
 
 

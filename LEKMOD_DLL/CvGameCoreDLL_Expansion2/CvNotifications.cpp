@@ -185,6 +185,9 @@ FDataStream& operator>>(FDataStream& loadFrom, CvNotifications::Notification& wr
 	loadFrom >> writeTo.m_ePlayerID;
 	writeTo.m_bNeedsBroadcast = true; // all loads should re-broadcast their events
 	writeTo.m_bWaitExtraTurn = false; // not saving this
+#if defined(LEKMOD_PORTABLE)
+	writeTo.m_bRuleNeedsBroadcast = true; // version 3 reads it after the list (CvNotifications::Read)
+#endif
 
 	return loadFrom;
 }
@@ -224,6 +227,9 @@ void CvNotifications::Notification::Clear()
 	m_bNeedsBroadcast = false;
 	m_bDismissed = false;
 	m_bWaitExtraTurn = false;
+#if defined(LEKMOD_PORTABLE)
+	m_bRuleNeedsBroadcast = false;
+#endif
 }
 
 /// Constructor
@@ -248,6 +254,12 @@ void CvNotifications::Init(PlayerTypes ePlayer)
 	for(uint ui = 0; ui < m_aNotifications.size(); ui++)
 	{
 		m_aNotifications[ui].Clear();
+#if defined(LEKMOD_HEADLESS_HYG_NOTIFICATION_INIT)
+		// HYG-0003: resize() copies a stack temporary whose m_iExtraGameData/m_ePlayerID VC9 leaves uninitialised
+		// and Clear() does not reset them; the empty slots were written to the save stream with that residue.
+		m_aNotifications[ui].m_iExtraGameData = -1;
+		m_aNotifications[ui].m_ePlayerID = NO_PLAYER;
+#endif
 	}
 	m_iNotificationsBeginIndex = 0;
 	m_iNotificationsEndIndex = 0;
@@ -291,13 +303,27 @@ void CvNotifications::Read(FDataStream& kStream)
 				m_aNotifications[ui].m_eNotificationType = (NotificationTypes)V1_IndexToHash[iIndex];
 		}
 	}
+#if defined(LEKMOD_PORTABLE)
+	if (uiVersion >= 3)
+	{
+		for(uint ui = 0; ui < MAX_NOTIFICATIONS; ui++)
+		{
+			kStream >> m_aNotifications[ui].m_bRuleNeedsBroadcast;
+			kStream >> m_aNotifications[ui].m_bWaitExtraTurn;
+		}
+	}
+#endif
 }
 
 /// Serialization write
 void CvNotifications::Write(FDataStream& kStream) const
 {
 	// Current version number
+#if defined(LEKMOD_PORTABLE)
+	uint uiVersion = 3;  // B4 gc-replica: + the rule's broadcast flag and m_bWaitExtraTurn of every record
+#else
 	uint uiVersion = 2;
+#endif
 	kStream << uiVersion;
 
 	// need to serialize notification list
@@ -310,6 +336,13 @@ void CvNotifications::Write(FDataStream& kStream) const
 	{
 		kStream << m_aNotifications[ui];
 	}
+#if defined(LEKMOD_PORTABLE)
+	for(uint ui = 0; ui < MAX_NOTIFICATIONS; ui++)
+	{
+		kStream << m_aNotifications[ui].m_bRuleNeedsBroadcast;
+		kStream << m_aNotifications[ui].m_bWaitExtraTurn;
+	}
+#endif
 }
 
 /// Update - called from within CvPlayer
@@ -340,12 +373,18 @@ void CvNotifications::Update(void)
 						{
 							GC.GetEngineUserInterface()->AddNotification(kNotification.m_iLookupIndex, kNotification.m_eNotificationType, kNotification.m_strMessage.c_str(), kNotification.m_strSummary.c_str(), kNotification.m_iGameDataIndex, kNotification.m_iExtraGameData, m_ePlayer, kNotification.m_iX, kNotification.m_iY);
 							kNotification.m_bNeedsBroadcast = false;
+#if defined(LEKMOD_PORTABLE)
+							kNotification.m_bRuleNeedsBroadcast = false;
+#endif
 						}
 					}
 					else if(gDLL->IsPlayerConnected(kNotification.m_ePlayerID))
 					{//We consider a notification to have been broadcast if the notification 
 						//is for a remote player who is network connected to the game.
 						kNotification.m_bNeedsBroadcast = false;
+#if defined(LEKMOD_PORTABLE)
+						kNotification.m_bRuleNeedsBroadcast = false;
+#endif
 					}
 				}
 			}
@@ -423,6 +462,9 @@ int CvNotifications::Add(NotificationTypes eNotificationType, const char* strMes
 	newNotification.m_iTurn = GC.getGame().getGameTurn();
 	newNotification.m_iLookupIndex = m_iCurrentLookupIndex;
 	newNotification.m_bNeedsBroadcast = true;
+#if defined(LEKMOD_PORTABLE)
+	newNotification.m_bRuleNeedsBroadcast = true;
+#endif
 	newNotification.m_bDismissed = false;
 	newNotification.m_bWaitExtraTurn = false;
 
@@ -469,6 +511,9 @@ int CvNotifications::Add(NotificationTypes eNotificationType, const char* strMes
 
 			}
 			m_aNotifications[m_iNotificationsEndIndex].m_bNeedsBroadcast = false;
+#if defined(LEKMOD_PORTABLE)
+			m_aNotifications[m_iNotificationsEndIndex].m_bRuleNeedsBroadcast = false;
+#endif
 		}
 
 		gDLL->GameplayMinimapNotification(iX, iY, m_iCurrentLookupIndex+1);	// The index is used to uniquely identify each flashing dot on the minimap. We're adding 1 since the selected unit is always 0. It ain't pretty, but it'll work
@@ -1106,7 +1151,9 @@ void CvNotifications::Activate(Notification& notification)
 		}
 		break;
 
-#ifndef AUI_WARNING_FIXES
+// HYG-0013 (LEKMOD_HEADLESS_HYG_MESSAGES_TO_HUMANS): the golden v34.15 build (AUI_WARNING_FIXES off) opens the project's results
+// (LeagueProjectPopup) on a click of its notification; Lekmod's AUI build compiled the case out.
+#if !defined(AUI_WARNING_FIXES) || defined(LEKMOD_HEADLESS_HYG_MESSAGES_TO_HUMANS)
 	case NOTIFICATION_LEAGUE_PROJECT_COMPLETE:
 		CvAssertMsg(notification.m_iGameDataIndex >= 0, "notification.m_iGameDataIndex is out of bounds");
 		if (notification.m_iGameDataIndex >= 0)
@@ -1959,7 +2006,11 @@ bool CvNotifications::IsNotificationTypeEndOfTurnExpired(NotificationTypes eNoti
 	case NOTIFICATION_REFORMATION_BELIEF_ADDED_ACTIVE_PLAYER:
 	case NOTIFICATION_REFORMATION_BELIEF_ADDED:
 		if(iForSpecificEntry != -1 && GC.getGame().isGameMultiPlayer() 
+#if defined(LEKMOD_PORTABLE)
+			&& (m_aNotifications[iForSpecificEntry].m_bRuleNeedsBroadcast //not broadcast yet.
+#else
 			&& (m_aNotifications[iForSpecificEntry].m_bNeedsBroadcast //not broadcast yet.
+#endif
 				|| m_aNotifications[iForSpecificEntry].m_iTurn == GC.getGame().getGameTurn())) //same turn as creation.
 		{
 			return false;

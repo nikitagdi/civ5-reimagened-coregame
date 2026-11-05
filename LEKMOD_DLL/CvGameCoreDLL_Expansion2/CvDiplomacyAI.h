@@ -38,6 +38,12 @@ FDataStream& operator>>(FDataStream&, DeclarationLogData&);
 
 #define MAX_DIPLO_LOG_STATEMENTS 60
 #define MAX_TURNS_SAFE_ESTIMATE 9999
+#if defined(LEKMOD_HEADLESS_FIX_0027)
+// FIX-0027 / DS-0008: FromUIDiploEvent code for "the human closed the trade screen with this AI" (iArg1 = AI was making an
+// offer). Sent by CvDealAI::DoTradeScreenClosed through the existing sendFromUIDiploEvent message (the exe passes the
+// event id through as an int), handled by CvDiplomacyAI::DoFromUIDiploEvent on every peer. Past the stock range.
+#define HEADLESS_FROM_UI_DIPLO_EVENT_TRADE_SCREEN_CLOSED ((FromUIDiploEventTypes)(NUM_FROM_UI_DIPLO_EVENTS + 0))
+#endif
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //  CLASS:      CvDiplomacyAI

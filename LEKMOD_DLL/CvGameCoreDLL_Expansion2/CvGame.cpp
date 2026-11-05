@@ -75,7 +75,14 @@
 //	 * CvGame save version reset for expansion pack 2.
 //------------------------------------------------------------------------------
 const int g_CurrentCvGameVersion = 1;
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+extern unsigned int g_uiHeadlessGameDatabaseEpoch;	// OPT-0016, CvGlobals.cpp
+#endif
 
+#if defined(LEKMOD_HEADLESS_FIX_0012)
+// FIX-0012 / DS-0022: set by CvGame::Read, consumed by the next initScoreCalculation (the exe's post-load call).
+static bool s_bHeadlessScoreFromSave = false;
+#endif
 
 CvGameInitialItemsOverrides::CvGameInitialItemsOverrides()
 {
@@ -1059,6 +1066,10 @@ void CvGame::uninit()
 	m_aPlotExtraCosts.clear();
 
 	SAFE_DELETE(m_pDiploResponseQuery);
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	m_kDiploResponseMemo.clear();	// OPT-0016: same lifetime as the prepared query
+	m_uiDiploResponseMemoEpoch = g_uiHeadlessGameDatabaseEpoch;
+#endif
 
 	SAFE_DELETE(m_pSettlerSiteEvaluator);
 	SAFE_DELETE(m_pStartSiteEvaluator);
@@ -1192,6 +1203,9 @@ void CvGame::reset(HandicapTypes eHandicap, bool bConstructorCall)
 	//--------------------------------
 	// Uninit class
 	uninit();
+#if defined(LEKMOD_HEADLESS_FIX_0012)
+	s_bHeadlessScoreFromSave = false;
+#endif
 
 	m_fCurrentTurnTimerPauseDelta = 0.f;
 
@@ -5466,6 +5480,21 @@ int CvGame::getInitWonders() const
 //	--------------------------------------------------------------------------------
 void CvGame::initScoreCalculation()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0012)
+	// FIX-0012 / DS-0022: the exe calls InitScoreCalculation right after a load. m_iMaxPopulation is derived from the
+	// current map (best nature food yields), so golden replaced the value saved at game start with one from the loaded
+	// turn and a loaded game's CvGame state differed from the continuous game's. Nothing in the DLL reads these
+	// fields; keep the saved values on the first call after CvGame::Read. Save format unchanged.
+	if(s_bHeadlessScoreFromSave)
+	{
+		s_bHeadlessScoreFromSave = false;
+		if(m_iMaxPopulation != 0)
+		{
+			HEADLESS_FIX_TRIGGER(12);
+			return;
+		}
+	}
+#endif
 	// initialize score calculation
 	int iMaxFood = 0;
 #ifdef AUI_WARNING_FIXES
@@ -6024,12 +6053,104 @@ void CvGame::ChangeNumVotesForTeam(TeamTypes eTeam, int iChange)
 
 
 //	--------------------------------------------------------------------------------
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+// OPT-0016: golden's query loop, collecting the (Tag, Bias) rows in query order instead of expanding them.
+void CvGame::QueryDiploResponseRows(const char* szLeader, const char* szResponse, DiploResponseRows& kRows)
+{
+	if(m_pDiploResponseQuery == NULL)
+	{
+		//Directly reference Language_en_US is safe here since we're just looking for the tag
+		//and not the actual text.
+		const char* szSQL = "select Tag, Bias from Diplomacy_Responses, Language_en_US where (LeaderType = ? or LeaderType = 'GENERIC') and ResponseType = ? and Tag like Response";
+		m_pDiploResponseQuery = new Database::Results();
+		if(!GC.GetGameDatabase()->Execute(*m_pDiploResponseQuery, szSQL, strlen(szSQL)))
+		{
+			CvAssertMsg(false, "Failed to generate diplo response query.");
+		}
+	}
+
+	m_pDiploResponseQuery->Bind(1, szLeader);
+	m_pDiploResponseQuery->Bind(2, szResponse);
+
+	while(m_pDiploResponseQuery->Step())
+	{
+		const char* szTag = m_pDiploResponseQuery->GetText(0);
+		int bias = m_pDiploResponseQuery->GetInt(1);
+		kRows.push_back(std::make_pair(std::string(szTag ? szTag : ""), bias));
+	}
+
+	m_pDiploResponseQuery->Reset();
+}
+#endif
+
 Localization::String CvGame::GetDiploResponse(const char* szLeader, const char* szResponse, const Localization::String& strOptionalKey1, const Localization::String& strOptionalKey2)
 {
 	//cvStopWatch stopWatch("GetDiploResponse");
 
 	Localization::String response;
 
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	// OPT-0016: the query result depends only on (szLeader, szResponse) and the game database, which is static while
+	// this CvGame holds the prepared query; the memo returns the same rows. Golden expands each row into Bias copies of
+	// its tag and picks one with getAsyncRandNum(count): the same count, the same single async RNG call and the same
+	// tag are used here without building the string vector.
+	if(m_uiDiploResponseMemoEpoch != g_uiHeadlessGameDatabaseEpoch)
+	{
+		m_kDiploResponseMemo.clear();
+		m_uiDiploResponseMemoEpoch = g_uiHeadlessGameDatabaseEpoch;
+	}
+	DiploResponseRows kDirectRows;
+	const DiploResponseRows* pRows = &kDirectRows;
+	if(szLeader != NULL && szResponse != NULL)
+	{
+		std::string strKey(szLeader);
+		strKey += '\n';
+		strKey += szResponse;
+		std::map<std::string, DiploResponseRows>::iterator it = m_kDiploResponseMemo.find(strKey);
+		if(it == m_kDiploResponseMemo.end())
+		{
+			DiploResponseRows kRows;
+			QueryDiploResponseRows(szLeader, szResponse, kRows);
+			it = m_kDiploResponseMemo.insert(std::make_pair(strKey, kRows)).first;
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		else
+		{
+			DiploResponseRows kRef;
+			QueryDiploResponseRows(szLeader, szResponse, kRef);
+			HEADLESS_OPT_VERIFY(kRef == it->second, 16, "CvGame::GetDiploResponse memo");
+		}
+#endif
+		pRows = &it->second;
+	}
+	else
+	{
+		QueryDiploResponseRows(szLeader, szResponse, kDirectRows);
+	}
+
+	int iNumEntries = 0;	// golden: probabilities.size()
+	for(size_t iRow = 0; iRow < pRows->size(); iRow++)
+	{
+		if((*pRows)[iRow].second > 0)
+			iNumEntries += (*pRows)[iRow].second;
+	}
+	if(iNumEntries > 0)
+	{
+		int iPick = getAsyncRandNum(iNumEntries, "Diplomacy Rand");
+		size_t iRow = 0;
+		for(; iRow < pRows->size(); iRow++)
+		{
+			const int iBias = (*pRows)[iRow].second;
+			if(iBias <= 0)
+				continue;
+			if(iPick < iBias)
+				break;
+			iPick -= iBias;
+		}
+		response = Localization::Lookup((*pRows)[iRow].first.c_str());
+		response << strOptionalKey1 << strOptionalKey2;
+	}
+#else
 	if(m_pDiploResponseQuery == NULL)
 	{
 		//Directly reference Language_en_US is safe here since we're just looking for the tag
@@ -6075,6 +6196,7 @@ Localization::String CvGame::GetDiploResponse(const char* szLeader, const char* 
 		response = Localization::Lookup(probabilities[getAsyncRandNum(probabilities.size(), "Diplomacy Rand")].c_str());
 		response << strOptionalKey1 << strOptionalKey2;
 	}
+#endif
 
 	if(response.IsEmpty())
 	{
@@ -8253,9 +8375,266 @@ void CvGame::addGreatPersonBornName(const CvString& szName)
 
 // Protected Functions...
 
+#if defined(LEKMOD_HEADLESS_DIAG_TURN_LOG)
+//	--------------------------------------------------------------------------------
+// HYG-0010 (LEKMOD_HEADLESS_DIAG_TURN_LOG): per-turn state checksum log for desync forensics in real MP games.
+// Called at the start of CvGame::doTurn (all commands and AI moves of the turn are done, turn processing not started yet),
+// which every machine reaches with the same state. Pure reads of plain members (no RNG, no cached getters such as
+// GetMilitaryMight / CalculateGoldRate, no writes to game state); integer math only. Written through the game's own
+// log manager, so it respects LoggingEnabled (config.ini [Debug]); file: Logs\LekmodNG-turns.log. Format (v1):
+//   LTL1 t=<turn> ap=<active player> jon=<seed>,<calls>,<resets> map=<seed>,<calls>,<resets> g=<hex> m=<hex> v=<hex> us=<cost>
+//   LTL1 t=<turn> T00=<techs>,<hex> ...                                       (teams that ever lived)
+//   LTL1 t=<turn> P00=<h|a|d>,<cities>,<units>,<goldT100>,<econ>,<cities>,<units>,<policies> ...  (players that ever lived)
+// Lines are kept below ~900 characters (several lines per turn); "ap" and "us" differ between machines by design.
+// Every N turns with /D LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY=N (default 1).
+#ifndef LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY
+#define LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY 1
+#endif
+#include <intrin.h>	// __rdtsc
+namespace
+{
+struct LtlHash
+{
+	unsigned int m_h;
+	unsigned int m_n;
+	LtlHash() : m_h(0x9747b28cu), m_n(0) {}
+	void add(int iValue)
+	{
+		unsigned int k = (unsigned int)iValue * 0xcc9e2d51u;
+		k = (k << 15) | (k >> 17);
+		k *= 0x1b873593u;
+		m_h ^= k;
+		m_h = (m_h << 13) | (m_h >> 19);
+		m_h = m_h * 5u + 0xe6546b64u;
+		++m_n;
+	}
+	unsigned int get() const
+	{
+		unsigned int h = m_h ^ (m_n * 4u);
+		h ^= h >> 16; h *= 0x85ebca6bu; h ^= h >> 13; h *= 0xc2b2ae35u; h ^= h >> 16;
+		return h;
+	}
+};
+
+struct LtlWriter
+{
+	FILogFile* m_pLog;
+	int m_iTurn;
+	char m_szLine[1024];
+	int m_iLen;
+	int m_iPrefix;
+	LtlWriter(FILogFile* pLog, int iTurn) : m_pLog(pLog), m_iTurn(iTurn), m_iLen(0), m_iPrefix(0)
+	{
+		m_iPrefix = sprintf_s(m_szLine, sizeof(m_szLine), "LTL1 t=%d", iTurn);
+		m_iLen = m_iPrefix;
+	}
+	void token(const char* szToken)
+	{
+		int iTok = (int)strlen(szToken);
+		if(m_iLen > m_iPrefix && m_iLen + 1 + iTok > 900)
+			flush();
+		if(m_iLen + 1 + iTok >= (int)sizeof(m_szLine))
+			return;
+		m_szLine[m_iLen++] = ' ';
+		memcpy(m_szLine + m_iLen, szToken, iTok);
+		m_iLen += iTok;
+		m_szLine[m_iLen] = '\0';
+	}
+	void flush()
+	{
+		if(m_iLen > m_iPrefix)
+			m_pLog->Msg("%s", m_szLine);
+		m_iLen = m_iPrefix;
+		m_szLine[m_iLen] = '\0';
+	}
+};
+}
+
+void CvGame::LogTurnChecksums()
+{
+	if(LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY > 1 && (getGameTurn() % LEKMOD_HEADLESS_DIAG_TURN_LOG_EVERY) != 0)
+		return;
+	if(!(GC.getLogging() || LOGFILEMGR.IsLoggingEnabled()))
+		return;
+	FILogFile* pLog = LOGFILEMGR.GetLog("LekmodNG-turns.log", 0, "LekmodNG turn log v1 (LTL1)");
+	if(pLog == NULL)
+		return;
+
+	LARGE_INTEGER kFreq, kStart, kEnd;
+	kFreq.QuadPart = 0;
+	QueryPerformanceFrequency(&kFreq);
+	QueryPerformanceCounter(&kStart);
+	const unsigned __int64 ulCycStart = __rdtsc();	// civhost virtualises QPC; the TSC gives the real cost there
+
+	char szTok[256];
+	const int iNumTechs = GC.getNumTechInfos();
+	const int iNumPolicies = GC.getNumPolicyInfos();
+	const int iNumBranches = GC.getNumPolicyBranchInfos();
+
+	// game
+	LtlHash kGame;
+	kGame.add(getGameTurn());
+	kGame.add(getElapsedGameTurns());
+	kGame.add(getNumCities());
+	kGame.add(getTotalPopulation());
+	for(int iP = 0; iP < MAX_PLAYERS; iP++)
+	{
+		const CvPlayer& kP = GET_PLAYER((PlayerTypes)iP);
+		kGame.add((kP.isAlive() ? 1 : 0) | (kP.isEverAlive() ? 2 : 0));
+	}
+
+	// map: ownership, terrain, improvements, routes, resources; visibility per team
+	LtlHash kMap, kVis;
+	const CvMap& kMapRef = GC.getMap();
+	const int iNumPlots = kMapRef.numPlots();
+	for(int iI = 0; iI < iNumPlots; iI++)
+	{
+		const CvPlot* pPlot = kMapRef.plotByIndexUnchecked(iI);
+		if(pPlot == NULL)
+			continue;
+		kMap.add(pPlot->getOwner());
+		kMap.add(((int)pPlot->getPlotType() << 16) ^ (int)pPlot->getTerrainType());
+		kMap.add(pPlot->getFeatureType());
+		kMap.add(((int)pPlot->getResourceType() << 16) ^ pPlot->getNumResource());
+		kMap.add(((int)pPlot->getImprovementType() << 1) | (pPlot->IsImprovementPillaged() ? 1 : 0));
+		kMap.add(((int)pPlot->getRouteType() << 1) | (pPlot->IsRoutePillaged() ? 1 : 0));
+		kMap.add(pPlot->getUpgradeProgress());
+		kMap.add((int)pPlot->getNumUnits());
+		for(int iT = 0; iT < MAX_TEAMS; iT++)
+		{
+			const CvTeam& kT = GET_TEAM((TeamTypes)iT);
+			if(kT.isEverAlive())
+				kVis.add(pPlot->getVisibilityCount((TeamTypes)iT));
+		}
+	}
+
+	const CvRandom& kJon = m_jonRand;
+	const CvRandom& kMapRand = m_mapRand;
+	LtlWriter kW(pLog, getGameTurn());
+	sprintf_s(szTok, sizeof(szTok), "ap=%d", (int)getActivePlayer()); kW.token(szTok);
+	sprintf_s(szTok, sizeof(szTok), "jon=%lu,%lu,%lu", kJon.getSeed(), kJon.getCallCount(), kJon.getResetCount()); kW.token(szTok);
+	sprintf_s(szTok, sizeof(szTok), "map=%lu,%lu,%lu", kMapRand.getSeed(), kMapRand.getCallCount(), kMapRand.getResetCount()); kW.token(szTok);
+	sprintf_s(szTok, sizeof(szTok), "g=%08x", kGame.get()); kW.token(szTok);
+	sprintf_s(szTok, sizeof(szTok), "m=%08x", kMap.get()); kW.token(szTok);
+	sprintf_s(szTok, sizeof(szTok), "v=%08x", kVis.get()); kW.token(szTok);
+
+	// teams: techs, research progress, war/peace
+	std::string strTeams;
+	for(int iT = 0; iT < MAX_TEAMS; iT++)
+	{
+		const CvTeam& kT = GET_TEAM((TeamTypes)iT);
+		if(!kT.isEverAlive())
+			continue;
+		LtlHash kTeam;
+		const CvTeamTechs* pTechs = kT.GetTeamTechs();
+		int iKnown = 0;
+		if(pTechs != NULL)
+		{
+			iKnown = pTechs->GetNumTechsKnown();
+			for(int iTech = 0; iTech < iNumTechs; iTech++)
+			{
+				kTeam.add(pTechs->HasTech((TechTypes)iTech) ? 1 : 0);
+				kTeam.add(pTechs->GetResearchProgressTimes100((TechTypes)iTech));
+			}
+		}
+		for(int iT2 = 0; iT2 < MAX_TEAMS; iT2++)
+			if(GET_TEAM((TeamTypes)iT2).isEverAlive())
+				kTeam.add(kT.isAtWar((TeamTypes)iT2) ? 1 : 0);
+		sprintf_s(szTok, sizeof(szTok), "T%02d=%d,%08x", iT, iKnown, kTeam.get());
+		strTeams += szTok; strTeams += ' ';
+	}
+
+	// players: treasury/culture/faith/golden age, cities, units, policies
+	std::string strPlayers;
+	for(int iP = 0; iP < MAX_PLAYERS; iP++)
+	{
+		const CvPlayer& kP = GET_PLAYER((PlayerTypes)iP);
+		if(!kP.isEverAlive())
+			continue;
+		LtlHash kEcon, kCities, kUnits, kPol;
+		const int iGold = (kP.GetTreasury() != NULL) ? kP.GetTreasury()->GetGoldTimes100() : 0;
+		kEcon.add(iGold);
+		kEcon.add(kP.getJONSCulture());
+		kEcon.add(kP.GetFaith());
+		kEcon.add(kP.GetGoldenAgeProgressMeter());
+		kEcon.add(kP.getGoldenAgeTurns());
+		if(kP.GetPlayerTechs() != NULL)
+			kEcon.add(kP.GetPlayerTechs()->GetCurrentResearch());
+
+		int iLoop = 0;
+		for(const CvCity* pCity = kP.firstCity(&iLoop); pCity != NULL; pCity = kP.nextCity(&iLoop))
+		{
+			kCities.add(pCity->GetID());
+			kCities.add((pCity->getX() << 16) ^ pCity->getY());
+			kCities.add(pCity->getPopulation());
+			kCities.add(pCity->getDamage());
+			kCities.add(pCity->getFoodTimes100());
+			kCities.add(pCity->getProductionTimes100());
+			kCities.add(pCity->GetJONSCultureStored());
+			kCities.add(const_cast<CvCity*>(pCity)->getThreatValue());	// plain read of m_iThreatValue (non-const without AUI_CONSTIFY)
+			const OrderData* pOrder = pCity->headOrderQueueNode();
+			kCities.add(pOrder != NULL ? (((int)pOrder->eOrderType << 16) ^ pOrder->iData1) : -1);
+		}
+		iLoop = 0;
+		for(const CvUnit* pUnit = kP.firstUnit(&iLoop); pUnit != NULL; pUnit = kP.nextUnit(&iLoop))
+		{
+			kUnits.add(pUnit->GetID());
+			kUnits.add(pUnit->getUnitType());
+			kUnits.add((pUnit->getX() << 16) ^ pUnit->getY());
+			kUnits.add(pUnit->getDamage());
+			kUnits.add(pUnit->getMoves());
+			kUnits.add(pUnit->getExperience());
+			kUnits.add(pUnit->getLevel());
+			kUnits.add(pUnit->GetActivityType());
+		}
+		const CvPlayerPolicies* pPolicies = kP.GetPlayerPolicies();
+		if(pPolicies != NULL)
+		{
+			for(int iPol = 0; iPol < iNumPolicies; iPol++)
+				kPol.add(pPolicies->HasPolicy((PolicyTypes)iPol) ? 1 : 0);
+			for(int iBr = 0; iBr < iNumBranches; iBr++)
+				kPol.add(pPolicies->IsPolicyBranchUnlocked((PolicyBranchTypes)iBr) ? 1 : 0);
+		}
+		sprintf_s(szTok, sizeof(szTok), "P%02d=%c,%d,%d,%d,%08x,%08x,%08x,%08x", iP, !kP.isAlive() ? 'd' : (kP.isHuman() ? 'h' : 'a'),
+		          kP.getNumCities(), kP.getNumUnits(), iGold, kEcon.get(), kCities.get(), kUnits.get(), kPol.get());
+		strPlayers += szTok; strPlayers += ' ';
+	}
+
+	QueryPerformanceCounter(&kEnd);
+	int iMicros = (kFreq.QuadPart > 0) ? (int)((kEnd.QuadPart - kStart.QuadPart) * 1000000 / kFreq.QuadPart) : -1;
+	const int iKiloCycles = (int)((__rdtsc() - ulCycStart) / 1000);
+	sprintf_s(szTok, sizeof(szTok), "us=%d kc=%d", iMicros, iKiloCycles); kW.token(szTok);
+	kW.flush();
+
+	// team and player tokens
+	const std::string* aLists[2] = { &strTeams, &strPlayers };
+	for(int iList = 0; iList < 2; iList++)
+	{
+		const std::string& str = *aLists[iList];
+		size_t uiStart = 0;
+		while(uiStart < str.size())
+		{
+			size_t uiEnd = str.find(' ', uiStart);
+			if(uiEnd == std::string::npos)
+				uiEnd = str.size();
+			if(uiEnd > uiStart)
+				kW.token(str.substr(uiStart, uiEnd - uiStart).c_str());
+			uiStart = uiEnd + 1;
+		}
+		kW.flush();
+	}
+}
+#endif
+
 //	--------------------------------------------------------------------------------
 void CvGame::doTurn()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_GAME_DOTURN);
+#endif
+#if defined(LEKMOD_HEADLESS_DIAG_TURN_LOG)
+	LogTurnChecksums();
+#endif
 #ifndef FINAL_RELEASE
 	char temp[256];
 	sprintf_s(temp, "Turn %i\n", getGameTurn());
@@ -9177,6 +9556,9 @@ void CvGame::updateWar()
 //	-----------------------------------------------------------------------------------------------
 void CvGame::updateMoves()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_GAME_UPDATEMOVES);
+#endif
 	UnitHandle pLoopUnit;
 	pLoopUnit.ignoreDestruction(true); // It's acceptable for the unit to become invalid during AutoMoves()
 
@@ -10179,6 +10561,9 @@ CvRandom& CvGame::getMapRand()
 //	--------------------------------------------------------------------------------
 int CvGame::getMapRandNum(int iNum, const char* pszLog)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_RAND_CALLER();
+#endif
 	return m_mapRand.get(iNum, pszLog);
 }
 
@@ -10195,6 +10580,9 @@ CvRandom& CvGame::getJonRand()
 /// Allows for logging.
 int CvGame::getJonRandNum(int iNum, const char* pszLog)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_RAND_CALLER();
+#endif
 	return m_jonRand.get(iNum, pszLog);
 }
 
@@ -10204,6 +10592,9 @@ int CvGame::getJonRandNum(int iNum, const char* pszLog)
 /// Allows for logging.
 int CvGame::getJonRandNumBinom(int iNum, const char* pszLog)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_RAND_CALLER();
+#endif
 	return m_jonRand.getBinom(iNum, pszLog);
 }
 #endif
@@ -10215,6 +10606,9 @@ int CvGame::getJonRandNumBinom(int iNum, const char* pszLog)
 // causing ambiguous call errors.  The non VA one is needed for use as a delegate
 int CvGame::getJonRandNumVA(int iNum, const char* pszLog, ...)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_RAND_CALLER();
+#endif
 	if (pszLog)
 	{
 		const size_t uiOutputSize = 512;
@@ -10236,6 +10630,9 @@ int CvGame::getJonRandNumVA(int iNum, const char* pszLog, ...)
 /// This should only be called by operations that will not effect gameplay!
 int CvGame::getAsyncRandNum(int iNum, const char* pszLog)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_RAND_CALLER();
+#endif
 	return GC.getASyncRand().get(iNum, pszLog);
 }
 
@@ -10849,9 +11246,12 @@ void CvGame::Read(FDataStream& kStream)
 #endif
 #endif
 
-	//when loading from file, we need to reset m_lastTurnAICivsProcessed 
+	//when loading from file, we need to reset m_lastTurnAICivsProcessed
 	//so that updateMoves() can turn active players after loading an autosave in simultaneous turns multiplayer.
 	m_lastTurnAICivsProcessed = -1;
+#if defined(LEKMOD_HEADLESS_FIX_0012)
+	s_bHeadlessScoreFromSave = true;
+#endif
 }
 
 //	---------------------------------------------------------------------------
@@ -10863,6 +11263,9 @@ void CvGame::ReadSupportingClassData(FDataStream& kStream)
 
 	CvBarbarians::Read(kStream, uiVersion);
 	CvGoodyHuts::Read(kStream, uiVersion);
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	HeadlessSaveTrailer::Read(kStream);		// FIX-0019: optional trailer (tactical postures), only if CvTacticalAI::Read saw its marker
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -11086,6 +11489,9 @@ void CvGame::WriteSupportingClassData(FDataStream& kStream)
 
 	CvBarbarians::Write(kStream);
 	CvGoodyHuts::Write(kStream);
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	HeadlessSaveTrailer::Write(kStream);	// FIX-0019: optional trailer; must stay the last bytes of the save body
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -13023,7 +13429,11 @@ void CvGame::SpawnArchaeologySitesHistorically()
 			// Erase that writing from future consideration
 			vector<GreatWorkType>::const_iterator it;
 			it = std::find (aWorksWriting.begin(), aWorksWriting.end(), eWrittenGreatWork);
+#if defined(LEKMOD_PORTABLE)
+			aWorksWriting.erase(lekmod_portable::mutable_iterator(aWorksWriting, it));
+#else
 			aWorksWriting.erase(it);
+#endif
 
 			// One less writing to give out
 			iNumWritingSites--;

@@ -41,7 +41,31 @@ public:
 	virtual int PlotFertilityValue(CvPlot* pPlot);
 	virtual int BestFoundValueForSpecificYield(CvPlayer* pPlayer, YieldTypes eYield);
 
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	// OPT-0014: memo of the per-plot terms of PlotFoundValue for one CvPlayerAI::AI_updateFoundValues pass
+	// (Begin after ComputeFlavorMultipliers, End after the plot loop; nothing the terms read changes in between).
+	void BeginPlotValueMemo(const CvPlayer* pPlayer);
+	void EndPlotValueMemo();
+#endif
+
 protected:
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+	struct PlotValueMemo
+	{
+		int iYieldGen;		// aiYield valid while == m_iPlotValueMemoGen
+		int iUnownedGen;	// iHappiness / iResource valid while == m_iPlotValueMemoGen
+		int aiYield[5];		// ComputeFoodValue, ComputeProductionValue, ComputeGoldValue, ComputeScienceValue, ComputeFaithValue
+		int iHappiness;		// ComputeHappinessValue
+		int iResource;		// ComputeTradeableResourceValue
+	};
+	std::vector<PlotValueMemo> m_aPlotValueMemo;
+	int m_iPlotValueMemoGen;
+	const CvPlayer* m_pPlotValueMemoPlayer;	// NULL = no pass active, PlotFoundValue computes directly
+	ImprovementTypes m_eMemoIncaImprovement;
+	ImprovementTypes m_eMemoBrazilImprovement;
+	ImprovementTypes m_eMemoMoroccoImprovement;
+	ImprovementTypes m_eMemoPolderImprovement;
+#endif
 	// Each of these routines computes a number from 0 (no value) to 100 (best possible value)
 	virtual int ComputeFoodValue(CvPlot* pPlot, CvPlayer* pPlayer);
 	virtual int ComputeHappinessValue(CvPlot* pPlot, CvPlayer* pPlayer);

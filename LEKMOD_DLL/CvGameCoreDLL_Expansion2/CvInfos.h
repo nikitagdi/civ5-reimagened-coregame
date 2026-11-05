@@ -1497,7 +1497,7 @@ protected:
 	// Arrays
 	int* m_piYieldChange;
 #if defined(MOD_RESOURCES_PRODUCTION_COST_MODIFIERS)
-	std::map<int, std::vector<ProductionCostModifiers>> m_piiiUnitCombatProductionCostModifiersLocal;
+	std::map<int, std::vector<ProductionCostModifiers> > m_piiiUnitCombatProductionCostModifiersLocal;
 	std::vector<ProductionCostModifiers> m_aiiiBuildingProductionCostModifiersLocal;
 #endif
 	int* m_piResourceQuantityTypes;

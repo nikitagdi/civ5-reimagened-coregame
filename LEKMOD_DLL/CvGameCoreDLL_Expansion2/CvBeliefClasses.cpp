@@ -18,6 +18,69 @@
 
 #include "LintFree.h"
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+// OPT-0040: CvReligionBeliefs loops of the form "for(i = 0; i < GetNumBeliefs(); i++) if(HasBelief(i)) <body>" test every
+// belief of the game with HasBelief, a linear search of the religion's list. This iterator yields exactly the ids that loop
+// accepts, in the same ascending order, from the religion's own list: same ids, same order, same body calls.
+#define HEADLESS_OWNED_BELIEFS_MAX 32
+class CvHeadlessOwnedBeliefLoop
+{
+public:
+	CvHeadlessOwnedBeliefLoop(const CvReligionBeliefs& kBeliefs, int iNumBeliefs) :
+		m_kBeliefs(kBeliefs), m_iNumBeliefs(iNumBeliefs), m_iPos(0)
+	{
+		m_iCount = kBeliefs.HeadlessOwnedBeliefsAscending(m_aiOwned, HEADLESS_OWNED_BELIEFS_MAX, iNumBeliefs);
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		if(m_iCount >= 0)
+		{
+			// reference: golden's loop header
+			int iRef = 0;
+			bool bSame = true;
+			for(int i = 0; i < iNumBeliefs; i++)
+			{
+				if(kBeliefs.HasBelief((BeliefTypes)i))
+				{
+					if(iRef >= m_iCount || m_aiOwned[iRef] != i)
+						bSame = false;
+					iRef++;
+				}
+			}
+			HEADLESS_OPT_VERIFY(bSame && iRef == m_iCount, 40, "CvReligionBeliefs owned-belief loop");
+		}
+#endif
+	}
+	// The next id golden's loop accepts; false at its end.
+	bool Next(int& i)
+	{
+		if(m_iCount >= 0)
+		{
+			if(m_iPos >= m_iCount)
+				return false;
+			i = m_aiOwned[m_iPos++];
+			return true;
+		}
+		while(m_iPos < m_iNumBeliefs)	// list did not fit: golden's own loop
+		{
+			const int iCandidate = m_iPos++;
+			if(m_kBeliefs.HasBelief((BeliefTypes)iCandidate))
+			{
+				i = iCandidate;
+				return true;
+			}
+		}
+		return false;
+	}
+private:
+	const CvReligionBeliefs& m_kBeliefs;
+	int m_iNumBeliefs;
+	int m_iPos;
+	int m_iCount;
+	int m_aiOwned[HEADLESS_OWNED_BELIEFS_MAX];
+
+	CvHeadlessOwnedBeliefLoop& operator=(const CvHeadlessOwnedBeliefLoop&);
+};
+#endif
+
 //======================================================================================================
 //					CvBeliefEntry
 //======================================================================================================
@@ -1417,6 +1480,34 @@ bool CvReligionBeliefs::HasBelief(BeliefTypes eBelief) const
 	return (find(m_ReligionBeliefs.begin(), m_ReligionBeliefs.end(), (int)eBelief) != m_ReligionBeliefs.end());
 }
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+/// OPT-0040: {i in [0, iNumBeliefs) : HasBelief(i)} ascending (HasBelief is a membership test, so duplicates count once and
+/// ids outside the range are never visited by the golden loops). -1 if more than iMax ids qualify.
+int CvReligionBeliefs::HeadlessOwnedBeliefsAscending(int* aiOut, int iMax, int iNumBeliefs) const
+{
+	int iCount = 0;
+	const int iSize = (int)m_ReligionBeliefs.size();
+	for(int k = 0; k < iSize; k++)
+	{
+		const int iBelief = m_ReligionBeliefs[k];
+		if(iBelief < 0 || iBelief >= iNumBeliefs)
+			continue;
+		int iPos = iCount;
+		while(iPos > 0 && aiOut[iPos - 1] > iBelief)
+			iPos--;
+		if(iPos > 0 && aiOut[iPos - 1] == iBelief)
+			continue;
+		if(iCount >= iMax)
+			return -1;
+		for(int j = iCount; j > iPos; j--)
+			aiOut[j] = aiOut[j - 1];
+		aiOut[iPos] = iBelief;
+		iCount++;
+	}
+	return iCount;
+}
+#endif
+
 /// Does this religion possess a specific belief?
 BeliefTypes CvReligionBeliefs::GetBelief(int iIndex) const
 {
@@ -1746,10 +1837,17 @@ int CvReligionBeliefs::GetImprovementYieldChange(ImprovementTypes eImprovement, 
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetImprovementYieldChange(eImprovement, eYield);
 		}
 	}
@@ -1763,10 +1861,17 @@ int CvReligionBeliefs::GetBuildingClassYieldChange(BuildingClassTypes eBuildingC
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			if(iFollowers >= pBeliefs->GetEntry(i)->GetMinFollowers())
 			{
 				rtnValue += pBeliefs->GetEntry(i)->GetBuildingClassYieldChange(eBuildingClass, eYieldType);
@@ -1801,10 +1906,17 @@ int CvReligionBeliefs::GetBuildingClassHappiness(BuildingClassTypes eBuildingCla
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			if(iFollowers >= pBeliefs->GetEntry(i)->GetMinFollowers())
 			{
 				rtnValue += pBeliefs->GetEntry(i)->GetBuildingClassHappiness(eBuildingClass);
@@ -1821,10 +1933,17 @@ int CvReligionBeliefs::GetBuildingClassTourism(BuildingClassTypes eBuildingClass
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetBuildingClassTourism(eBuildingClass);
 		}
 	}
@@ -1838,10 +1957,17 @@ int CvReligionBeliefs::GetFeatureYieldChange(FeatureTypes eFeature, YieldTypes e
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetFeatureYieldChange(eFeature, eYieldType);
 		}
 	}
@@ -1855,10 +1981,17 @@ int CvReligionBeliefs::GetResourceYieldChange(ResourceTypes eResource, YieldType
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetResourceYieldChange(eResource, eYieldType);
 		}
 	}
@@ -1872,10 +2005,17 @@ int CvReligionBeliefs::GetTerrainYieldChange(TerrainTypes eTerrain, YieldTypes e
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetTerrainYieldChange(eTerrain, eYieldType);
 		}
 	}
@@ -1940,10 +2080,17 @@ int CvReligionBeliefs::GetYieldChangeNaturalWonder(YieldTypes eYieldType) const
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetYieldChangeNaturalWonder(eYieldType);
 		}
 	}
@@ -1974,10 +2121,17 @@ int CvReligionBeliefs::GetYieldModifierNaturalWonder(YieldTypes eYieldType) cons
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetYieldModifierNaturalWonder(eYieldType);
 		}
 	}
@@ -1991,10 +2145,17 @@ int CvReligionBeliefs::GetMaxYieldModifierPerFollower(YieldTypes eYieldType) con
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 	int rtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			rtnValue += pBeliefs->GetEntry(i)->GetMaxYieldModifierPerFollower(eYieldType);
 		}
 	}
@@ -2032,10 +2193,17 @@ bool CvReligionBeliefs::IsFaithBuyingEnabled(EraTypes eEra) const
 {
 	CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	CvHeadlessOwnedBeliefLoop kHeadlessOwned(*this, pBeliefs->GetNumBeliefs());	// OPT-0040: same ids, same order
+	for(int i = 0; kHeadlessOwned.Next(i); )
+	{
+		{
+#else
 	for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
 	{
 		if(HasBelief((BeliefTypes)i))
 		{
+#endif
 			if (pBeliefs->GetEntry(i)->IsFaithUnitPurchaseEra((int)eEra))
 			{
 				return true;

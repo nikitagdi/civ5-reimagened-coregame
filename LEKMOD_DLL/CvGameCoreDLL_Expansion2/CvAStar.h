@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	ï¿½ 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -19,7 +19,41 @@
 
 #include	"CvAStarNode.h"
 
+// headless OPT-0012/OPT-0013/OPT-0015 share the per-search epoch of CvAStar (see HeadlessInSearch below)
+#if (defined(LEKMOD_HEADLESS_OPT_ASTAR_MOVE_MEMO) || defined(LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO) || defined(LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO) || defined(LEKMOD_HEADLESS_OPT_ASTAR_FROM_PLOT_MEMO)) && !defined(LEKMOD_HEADLESS_ASTAR_SEARCH_EPOCH)
+#define LEKMOD_HEADLESS_ASTAR_SEARCH_EPOCH
+#endif
+// headless OPT-0090: early stop of TurnsToReachTarget searches that cannot reach their destination (the study build uses the
+// same hook to measure without stopping)
+#if (defined(LEKMOD_HEADLESS_OPT_ASTAR_UNREACHABLE_STOP) || defined(LEKMOD_STUDY_FAILPATH_STATS)) && !defined(LEKMOD_HEADLESS_ASTAR_STOP_HOOK)
+#define LEKMOD_HEADLESS_ASTAR_STOP_HOOK
+#endif
+#if defined(LEKMOD_HEADLESS_ASTAR_STOP_HOOK) && !defined(HEADLESS_STOP_CHECK_EVERY)
+#define HEADLESS_STOP_CHECK_EVERY 32		// OPT-0090: pops between two stop checks of a search (the turn bound test)
+#define HEADLESS_STOP_CLOSURE_EVERY 128	// OPT-0090: pops between two unreachability walks (a multiple of HEADLESS_STOP_CHECK_EVERY)
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO) && !defined(LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO)
+#error OPT-0015 (LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO) relies on OPT-0013 (LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO): the node cost cache must change only at its first fill per search
+#endif
+
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS)
+#if defined(AUI_ASTAR_FIX_POSSIBLE_NULL_POINTERS) || defined(AUI_ASTAR_MINOR_OPTIMIZATION)
+#error OPT-0086 (LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS) reproduces the list order of the build without AUI_ASTAR_FIX_POSSIBLE_NULL_POINTERS / AUI_ASTAR_MINOR_OPTIMIZATION only
+#endif
+#include <vector>
+// headless OPT-0086: one run of equal total costs in the sorted open list (first and last node of the run)
+struct CvAStarOpenBucket
+{
+	int iCost;
+	CvAStarNode* pFirst;
+	CvAStarNode* pLast;
+};
+#endif
+
 class CvAStar;
+#if defined(LEKMOD_HEADLESS_FIX_0020)
+class CvIgnoreUnitsPathFinder;
+#endif
 
 #ifdef AUI_CONSTIFY
 typedef int(*CvAPointFunc)(int, int, const void*, const CvAStar*);
@@ -381,6 +415,75 @@ public:
 	const void* CvAStar::GetScratchBuffer() const { return &m_ScratchBuffer[0]; }
 #endif
 	void* GetScratchBuffer() { return &m_ScratchBuffer[0]; }
+
+#if defined(LEKMOD_HEADLESS_ASTAR_SEARCH_EPOCH)
+	// headless OPT-0012/OPT-0013: every GeneratePath call is one "search" with its own epoch number. Inside one search the
+	// unit (m_pData), the flags and the game state are constant (the callbacks only read), so values the callbacks derive
+	// from them can be memoised for the rest of that search and are void when the next search starts.
+	inline bool HeadlessInSearch() const { return m_bHeadlessInSearch; }
+	inline int HeadlessSearchEpoch() const { return m_iHeadlessSearchEpoch; }
+	inline int HeadlessNumPlots() const { return m_iColumns * m_iRows; }
+	inline int HeadlessColumns() const { return m_iColumns; }
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_MOVE_MEMO)
+	// OPT-0012: per-search memo of the pure movement predicates of PathCost/PathAdd (CvAStar.cpp, "OPT-0012").
+	struct HeadlessZocMemo
+	{
+		int iEpoch;					// search epoch the masks belong to (0 = never computed)
+		unsigned char ucCityMask;	// bit d: plotDirection(from, d) is an enemy city that exerts ZOC on this unit
+		unsigned char ucUnitMask;	// bit d: plotDirection(from, d) holds an enemy combat unit that exerts ZOC on this unit
+	};
+	struct HeadlessMoveMemo
+	{
+		int iEpoch;					// search epoch of the entry (0 = empty)
+		const CvPlot* pFrom;
+		const CvPlot* pTo;
+		signed char cConsumesAllMoves;	// -1 not computed yet, else 0/1
+		signed char cCostsOnlyOne;
+		signed char cSlowedByZOC;
+		bool bTerrainCostValid;
+		int iTerrainCostBaseMoves;	// iBaseMoves the terrain cost below was computed with
+		int iTerrainCost;			// max(1, min(regular, route, flat route)) of CvUnitMovement::GetCostsForMove
+	};
+	inline HeadlessZocMemo* HeadlessZocMemoAt(int iPlotIndex) { return &m_paHeadlessZocMemo[iPlotIndex]; }
+	inline HeadlessMoveMemo& HeadlessMoveMemoEntry() { return m_kHeadlessMoveMemo; }
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO)
+	// OPT-0015: version of the search tree. A node's memoised walk result is valid while its version equals this one.
+	// Bumped at every search start and whenever a CLOSED node's parent, turn count (m_iData2) or cost cache changes (only
+	// closed nodes have descendants and memos; see CvAStar.cpp, "OPT-0015").
+	inline int HeadlessTreeVersion() const { return m_iHeadlessTreeVersion; }
+	inline void HeadlessBumpTreeVersion() { ++m_iHeadlessTreeVersion; }
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_FROM_PLOT_MEMO)
+	// OPT-0017: per-search memo of the from-plot tests at the end of PathValid/TacticalAnalysisMapPathValid
+	struct HeadlessFromMemo
+	{
+		int iEpoch;						// search epoch (0 = never)
+		signed char cMoveThrough;		// pUnit->canMoveThrough(from, MOVEFLAG_PRETEND_CORRECT_EMBARK_STATE): -1 unknown, 0/1
+		signed char cMoveOrAttackInto;	// pUnit->canMoveOrAttackInto(from, MOVEFLAG_PRETEND_CORRECT_EMBARK_STATE): -1 unknown, 0/1
+	};
+	inline HeadlessFromMemo* HeadlessFromMemoAt(int iPlotIndex) { return &m_paHeadlessFromMemo[iPlotIndex]; }
+#endif
+#if defined(LEKMOD_HEADLESS_ASTAR_STOP_HOOK)
+	// OPT-0090: early stop of a search that can no longer reach its destination (CvAStar.cpp, "OPT-0090"). While a stop check
+	// is set, GeneratePath asks it every so many pops; when it answers true the search returns false at once (the full search
+	// returns false too, or with a turn bound reaches the target only beyond it) and the finder remembers the rest was not run. HeadlessFinishStoppedSearch runs that
+	// rest (the game state must be the one of the stopped search); GeneratePath does so itself before a search that reuses the
+	// stopped tree (bReuse with the same start and flags), the only way the rest could be observed.
+	typedef bool (*HeadlessStopCheck)(CvAStar* pFinder, int iSteps);
+	inline void HeadlessSetStopCheck(HeadlessStopCheck pfnCheck) { m_pfnHeadlessStopCheck = pfnCheck; }
+	inline bool HeadlessStoppedEarly() const { return m_bHeadlessStoppedEarly; }
+	bool HeadlessFinishStoppedSearch();	// returns what the full GeneratePath would have returned (false if none stopped)
+	inline const CvAStarNode* HeadlessMainNode(int iX, int iY) const { return &m_ppaaNodes[iX][iY]; }
+	inline const void* HeadlessData() const { return m_pData; }
+	int HeadlessMinOpenTurns() const;	// smallest m_iData2 of the open nodes (MAX_INT if none); the one reader of the open list
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0020)
+	// FIX-0020 / DS-0035: private finder for path queries made for the local UI only (see HeadlessUiIgnoreUnitsPathFinder).
+	// Set only on GC.getIgnoreUnitsPathFinder(): created with the same grid and callbacks in every Initialize, freed in DeInit.
+	inline CvIgnoreUnitsPathFinder* HeadlessUiTwin() const { return m_pHeadlessUiTwin; }
+#endif
 	//--------------------------------------- PROTECTED FUNCTIONS -------------------------------------------
 protected:
 
@@ -393,11 +496,27 @@ protected:
 	CvAStarNode*	GetBest();
 
 #ifdef AUI_ASTAR_PRECALCULATE_NEIGHBORS_ON_INITIALIZE
-	void PrecalcNeighbors(CvAStarNode* node) const;
+	void PrecalcNeighbors(CvAStarNode* node); // headless OPT-0002: not const, xRange/yRange/isValid are const only with AUI_CONSTIFY
 #endif
 	void CreateChildren(CvAStarNode* node);
 	void LinkChild(CvAStarNode* node, CvAStarNode* check);
 	void UpdateOpenNode(CvAStarNode* node);
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS)
+	// headless OPT-0086: index of the open list by cost (the list itself, m_pOpen / m_pNext / m_pPrev, is unchanged)
+	void OpenIndexReset();
+	size_t OpenIndexLower(int iCost) const;
+	size_t OpenIndexUpper(int iCost) const;
+	void OpenIndexInsertAt(size_t iAt, const CvAStarOpenBucket& kBucket);
+	void OpenIndexPushFront(CvAStarNode* node, int iCost);
+	void OpenIndexPushBack(CvAStarNode* node, int iCost);
+	void OpenIndexRemove(CvAStarNode* node);
+	void OpenIndexPopHead(CvAStarNode* node);
+	CvAStarNode* OpenIndexLastNotAbove(int iCost) const;
+	CvAStarNode* OpenIndexFirstNotBelow(int iCost) const;
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	void OpenVerifyAll(const char* pszWhere);
+#endif
+#endif
 	void UpdateParents(CvAStarNode* node);
 
 	void Push(CvAStarNode* node);
@@ -455,6 +574,10 @@ protected:
 
 	CvAStarNode* m_pOpen;            // The open list
 	CvAStarNode* m_pOpenTail;        // The open list tail pointer (to speed up inserts)
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS)
+	std::vector<CvAStarOpenBucket> m_aOpenBuckets;	// headless OPT-0086: the runs of equal cost of the open list, ascending; live ones are [m_iOpenBucketsHead, size())
+	size_t m_iOpenBucketsHead;
+#endif
 	CvAStarNode* m_pClosed;          // The closed list
 	CvAStarNode* m_pBest;            // The best node
 	CvAStarNode* m_pStackHead;		// The Push/Pop stack head
@@ -468,6 +591,28 @@ protected:
 #endif
 
 	char  m_ScratchBuffer[SCRATCH_BUFFER_SIZE];	// Will NOT be modified directly by CvAStar
+
+#if defined(LEKMOD_HEADLESS_ASTAR_SEARCH_EPOCH)
+	int m_iHeadlessSearchEpoch;		// headless OPT-0012/0013: incremented at the start of every GeneratePath
+	bool m_bHeadlessInSearch;		// true while GeneratePath runs (memos are only used by callbacks called from it)
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_MOVE_MEMO)
+	HeadlessZocMemo* m_paHeadlessZocMemo;	// OPT-0012: [m_iColumns * m_iRows], index y * m_iColumns + x of the from-plot
+	HeadlessMoveMemo m_kHeadlessMoveMemo;	// OPT-0012: last (from, to) edge evaluated in this search
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO)
+	int m_iHeadlessTreeVersion;				// OPT-0015
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_FROM_PLOT_MEMO)
+	HeadlessFromMemo* m_paHeadlessFromMemo;	// OPT-0017: [m_iColumns * m_iRows], index y * m_iColumns + x of the from-plot
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0020)
+	CvIgnoreUnitsPathFinder* m_pHeadlessUiTwin;	// FIX-0020: UI-only copy of GC.getIgnoreUnitsPathFinder() (NULL on every other finder)
+#endif
+#if defined(LEKMOD_HEADLESS_ASTAR_STOP_HOOK)
+	HeadlessStopCheck m_pfnHeadlessStopCheck;	// OPT-0090: set by TurnsToReachTarget for one GeneratePath call, NULL otherwise
+	bool m_bHeadlessStoppedEarly;				// OPT-0090: the last search stopped early, the rest of it was not run
+#endif
 };
 
 
@@ -630,6 +775,40 @@ int TurnsToReachTargetFromPlot(UnitHandle pUnit, const CvPlot* pTarget, const Cv
 int TurnsToReachTarget(UnitHandle pUnit, CvPlot* pTarget, bool bReusePaths=false, bool bIgnoreUnits=false, bool bIgnoreStacking=false);
 #endif
 bool CanReachInXTurns(UnitHandle pUnit, CvPlot* pTarget, int iTurns, bool bIgnoreUnits=false, int* piTurns = NULL);
+#if defined(LEKMOD_HEADLESS_ASTAR_STOP_HOOK)
+// OPT-0090: marks a stretch of code that only asks questions: no game state changes from the constructor to the destructor
+// (the loops of FindClosestOperationUnit, FindClosestUnit, ...). Inside it TurnsToReachTarget may stop a failing search of
+// GC.GetTacticalAnalysisMapFinder() early; when the outermost scope ends, the rest of the last such search is run, so the
+// finder leaves the scope in the state the golden searches leave it (CvAStar.cpp, "OPT-0090"). Nests.
+class CvHeadlessPathQueryScope
+{
+public:
+	CvHeadlessPathQueryScope();
+	~CvHeadlessPathQueryScope();
+private:
+	CvHeadlessPathQueryScope(const CvHeadlessPathQueryScope&);
+	CvHeadlessPathQueryScope& operator=(const CvHeadlessPathQueryScope&);
+};
+#define HEADLESS_PATH_QUERY_SCOPE() CvHeadlessPathQueryScope kHeadlessPathQueryScope
+// OPT-0090: TurnsToReachTarget for callers that only test the answer with <= iMaxTurns: the same answer when it is at most
+// iMaxTurns, otherwise some value above iMaxTurns (inside a scope the search may stop as soon as that is certain)
+int HeadlessTurnsToReachTargetAtMost(UnitHandle pUnit, CvPlot* pTarget, bool bReusePaths, bool bIgnoreUnits, bool bIgnoreStacking, int iMaxTurns);
+#else
+#define HEADLESS_PATH_QUERY_SCOPE()
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_PAR_CLOSEST_OP_UNIT)
+// OPT-0080: TurnsToReachTarget(pUnit, pTarget) (bReusePaths, bIgnoreUnits, bIgnoreStacking false, no turn limit) for a batch of
+// units, the searches spread over the worker threads (per-thread clones of the tactical analysis map finder); afterwards the
+// global finder holds the state of the batch's last search, as after the sequential loop. Simulation thread only.
+struct CvHeadlessParTurnsItem
+{
+	CvUnit* pUnit;
+	CvPlot* pTarget;
+	int iTurns;		// out
+};
+void HeadlessParTurnsToReachTarget(CvHeadlessParTurnsItem* paItems, int iNumItems);
+void HeadlessParShutdown();	// CvGlobals::uninit: stop the workers, free the finder clones
+#endif
 int TradeRouteHeuristic(int iFromX, int iFromY, int iToX, int iToY);
 int TradeRouteLandPathCost(CvAStarNode* parent, CvAStarNode* node, int data, const void* pointer, CvAStar* finder);
 int TradeRouteLandValid(CvAStarNode* parent, CvAStarNode* node, int data, const void* pointer, CvAStar* finder);
@@ -707,5 +886,13 @@ public:
 private:
 	CvAStarNode* m_pCurNode;
 };
+
+#if defined(LEKMOD_HEADLESS_FIX_0020)
+// FIX-0020 / DS-0035: the IgnoreUnits finder for queries that run on one machine only, for its local UI (CvUnit::CanSwapWithUnitHere:
+// the swap check of every human move/attack order and the exe's swap cursor). With the MP cache flag left on by
+// CvPlayerAI::AI_unitUpdate's busy-unit early return, GC.getIgnoreUnitsPathFinder() reuses its last tree across turns in synced
+// code (danger plots); a local search there replaced that tree on one machine only. Never use this finder in synced code.
+CvIgnoreUnitsPathFinder& HeadlessUiIgnoreUnitsPathFinder();
+#endif
 
 #endif	//CVASTAR_H

@@ -187,6 +187,9 @@ void CvPlayerAI::AI_updateFoundValues(bool bStartingLoc)
 	{
 		const TeamTypes eTeam = getTeam();
 		GC.getGame().GetSettlerSiteEvaluator()->ComputeFlavorMultipliers(this);
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+		GC.getGame().GetSettlerSiteEvaluator()->BeginPlotValueMemo(this);	// OPT-0014
+#endif
 		for (int iI = 0; iI < iNumPlots; iI++)
 		{
 			CvPlot* pLoopPlot = GC.getMap().plotByIndexUnchecked(iI);
@@ -209,12 +212,18 @@ void CvPlayerAI::AI_updateFoundValues(bool bStartingLoc)
 				pLoopPlot->setFoundValue(eID, -1);
 			}
 		}
+#if defined(LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO)
+		GC.getGame().GetSettlerSiteEvaluator()->EndPlotValueMemo();	// OPT-0014
+#endif
 	}
 }
 
 //	---------------------------------------------------------------------------
 void CvPlayerAI::AI_unitUpdate()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_UNITPROCESSING);
+#endif
 	GC.getPathFinder().ForceReset();
 	GC.getIgnoreUnitsPathFinder().ForceReset();
 	GC.getRouteFinder().ForceReset();
@@ -244,8 +253,32 @@ void CvPlayerAI::AI_unitUpdate()
 	// this was a !hasBusyUnit around the entire rest of the function, so I tried to make it a bit flatter.
 	if(hasBusyUnitOrCity())
 	{
+#if defined(LEKMOD_HEADLESS_FIX_0025)
+		// FIX-0025 / DS-0035 root cause: golden returned here between SetMPCacheSafe(true) and the restore at the end, so
+		// after the first busy AI player the MP cache flag of these six global finders stayed on for the rest of the game.
+		// In a network game every later search then reused the previous tree across windows and turns, UI-only searches
+		// (recommended city sites, buy-plot cost, longest connection) included, and that history is neither synced nor
+		// saved. Restore the flags exactly as the normal exit below does.
+		GC.getPathFinder().SetMPCacheSafe(bCommonPathFinderMPCaching);
+		GC.getIgnoreUnitsPathFinder().SetMPCacheSafe(bIgnoreUnitsPathFinderMPCaching);
+		GC.GetTacticalAnalysisMapFinder().SetMPCacheSafe(bTacticalPathFinderMPCaching);
+		GC.getInfluenceFinder().SetMPCacheSafe(bInfluencePathFinderMPCaching);
+		GC.getRouteFinder().SetMPCacheSafe(bRoutePathFinderMPCaching);
+		GC.GetWaterRouteFinder().SetMPCacheSafe(bWaterRoutePathFinderMPCaching);
+		HEADLESS_FIX_TRIGGER(25);
+#endif
 		return;
 	}
+
+#if defined(LEKMOD_HEADLESS_FIX_0015)
+	// FIX-0015 / DS-0027: the tactical analysis map (dominance zones, cell strengths) is one global object, built in
+	// doTurnPostDiplomacy for each player at its turn start and not serialized. With simultaneous AI turns every AI is
+	// activated in a shuffled order at turn start, so all AIs moved their units on the map of the player activated last
+	// (from that player's perspective), and a game loaded mid-turn (resync, hot-join, reload) had an empty map until the
+	// next turn: its units moved differently. Build the map for this player from the current state before its units
+	// move: the same in a continuous and in a loaded game. Save format unchanged.
+	GC.getGame().GetTacticalAnalysisMap()->HeadlessRebuildForPlayer(this);
+#endif
 
 	if(isHuman())
 	{

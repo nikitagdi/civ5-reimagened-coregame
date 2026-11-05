@@ -36,6 +36,11 @@ CvReplayMessage::CvReplayMessage()
 CvReplayMessage::CvReplayMessage(int iTurn, ReplayMessageTypes eType, PlayerTypes ePlayer) :
 	m_iTurn(iTurn),
 	m_iTimeMilliseconds(static_cast<int>(GC.getGame().getTimeElapsed() * 1000)),
+#if defined(LEKMOD_HEADLESS_HYG_REPLAY_MSG_INIT)
+	// HYG-0002: m_iExtraData1/2 were left uninitialised (stack residue: addresses) and written to the save stream.
+	m_iExtraData1(0),
+	m_iExtraData2(0),
+#endif
 	m_ePlayer(ePlayer),
 	m_eType(eType)
 {

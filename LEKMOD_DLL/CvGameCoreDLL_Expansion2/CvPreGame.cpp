@@ -295,6 +295,9 @@ bool s_multiplayerAIEnabled = true; // default for RTM, change to true on street
 std::map<PlayerTypes, CvString> s_displayNicknames; // JAR - workaround duplicate IDs vs display names
 
 const std::vector<TeamTypes>& sr_TeamTypes = s_teamTypes;
+#if defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)
+const std::vector<CivilizationTypes>& sr_HeadlessCivilizations = s_civilizations;	// OPT-0061: read by the inline civilization()
+#endif
 
 PackageIDList s_AllowedDLC;
 
@@ -712,12 +715,14 @@ CalendarTypes calendar()
 	return s_calendar;
 }
 
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CivilizationTypes civilization(PlayerTypes p)
 {
 	if(p >= 0 && p < MAX_PLAYERS)
 		return s_civilizations[p];
 	return NO_CIVILIZATION;
 }
+#endif
 
 const CvString& civilizationAdjective(PlayerTypes p)
 {
@@ -901,11 +906,122 @@ const CvString& gameName()
 //! since GameCore does it way to effing often.
 int s_EnumBasedGameOptions[NUM_GAMEOPTION_TYPES];
 
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+// OPT-0010: memo of GetGameOption(const char*). Its result is a pure function of (s_GameOptions, the contents of the
+// game database, the option name): it scans s_GameOptions and otherwise runs a read-only SELECT on GameOptions, with no
+// RNG, no Lua and no state write. Exact invalidation: every write of s_GameOptions (SetGameOption, SetGameOptions,
+// read, ResetGameOptions) is followed by SyncGameOptionsWithEnumList(), which invalidates first; the database utility
+// (PerformDatabasePostProcessing, CacheGameDatabaseData, FlushGameDatabaseData) and CvGlobals::SetGameDatabase
+// invalidate on every (re)load. Entries are keyed by the name's contents (never by pointer); a generation counter
+// empties the whole table at once, so probe chains never see stale slots.
+namespace
+{
+struct GameOptionMemo
+{
+	unsigned int uiGen;		// the slot is valid only while uiGen == s_uiGameOptionMemoGen
+	unsigned int uiHash;
+	int iValue;
+	bool bFound;
+	char szName[64];
+};
+const unsigned int GAMEOPTION_MEMO_SLOTS = 512;	// power of two; the DLL asks for ~150 distinct names
+GameOptionMemo s_aGameOptionMemo[GAMEOPTION_MEMO_SLOTS];
+unsigned int s_uiGameOptionMemoGen = 1;
+}
+
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+namespace
+{
+unsigned int s_uiHeadlessOptionSiteGen = 1;	// OPT-0046: moves with every invalidation of the OPT-0010 memo
+}
+#endif
+
+void InvalidateGameOptionCache()
+{
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+	++s_uiHeadlessOptionSiteGen;	// OPT-0046
+#endif
+	if(++s_uiGameOptionMemoGen == 0)
+	{
+		memset(s_aGameOptionMemo, 0, sizeof(s_aGameOptionMemo));
+		s_uiGameOptionMemoGen = 1;
+	}
+}
+
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+// OPT-0046: the value CvGame::isOption(szOptionName) returns (GetGameOption + "== 1"), computed once per site and
+// generation. The generation moves exactly when OPT-0010's memo is invalidated, i.e. on every change of what
+// GetGameOption(const char*) reads (s_GameOptions, the game database). The site is never keyed by pointer: one static per
+// call site and option name.
+bool HeadlessIsOptionAtSite(HeadlessOptionSite& kSite, const char* szOptionName)
+{
+	if(kSite.m_uiGen != s_uiHeadlessOptionSiteGen)
+	{
+		int iValue = 0;
+		GetGameOption(szOptionName, iValue);
+		kSite.m_bValue = (iValue == 1);
+		kSite.m_uiGen = s_uiHeadlessOptionSiteGen;
+	}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	else
+	{
+		int iRef = 0;
+		GetGameOption(szOptionName, iRef);
+		HEADLESS_OPT_VERIFY(kSite.m_bValue == (iRef == 1), 46, "CvPreGame::HeadlessIsOptionAtSite");
+	}
+#endif
+	return kSite.m_bValue;
+}
+#endif
+
+// The golden body of GetGameOption(const char*), unchanged.
+static bool GetGameOptionUncached(const char* szOptionName, int& iValue)
+{
+	for(std::vector<CustomOption>::const_iterator it = s_GameOptions.begin();
+	        it != s_GameOptions.end(); ++it)
+	{
+		size_t bytes = 0;
+		const char* szCurrentOptionName = (*it).GetName(bytes);
+		if(strncmp(szCurrentOptionName, szOptionName, bytes) == 0)
+		{
+			iValue = (*it).GetValue();
+			return true;
+		}
+	}
+
+	//Try and lookup the default value.
+	Database::Results kLookup;
+	if(GC.GetGameDatabase()->Execute(kLookup, "Select \"Default\" from GameOptions where Type = ? LIMIT 1"))
+	{
+		kLookup.Bind(1, szOptionName);
+		if(kLookup.Step())
+		{
+			iValue = kLookup.GetInt(0);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+static bool GameOptionMemoMatches(const GameOptionMemo& kMemo, const char* szOptionName)
+{
+	int iRef = 0;
+	const bool bRef = GetGameOptionUncached(szOptionName, iRef);
+	return bRef == kMemo.bFound && (!bRef || iRef == kMemo.iValue);
+}
+#endif
+#endif
+
 //! This method sync's up an enum-based array of game options w/ the actual
 //! game options structure.  This should be called every time new options
 //! are set.
 void SyncGameOptionsWithEnumList()
 {
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	InvalidateGameOptionCache();	// OPT-0010: s_GameOptions was just written
+#endif
 	const char* str;
 	for(int i = 0; i < NUM_GAMEOPTION_TYPES; i++)
 	{
@@ -933,6 +1049,42 @@ bool GetGameOption(const char* szOptionName, int& iValue)
 	if (szOptionName == NULL || *szOptionName == 0)
 		return false;
 
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	// OPT-0010: memoised lookup (see GameOptionMemo). Same return value, iValue written only when found, as golden.
+	unsigned int uiHash = 2166136261U;	// FNV-1a over the name's bytes
+	size_t uLen = 0;
+	for(const char* p = szOptionName; *p != 0; ++p, ++uLen)
+		uiHash = (uiHash ^ (unsigned char)*p) * 16777619U;
+	if(uLen < sizeof(s_aGameOptionMemo[0].szName))
+	{
+		for(unsigned int uiProbe = 0; uiProbe < GAMEOPTION_MEMO_SLOTS; ++uiProbe)
+		{
+			GameOptionMemo& kMemo = s_aGameOptionMemo[(uiHash + uiProbe) & (GAMEOPTION_MEMO_SLOTS - 1)];
+			if(kMemo.uiGen != s_uiGameOptionMemoGen)
+			{
+				// free slot: first lookup of this name since the last invalidation
+				int iLookup = 0;
+				const bool bFound = GetGameOptionUncached(szOptionName, iLookup);
+				kMemo.uiGen = s_uiGameOptionMemoGen;
+				kMemo.uiHash = uiHash;
+				kMemo.iValue = iLookup;
+				kMemo.bFound = bFound;
+				memcpy(kMemo.szName, szOptionName, uLen + 1);
+				if(bFound)
+					iValue = iLookup;
+				return bFound;
+			}
+			if(kMemo.uiHash == uiHash && memcmp(kMemo.szName, szOptionName, uLen + 1) == 0)
+			{
+				HEADLESS_OPT_VERIFY(GameOptionMemoMatches(kMemo, szOptionName), 10, "CvPreGame::GetGameOption memo");
+				if(kMemo.bFound)
+					iValue = kMemo.iValue;
+				return kMemo.bFound;
+			}
+		}
+	}
+	return GetGameOptionUncached(szOptionName, iValue);
+#else
 	for(std::vector<CustomOption>::const_iterator it = s_GameOptions.begin();
 	        it != s_GameOptions.end(); ++it)
 	{
@@ -958,6 +1110,7 @@ bool GetGameOption(const char* szOptionName, int& iValue)
 	}
 
 	return false;
+#endif
 }
 
 bool GetGameOption(GameOptionTypes eOption, int& iValue)
@@ -3479,7 +3632,11 @@ void setDLCAllowed(const GUID& kDLCID, bool bState)
 		{
 			if(memcmp(&kDLCID, &(*itr), sizeof(GUID)) == 0)
 			{
+#if defined(LEKMOD_PORTABLE)
+				s_AllowedDLC.erase(lekmod_portable::mutable_iterator(s_AllowedDLC, itr));
+#else
 				s_AllowedDLC.erase(itr);
+#endif
 				break;
 			}
 		}

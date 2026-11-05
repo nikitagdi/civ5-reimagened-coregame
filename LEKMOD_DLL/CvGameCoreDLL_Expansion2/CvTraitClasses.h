@@ -297,7 +297,7 @@ public:
 	ResourceClassTypes GetBuildTimeOverrideResourceClassRequiredVector(int iBuild) const { return m_aiBuildTimeOverrideResourceClassRequired[iBuild]; }
 	
 	// Add accessor method for the multimap
-	const std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>>& GetBuildTimeOverridesMultimap() const { return m_BuildTimeOverrides; }
+	const std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> >& GetBuildTimeOverridesMultimap() const { return m_BuildTimeOverrides; }
 #endif
 
 	virtual bool CacheResults(Database::Results& kResults, CvDatabaseUtility& kUtility);
@@ -542,7 +542,7 @@ protected:
 #ifdef LEKMOD_BUILD_TIME_OVERRIDE
 	std::vector<int> m_aiBuildTimeOverride;
 	std::vector<ResourceClassTypes> m_aiBuildTimeOverrideResourceClassRequired;
-	std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>> m_BuildTimeOverrides;
+	std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> > m_BuildTimeOverrides;
 #endif
 
 private:
@@ -1490,7 +1490,7 @@ private:
 #ifdef LEKMOD_BUILD_TIME_OVERRIDE
 	std::vector<int> m_aiBuildTimeOverride;
 	std::vector<ResourceClassTypes> m_aiBuildTimeOverrideResourceClassRequired;
-	std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>> m_BuildTimeOverrides;
+	std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> > m_BuildTimeOverrides;
 #endif
 
 	FStaticVector<FreeTraitUnit, SAFE_ESTIMATE_NUM_FREE_UNITS, true, c_eCiv5GameplayDLL, 0> m_aFreeTraitUnits;

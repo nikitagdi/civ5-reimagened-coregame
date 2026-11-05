@@ -923,6 +923,10 @@ public:
 	void FlavorUpdate();
 
 	CvPlayer* GetPlayer();
+#ifdef LEKMOD_PORTABLE
+	// B1 F3: auto-choice reads the human's policy AI (operator decision 2026-10-20)
+	CvPolicyAI* GetPolicyAI() const { return m_pPolicyAI; }
+#endif
 
 	// Accessor functions
 	bool HasPolicy(PolicyTypes eIndex) const;

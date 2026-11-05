@@ -270,6 +270,15 @@ public:
 
 	__forceinline CvPlot* plot(int iX, int iY) const
 	{
+#if defined(LEKMOD_HEADLESS_OPT_MAP_PLOT_FASTPATH)
+		// OPT-0062: coordinates already on the map (0 <= x < width, 0 <= y < height: one unsigned compare each) pass the
+		// golden tests below unchanged (not INVALID_PLOT_COORD, coordRange returns them as they are, isPlot holds), so the
+		// golden result is the plot at plotNum(x, y); everything else (off-map, wrapping, INVALID) takes the golden path.
+		if((unsigned int)iX < (unsigned int)m_iGridWidth && (unsigned int)iY < (unsigned int)m_iGridHeight)
+		{
+			return &(m_pMapPlots[iY * m_iGridWidth + iX]);
+		}
+#endif
 		if((iX == INVALID_PLOT_COORD) || (iY == INVALID_PLOT_COORD))
 		{
 			return NULL;

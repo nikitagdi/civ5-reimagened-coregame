@@ -251,6 +251,20 @@ private:
 	YieldTypes m_eFocusYield;
 };
 
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+// OPT-0042: while a scope is open, CvCityStrategyAI::IsYieldDeficient of that city strategy AI answers a yield it already
+// answered in the scope from a memo. Opened only around read-only callers whose loops ask the same question repeatedly
+// (CvCity::GetBuyPlotScore, CvCityStrategyAI::GetDeficientYield). A GameEvents hook with listeners in between clears the memo.
+class CvHeadlessDeficientMemoScope
+{
+public:
+	explicit CvHeadlessDeficientMemoScope(const CvCityStrategyAI* pAI);
+	~CvHeadlessDeficientMemoScope();
+private:
+	bool m_bOpened;
+};
+#endif
+
 namespace CityStrategyAIHelpers
 {
 // CvCityStrategy namespace - non-member functions

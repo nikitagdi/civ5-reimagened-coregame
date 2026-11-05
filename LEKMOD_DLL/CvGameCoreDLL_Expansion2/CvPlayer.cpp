@@ -7,6 +7,7 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#include "HeadlessMsgGuard.h"	// HYG-0013
 #include "CvGlobals.h"
 #include "CvArea.h"
 #include "CvMap.h"
@@ -62,7 +63,13 @@
 // Version 1 
 //	 * CvPlayer save version reset for expansion pack 2.
 //------------------------------------------------------------------------------
+#if defined(LEKMOD_PORTABLE)
+// Version 18 (portable build, B4 replay determinism 2026-10-31): the military AI's per-turn counts at the end of the
+// record (CvMilitaryAI::WriteTurnCounts). A build that knows 17 reads such a record and leaves the tail unread.
+const int g_CurrentCvPlayerVersion = 18;
+#else
 const int g_CurrentCvPlayerVersion = 17;
+#endif
 
 //Simply empty check utility.
 bool isEmpty(const char* szString)
@@ -208,6 +215,9 @@ CvPlayer::CvPlayer() :
 	, m_iTechExtraLeagueVotes(0)
 	, m_iPolicyExtraLeagueVotes(0)
 	, m_iMiscTradeRoutes(0)
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0002) && defined(LEKMOD_v34)
+	, m_bCanChooseReformationBelief(false) // FIX-0002 / DS-0002: was never initialised (heap garbage in a new game)
 #endif
 	, m_iSpecialPolicyBuildingHappiness("CvPlayer::m_iSpecialPolicyBuildingHappiness", m_syncArchive)
 	, m_iWoundedUnitDamageMod("CvPlayer::m_iWoundedUnitDamageMod", m_syncArchive)
@@ -994,6 +1004,14 @@ void CvPlayer::uninit()
 	m_iPolicyExtraLeagueVotes = 0;
 	m_iMiscTradeRoutes = 0;
 #endif
+#if defined(LEKMOD_HEADLESS_FIX_0002) && defined(LEKMOD_v34)
+	// FIX-0002 / DS-0002: m_bCanChooseReformationBelief was never reset (kept the previous game's value / heap garbage)
+	if(m_bCanChooseReformationBelief)
+	{
+		HEADLESS_FIX_TRIGGER(2);
+	}
+	m_bCanChooseReformationBelief = false;
+#endif
 
 	m_iSpecialPolicyBuildingHappiness = 0;
 	m_iWoundedUnitDamageMod = 0;
@@ -1153,6 +1171,11 @@ void CvPlayer::uninit()
 	m_iMilitaryMight = 0;
 	m_iEconomicMight = 0;
 	m_iTurnMightRecomputed = -1;
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	m_iHeadlessUiMightTurn = -1;	// FIX-0022: UI-only might values (not saved, not synced)
+	m_iHeadlessUiMilitaryMight = 0;
+	m_iHeadlessUiEconomicMight = 0;
+#endif
 	m_iNewCityExtraPopulation = 0;
 	m_iFreeFoodBox = 0;
 	m_iScenarioScore1 = 0;
@@ -2403,7 +2426,7 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bGift, bool bP
 
 	if(bConquest)
 	{
-		if(GetID() == GC.getGame().getActivePlayer())
+		if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), GetID()))
 		{
 			strBuffer = GetLocalizedText("TXT_KEY_MISC_CAPTURED_CITY", pOldCity->getNameKey()).GetCString();
 			GC.GetEngineUserInterface()->AddCityMessage(0, pOldCity->GetIDInfo(), GetID(), true, GC.getEVENT_MESSAGE_TIME(), strBuffer/*, "AS2D_CITYCAPTURE", MESSAGE_TYPE_MAJOR_EVENT, NULL, (ColorTypes)GC.getInfoTypeForString("COLOR_GREEN"), pOldCity->getX(), pOldCity->getY(), true, true*/);
@@ -2413,7 +2436,7 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bGift, bool bP
 
 		for(iI = 0; iI < MAX_PLAYERS; iI++)
 		{
-			if((PlayerTypes)iI == GC.getGame().getActivePlayer())
+			if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), (PlayerTypes)iI))
 			{
 				if(GET_PLAYER((PlayerTypes)iI).isAlive())
 				{
@@ -4298,7 +4321,7 @@ void CvPlayer::disbandUnit(bool)
 
 	if(pBestUnit != NULL)
 	{
-		if(GetID() == GC.getGame().getActivePlayer())
+		if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), GetID()))
 		{
 			sprintf_s(szBuffer, lenBuffer, GetLocalizedText("TXT_KEY_MISC_UNIT_DISBANDED_NO_MONEY", pBestUnit->getNameKey()).GetCString());
 			GC.GetEngineUserInterface()->AddUnitMessage(0, pBestUnit->GetIDInfo(), GetID(), false, GC.getEVENT_MESSAGE_TIME(), szBuffer);//, "AS2D_UNITDISBANDED", MESSAGE_TYPE_MINOR_EVENT, pBestUnit->getUnitInfo().GetButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_RED"), pBestUnit->getX(), pBestUnit->getY(), true, true);
@@ -4657,7 +4680,7 @@ void CvPlayer::doBarbarianRansom(int iOption, int iUnitID)
 	// Leave them to the Barbs
 	else if(iOption == 1)
 	{
-		if(GetID() == GC.getGame().getActivePlayer())
+		if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), GetID()))
 		{
 			GC.GetEngineUserInterface()->AddUnitMessage(0, pUnit->GetIDInfo(), GetID(), true, GC.getEVENT_MESSAGE_TIME(), GetLocalizedText("TXT_KEY_MISC_YOU_UNIT_RANSOM_KILL_BY_BARBARIANS", pUnit->getNameKey()));//,GC.getEraInfo(GC.getGame().getCurrentEra())->getAudioUnitDefeatScript(), MESSAGE_TYPE_INFO, pUnit->getUnitInfo().GetButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_RED"), pUnit->getX(), pUnit->getY(), true, true);
 		}
@@ -4945,6 +4968,9 @@ int CvPlayer::getCachedSpyStartingRank() const
 //	---------------------------------------------------------------------------
 void CvPlayer::doTurn()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_PLAYER_DOTURN);
+#endif
 	// Time building of these maps
 #ifdef AUI_PERF_LOGGING_FORMATTING_TWEAKS
 	AI_PERF_FORMAT("AI-perf.csv", ("CvPlayer::doTurn(), Turn %03d, %s", GC.getGame().getGameTurn(), getCivilizationShortDescription()));
@@ -5071,6 +5097,9 @@ void CvPlayer::doTurn()
 //	--------------------------------------------------------------------------------
 void CvPlayer::doTurnPostDiplomacy()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_PLAYER_DOTURN_POST);
+#endif
 	CvGame& kGame = GC.getGame();
 
 #ifdef PENALTY_FOR_DELAYING_POLICIES
@@ -5509,6 +5538,9 @@ void CvPlayer::doSelfConsistencyCheckAllCities()
 //	--------------------------------------------------------------------------------
 void CvPlayer::doTurnUnits()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_PLAYER_UNITS);
+#endif
 	CvArmyAI* pLoopArmyAI;
 	CvUnit* pLoopUnit;
 	int iLoop;
@@ -6697,7 +6729,7 @@ void CvPlayer::raze(CvCity* pCity)
 
 	CvAssert(pCity->getOwner() == GetID());
 
-	if(GetID() == GC.getGame().getActivePlayer())
+	if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), GetID()))
 	{
 		sprintf_s(szBuffer, lenBuffer, GetLocalizedText("TXT_KEY_MISC_DESTROYED_CITY", pCity->getNameKey()).GetCString());
 		GC.GetEngineUserInterface()->AddCityMessage(0, pCity->GetIDInfo(), GetID(), true, GC.getEVENT_MESSAGE_TIME(), szBuffer/*, "AS2D_CITYRAZE", MESSAGE_TYPE_MAJOR_EVENT, NULL, (ColorTypes)GC.getInfoTypeForString("COLOR_GREEN"), pCity->getX(), pCity->getY(), true, true*/);
@@ -6708,7 +6740,7 @@ void CvPlayer::raze(CvCity* pCity)
 	{
 		if(GET_PLAYER((PlayerTypes)iI).isAlive())
 		{
-			if(iI != GetID() && iI == GC.getGame().getActivePlayer())
+			if(iI != GetID() && HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), iI))
 			{
 				if(pCity->isRevealed(GET_PLAYER((PlayerTypes)iI).getTeam(), false))
 				{
@@ -8346,7 +8378,7 @@ void CvPlayer::receiveGoody(CvPlot* pPlot, GoodyTypes eGoody, CvUnit* pUnit)
 		}
 	}
 
-	if(!strBuffer.empty() && GC.getGame().getActivePlayer() == GetID())
+	if(!strBuffer.empty() && HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), GetID()))
 	{
 		GC.GetEngineUserInterface()->AddPlotMessage(0, pPlot->GetPlotIndex(), GetID(), true, GC.getEVENT_MESSAGE_TIME(), strBuffer);
 	}
@@ -9374,8 +9406,15 @@ bool CvPlayer::canConstruct(BuildingTypes eBuilding, bool bContinue, bool bTestV
 
 #ifdef NQM_AI_GIMP_NO_WORLD_WONDERS
 	CvBuildingClassInfo* pkBuildingClassInfo = GC.getBuildingClassInfo(eBuildingClass);
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+	static CvPreGame::HeadlessOptionSite s_kHeadlessAITweaks = { 0, false };	// OPT-0046
+	static CvPreGame::HeadlessOptionSite s_kHeadlessNoWorldWonder = { 0, false };	// OPT-0046
+	if (GC.getGame().isBuildingClassMaxedOut(eBuildingClass) ||
+		isWorldWonderClass(*pkBuildingClassInfo) && (CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessAITweaks, "GAMEOPTION_AI_TWEAKS") || CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessNoWorldWonder, "GAMEOPTION_AI_GIMP_NO_WORLD_WONDER")) && !isHuman())
+#else
 	if (GC.getGame().isBuildingClassMaxedOut(eBuildingClass) ||
 		isWorldWonderClass(*pkBuildingClassInfo) && (GC.getGame().isOption("GAMEOPTION_AI_TWEAKS") || GC.getGame().isOption("GAMEOPTION_AI_GIMP_NO_WORLD_WONDER")) && !isHuman())
+#endif
 	{
 		return false;
 	}
@@ -11629,8 +11668,16 @@ int CvPlayer::calculateResearchModifier(TechTypes eTech)
 		return iModifier;
 	}
 
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+	static CvPreGame::HeadlessOptionSite s_kHeadlessNoAITechDiscount = { 0, false };	// OPT-0046
+#endif
 #ifdef AUI_TECH_TOGGLEABLE_ALREADY_KNOWN_TECH_COST_DISCOUNT
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+	static CvPreGame::HeadlessOptionSite s_kHeadlessNoKnownTeamMod = { 0, false };	// OPT-0046
+	if (!CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessNoKnownTeamMod, "GAMEOPTION_NO_TECH_COST_TOTAL_KNOWN_TEAM_MODIFIER"))
+#else
 	if (!GC.getGame().isOption("GAMEOPTION_NO_TECH_COST_TOTAL_KNOWN_TEAM_MODIFIER"))
+#endif
 	{
 #endif
 	int iLeaguesMod = GC.getGame().GetGameLeagues()->GetResearchMod(GetID(), eTech);
@@ -11644,7 +11691,11 @@ int CvPlayer::calculateResearchModifier(TechTypes eTech)
 			if(GET_TEAM(getTeam()).isHasMet((TeamTypes)iI))
 			{
 #ifdef HAS_TECH_BY_HUMAN
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+				if (CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessNoAITechDiscount, "GAMEOPTION_NO_AI_TECH_DISCOUNT"))
+#else
 				if (GC.getGame().isOption("GAMEOPTION_NO_AI_TECH_DISCOUNT"))
+#endif
 				{
 					if (kLoopTeam.GetTeamTechs()->HasTechByHuman(eTech))
 #else
@@ -12881,7 +12932,21 @@ int CvPlayer::GetCultureYieldFromPreviousTurns(int iGameTurn, int iNumPreviousTu
 			break;
 		}
 
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+		// FIX-0022 / DS-0034: look the data set up without creating it (the Lua getter GetWrittenArtifactCulture reaches here;
+		// creating an absent data set changes the saved replay data on the asking machine only). Absent = no data = -1.
+		int iTurnCulture = -1;
+		for(unsigned int uiSet = 0; uiSet < m_ReplayDataSets.size(); uiSet++)
+		{
+			if(m_ReplayDataSets[uiSet] == "REPLAYDATASET_CULTUREPERTURN")
+			{
+				iTurnCulture = getReplayDataValue(uiSet, iTurn);
+				break;
+			}
+		}
+#else
 		int iTurnCulture = getReplayDataValue(getReplayDataSetIndex("REPLAYDATASET_CULTUREPERTURN"), iTurn);
+#endif
 		if (iTurnCulture >= 0)
 		{
 			iSum += iTurnCulture;
@@ -13679,6 +13744,13 @@ void CvPlayer::TestMidTurnPopGrowth(CvCity* pCity, bool bAlwaysShowNotification)
 			if (pCity->GetCityCitizens()->IsForcedAvoidGrowth())
 			{
 				pCity->setFood(pCity->growthThreshold());
+#if defined(LEKMOD_HEADLESS_FIX_0021)
+				// FIX-0021: food now equals the threshold and nothing in the loop changes the threshold or the forced flag, so
+				// golden never left the loop (the MP game froze on every machine). Stop here: the city keeps a full food box,
+				// as CvCity::doGrowth does at turn end under Avoid Growth.
+				HEADLESS_FIX_TRIGGER(21);
+				break;
+#endif
 			}
 			else
 			{
@@ -16459,10 +16531,12 @@ CvPlayerPolicies* CvPlayer::GetPlayerPolicies() const
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvPlayerTraits* CvPlayer::GetPlayerTraits() const
 {
 	return m_pTraits;
 }
+#endif
 
 //	--------------------------------------------------------------------------------
 CvFlavorManager* CvPlayer::GetFlavorManager() const
@@ -20205,6 +20279,40 @@ int CvPlayer::GetEconomicMight() const
 	return m_iEconomicMight;
 }
 
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+//	--------------------------------------------------------------------------------
+/// FIX-0022 / DS-0034: military and economic might for Lua (UI) callers. The getters above refresh the lazy cache
+/// (m_iTurnMightRecomputed / m_iMilitaryMight / m_iEconomicMight: FAutoVariables, sync-checked and saved) for whoever asks
+/// first in a turn; when that is a UI screen (Demographics, Who's Winning) only that machine writes them. This path never
+/// writes them. It returns what golden's getter would have returned on the asking machine:
+/// - the UI already asked this turn before the simulation refreshed the cache: the value it computed then (golden: the
+///   UI's refresh stuck for the rest of the turn), kept in plain members that are neither saved nor sync-checked;
+/// - the simulation refreshed the cache this turn first: the cache;
+/// - nobody asked yet: compute it now (same functions, same order) and keep it for the rest of the turn.
+/// The simulation keeps reading and writing only the synced cache, as on a machine where no UI asked.
+void CvPlayer::HeadlessUiMight(int& iMilitaryMight, int& iEconomicMight) const
+{
+	const int iTurn = GC.getGame().getElapsedGameTurns();
+	if(m_iHeadlessUiMightTurn >= iTurn)
+	{
+		iMilitaryMight = m_iHeadlessUiMilitaryMight;
+		iEconomicMight = m_iHeadlessUiEconomicMight;
+		return;
+	}
+	if(m_iTurnMightRecomputed >= iTurn)
+	{
+		iMilitaryMight = m_iMilitaryMight;
+		iEconomicMight = m_iEconomicMight;
+		return;
+	}
+	m_iHeadlessUiMightTurn = iTurn;
+	m_iHeadlessUiMilitaryMight = calculateMilitaryMight();
+	m_iHeadlessUiEconomicMight = calculateEconomicMight();
+	iMilitaryMight = m_iHeadlessUiMilitaryMight;
+	iEconomicMight = m_iHeadlessUiEconomicMight;
+}
+#endif
+
 //	--------------------------------------------------------------------------------
 int CvPlayer::calculateMilitaryMight() const
 {
@@ -21416,7 +21524,7 @@ void CvPlayer::setStrike(bool bNewValue)
 
 		if(m_bStrike)
 		{
-			if(GetID() == GC.getGame().getActivePlayer())
+			if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), GetID()))
 			{
 				GC.GetEngineUserInterface()->AddMessage(0, GetID(), false, GC.getEVENT_MESSAGE_TIME(), GetLocalizedText("TXT_KEY_MISC_UNITS_ON_STRIKE").GetCString(), "AS2D_STRIKE", MESSAGE_TYPE_MINOR_EVENT, NULL, (ColorTypes)GC.getInfoTypeForString("COLOR_WARNING_TEXT"));
 
@@ -21519,6 +21627,7 @@ HandicapTypes CvPlayer::getHandicapType() const
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvCivilizationInfo& CvPlayer::getCivilizationInfo() const
 {
 	CvCivilizationInfo* pkCivilizationInfo = GC.getCivilizationInfo(getCivilizationType());
@@ -21534,12 +21643,15 @@ CvCivilizationInfo& CvPlayer::getCivilizationInfo() const
 	return *pkCivilizationInfo;
 #pragma warning ( pop )
 }
+#endif
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CivilizationTypes CvPlayer::getCivilizationType() const
 {
 	return CvPreGame::civilization(GetID());
 }
+#endif
 
 
 //	--------------------------------------------------------------------------------
@@ -21606,6 +21718,9 @@ void CvPlayer::setTeam(TeamTypes eTeam)
 	GET_TEAM(getTeam()).changeTotalLand(-(getTotalLand()));
 
 	CvPreGame::setTeamType(GetID(), eTeam);
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	HeadlessTradePathBumpWater();	// OPT-0022: CvPlot::getTeam() of this player's water plots changed (water trade-route cost)
+#endif
 
 	GET_TEAM(getTeam()).changeNumMembers(1);
 	if(isAlive())
@@ -21625,14 +21740,26 @@ void CvPlayer::setTeam(TeamTypes eTeam)
 bool CvPlayer::IsAITeammateOfHuman() const
 {
 	bool bRtnValue = false;
+#if defined(LEKMOD_HEADLESS_OPT_AI_TEAMMATE_ORDER)
+	const TeamTypes eHeadlessMyTeam = getTeam();	// OPT-0045: CvPreGame::teamType(m_eID), a pure read, once
+#endif
 
 	for(int i = 0; i < MAX_PLAYERS; ++i)
 	{
 		CvPlayer& player = GET_PLAYER(static_cast<PlayerTypes>(i));
+#if defined(LEKMOD_HEADLESS_OPT_AI_TEAMMATE_ORDER)
+		// OPT-0045: the three tests are side-effect-free reads (m_bAlive, CvPreGame team and slot lookups), so their
+		// conjunction does not depend on the order; the cheap ones go first, CvPreGame::isHuman (slot status, and for
+		// open slots the hot-seat / pitboss / PBEM option lookups) runs only for alive players of this team.
+		if(player.isAlive() && player.getTeam() == eHeadlessMyTeam && player.isHuman())
+		{
+			{
+#else
 		if(player.isHuman() && player.isAlive())
 		{
 			if(player.getTeam() == getTeam())
 			{
+#endif
 				bRtnValue = true;
 				break;
 			}
@@ -24654,13 +24781,23 @@ const CvCity* CvPlayer::getCity(int iID) const
 //	--------------------------------------------------------------------------------
 CvCity* CvPlayer::addCity()
 {
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	// OPT-0022: CvPlot::isCity() also tests that the city object exists (water trade-route validator and cost)
+	CvCity* pHeadlessCity = m_cities.Add();
+	HeadlessTradePathBumpWater();
+	return pHeadlessCity;
+#else
 	return(m_cities.Add());
+#endif
 }
 
 //	--------------------------------------------------------------------------------
 void CvPlayer::deleteCity(int iID)
 {
 	m_cities.RemoveAt(iID);
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	HeadlessTradePathBumpWater();	// OPT-0022: see addCity
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -28130,6 +28267,9 @@ void CvPlayer::Read(FDataStream& kStream)
 	kStream >> m_iMilitaryMight;
 	kStream >> m_iEconomicMight;
 	kStream >> m_iTurnMightRecomputed;
+#if defined(LEKMOD_HEADLESS_FIX_0022)
+	m_iHeadlessUiMightTurn = -1;	// FIX-0022: UI-only might values start over with the loaded cache
+#endif
 	kStream >> m_iNewCityExtraPopulation;
 	kStream >> m_iFreeFoodBox;
 	kStream >> m_iScenarioScore1;
@@ -28519,6 +28659,10 @@ void CvPlayer::Read(FDataStream& kStream)
 
 		kStream >> m_ppiImprovementYieldChange;
 		kStream >> m_ppiResourceYieldChange;
+#if defined(LEKMOD_PORTABLE)
+	if(uiVersion >= 18)
+		m_pMilitaryAI->ReadTurnCounts(kStream);
+#endif
 
 }
 
@@ -29060,6 +29204,9 @@ void CvPlayer::Write(FDataStream& kStream) const
 
 	kStream << m_ppiImprovementYieldChange;
 	kStream << m_ppiResourceYieldChange;
+#if defined(LEKMOD_PORTABLE)
+	m_pMilitaryAI->WriteTurnCounts(kStream);
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -31239,6 +31386,15 @@ bool CvPlayer::hasUnitsThatNeedAIUpdate() const
 {
 	const CvUnit* pLoopUnit;
 	int iLoop;
+
+	// SIMPLIFIED(SIMP-exe-1085) b12-account: the automated units of a human (explore, automated workers) do not move at the start of the turn nor
+	// while the player plays it: the player may still give them a manual order, and they do not hold the turn. They move
+	// in the auto-moves phase after the player ended the turn (CvGame::updateMoves runs AI_unitUpdate for them while
+	// isAutoMoves() is set, then AutoMission). The AI is unchanged.
+	if(isHuman() && !isAutoMoves())
+	{
+		return false;
+	}
 
 	for(pLoopUnit = firstUnit(&iLoop); pLoopUnit; pLoopUnit = nextUnit(&iLoop))
 	{

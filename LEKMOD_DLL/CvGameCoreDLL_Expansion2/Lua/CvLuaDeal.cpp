@@ -123,6 +123,42 @@ const char* CvLuaDeal::GetTypeName()
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+//------------------------------------------------------------------------------
+// FIX-0030 / DS-0037: the trade screen's gold-per-turn pocket (Deal:AddGoldPerTurnTrade) re-runs IsPossibleToTradeItem, whose
+// GPT check calls calculateGoldRate; on the UI's machine only that refreshed the treasury's saved unit costs. Arguments are
+// read before the scope opens (no Lua error can leave it open), then the same call inside CvHeadlessUiTreasuryScope.
+int CvLuaDeal::lAddGoldPerTurnTrade(lua_State* L)
+{
+	CvDeal* pkDeal = GetInstance(L);
+	const PlayerTypes eFrom = (PlayerTypes) lua_tointeger(L, 2);
+	const int iAmount = lua_tointeger(L, 3);
+	const int iDuration = lua_tointeger(L, 4);
+	{
+		HEADLESS_UI_TREASURY_SCOPE();
+		pkDeal->AddGoldPerTurnTrade(eFrom, iAmount, iDuration);
+	}
+	return 0;
+}
+//------------------------------------------------------------------------------
+// FIX-0030 / DS-0037: the gold-per-turn amount box (TradeLogic ChangeGoldPerTurnAmount, UI and EUI) calls
+// Deal:ChangeGoldPerTurnTrade, which re-runs the same GPT check (calculateGoldRate) for the edited item: same scope, same result.
+int CvLuaDeal::lChangeGoldPerTurnTrade(lua_State* L)
+{
+	CvDeal* pkDeal = GetInstance(L);
+	const PlayerTypes eFrom = (PlayerTypes) lua_tointeger(L, 2);
+	const int iNewAmount = lua_tointeger(L, 3);
+	const int iDuration = lua_tointeger(L, 4);
+	bool bResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();
+		bResult = pkDeal->ChangeGoldPerTurnTrade(eFrom, iNewAmount, iDuration);
+	}
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+#endif
+//------------------------------------------------------------------------------
 int CvLuaDeal::lIsPossibleToTradeItem(lua_State* L)
 {
 	CvDeal* pkDeal = GetInstance(L);
@@ -134,7 +170,15 @@ int CvLuaDeal::lIsPossibleToTradeItem(lua_State* L)
 	const int iData3 = lua_tointeger(L, 7);
 	const bool bFlag1 = lua_toboolean(L, 8);
 
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	bool bResult;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();	// FIX-0023 / DS-0037: the gold-per-turn check calls calculateGoldRate (treasury costs)
+		bResult = pkDeal->IsPossibleToTradeItem(eFromPlayer, eToPlayer, eItem, iData1, iData2, iData3, bFlag1);
+	}
+#else
 	const bool bResult = pkDeal->IsPossibleToTradeItem(eFromPlayer, eToPlayer, eItem, iData1, iData2, iData3, bFlag1);
+#endif
 	lua_pushboolean(L, bResult);
 	return 1;
 }

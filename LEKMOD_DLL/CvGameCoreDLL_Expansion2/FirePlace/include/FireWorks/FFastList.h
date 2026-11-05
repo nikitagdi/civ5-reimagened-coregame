@@ -158,7 +158,11 @@ public:
 	////////////////////////////////////////////////////////////////////////
 	explicit FFastList() : BASE_TYPE() {};
 	explicit FFastList( unsigned int uiCapacity ) : BASE_TYPE(uiCapacity) {};
+#if defined(LEKMOD_PORTABLE)
+	explicit FFastList( const TYPE& rhs ) : BASE_TYPE( rhs ) {};
+#else
 	explicit TYPE( const TYPE& rhs ) : BASE_TYPE( rhs ) {};
+#endif
 
 	//Copy operator
 	const TYPE& operator = ( const TYPE& rhs ){  
@@ -365,7 +369,11 @@ public:
 
 	protected:
 		unsigned int m_uiCurrPos;
+#if defined(LEKMOD_PORTABLE)
+		friend class FCustomList_Core;
+#else
 		friend class TYPE;
+#endif
 	};
 
 	////////////////////////////////////////////////////////////////////////
@@ -1135,7 +1143,11 @@ protected:
 		unsigned int m_uiCurrList;
 		unsigned int m_uiCurrPos;
 		const TYPE* m_pFastList;
+#if defined(LEKMOD_PORTABLE)
+		friend class FMultiList2;
+#else
 		friend class TYPE;
+#endif
 	};
 
 public:

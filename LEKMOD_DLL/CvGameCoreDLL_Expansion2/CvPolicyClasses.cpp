@@ -14,9 +14,102 @@
 #include "CvEconomicAI.h"
 #include "CvGrandStrategyAI.h"
 #include "CvInfosSerializationHelper.h"
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+#include "HeadlessSparseLists.h"
+#endif
 
 // Include this after all other headers.
 #include "LintFree.h"
+
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+// OPT-0041: CvPlayerPolicies sums "for every policy i: if(owned && !blocked) rtn += entry(i)->Get(key)" visit only the
+// policies whose entry getter can return nonzero for the key (relevance = the getter itself, over every flag combination),
+// ascending. Skipped policies add 0 in golden; HasPolicy / IsPolicyBlocked are pure reads. See HeadlessSparseLists.h.
+namespace
+{
+typedef int (CvPolicyEntry::*HeadlessPolicyGetter2)(int, int) const;
+typedef int (CvPolicyEntry::*HeadlessPolicyGetter1)(int) const;
+
+// key = i * NUM_YIELD_TYPES + j for getters (i, j); key = i for getters (i)
+struct HeadlessPolicyRel2
+{
+	HeadlessPolicyRel2(CvPolicyXMLEntries* pPolicies, HeadlessPolicyGetter2 pfn) : m_pPolicies(pPolicies), m_pfn(pfn) {}
+	bool operator()(int iPolicy, int iKey) const
+	{
+		const CvPolicyEntry* pEntry = m_pPolicies->GetPolicyEntry(iPolicy);
+		return pEntry != NULL && (pEntry->*m_pfn)(iKey / NUM_YIELD_TYPES, iKey % NUM_YIELD_TYPES) != 0;
+	}
+	CvPolicyXMLEntries* m_pPolicies;
+	HeadlessPolicyGetter2 m_pfn;
+};
+struct HeadlessPolicyRel1
+{
+	HeadlessPolicyRel1(CvPolicyXMLEntries* pPolicies, HeadlessPolicyGetter1 pfn) : m_pPolicies(pPolicies), m_pfn(pfn) {}
+	bool operator()(int iPolicy, int iKey) const
+	{
+		const CvPolicyEntry* pEntry = m_pPolicies->GetPolicyEntry(iPolicy);
+		return pEntry != NULL && (pEntry->*m_pfn)(iKey) != 0;
+	}
+	CvPolicyXMLEntries* m_pPolicies;
+	HeadlessPolicyGetter1 m_pfn;
+};
+#if defined(LEKMOD_POLICY_TERRAIN_FEATURE_YIELDS)
+struct HeadlessPolicyTerrainRel
+{
+	explicit HeadlessPolicyTerrainRel(CvPolicyXMLEntries* pPolicies) : m_pPolicies(pPolicies) {}
+	bool operator()(int iPolicy, int iKey) const
+	{
+		const CvPolicyEntry* pEntry = m_pPolicies->GetPolicyEntry(iPolicy);
+		if(pEntry == NULL)
+			return false;
+		for(int iFlags = 0; iFlags < 8; iFlags++)
+		{
+			if(pEntry->GetPolicyTerrainYieldChange((TerrainTypes)(iKey / NUM_YIELD_TYPES), (YieldTypes)(iKey % NUM_YIELD_TYPES), (iFlags & 1) != 0, (iFlags & 2) != 0, (iFlags & 4) != 0) != 0)
+				return true;
+		}
+		return false;
+	}
+	CvPolicyXMLEntries* m_pPolicies;
+};
+struct HeadlessPolicyFeatureRel
+{
+	explicit HeadlessPolicyFeatureRel(CvPolicyXMLEntries* pPolicies) : m_pPolicies(pPolicies) {}
+	bool operator()(int iPolicy, int iKey) const
+	{
+		const CvPolicyEntry* pEntry = m_pPolicies->GetPolicyEntry(iPolicy);
+		if(pEntry == NULL)
+			return false;
+		for(int iFlags = 0; iFlags < 4; iFlags++)
+		{
+			if(pEntry->GetPolicyFeatureYieldChange((FeatureTypes)(iKey / NUM_YIELD_TYPES), (YieldTypes)(iKey % NUM_YIELD_TYPES), (iFlags & 1) != 0, (iFlags & 2) != 0) != 0)
+				return true;
+		}
+		return false;
+	}
+	CvPolicyXMLEntries* m_pPolicies;
+};
+CvHeadlessSparseLists s_kHeadlessPolicyTerrainLists;
+CvHeadlessSparseLists s_kHeadlessPolicyFeatureLists;
+#endif
+#if defined(LEKMOD_v34)
+CvHeadlessSparseLists s_kHeadlessPolicyResourceLists;
+CvHeadlessSparseLists s_kHeadlessPolicyResourceClassLists;
+#endif
+#if defined(LEKMOD_POLICY_GREATPERSON_IMPROVEMENT_ADJACENCY_YIELD)
+CvHeadlessSparseLists s_kHeadlessPolicyGPAdjacencyLists;
+#endif
+CvHeadlessSparseLists s_kHeadlessPolicyTourismModLists;
+
+template<class Rel>
+const CvHeadlessSparseLists& HeadlessPolicyLists(CvHeadlessSparseLists& kLists, CvPolicyXMLEntries* pPolicies, int iNumKeys, const Rel& kRel)
+{
+	const int iNumPolicies = pPolicies->GetNumPolicies();
+	if(!kLists.IsValid(iNumPolicies, iNumKeys))
+		kLists.Build(iNumPolicies, iNumKeys, kRel);
+	return kLists;
+}
+}
+#endif
 
 /// Constructor
 CvPolicyEntry::CvPolicyEntry(void):
@@ -2606,7 +2699,13 @@ bool CvPolicyEntry::IsFreePromotionUnitCombat(const int promotionID, const int u
 	return m_FreePromotionUnitCombats ? m_FreePromotionUnitCombats[promotionID][unitCombatID] : -1;
 
 #else
+#ifdef LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL
+	// HYG-0011: the loop below needs the first element of the key. lower_bound is that element (MSVC's find returns
+	// it too); libc++ 22's find may return any equal element and the loop then skips entries.
+	std::multimap<int, int>::const_iterator it = m_FreePromotionUnitCombats.lower_bound(promotionID);
+#else
 	std::multimap<int, int>::const_iterator it = m_FreePromotionUnitCombats.find(promotionID);
+#endif
 	if(it != m_FreePromotionUnitCombats.end())
 	{
 		// get an iterator to the element that is one past the last element associated with key
@@ -3669,17 +3768,68 @@ CvPolicyXMLEntries* CvPlayerPolicies::GetPolicies() const
 	return m_pPolicies;
 }
 
+#if defined(LEKMOD_HEADLESS_OPT_POLICY_NUMERIC_SPARSE)
+#if !defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+#error LEKMOD_HEADLESS_OPT_POLICY_NUMERIC_SPARSE (OPT-0052) needs LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS (OPT-0041)
+#endif
+// OPT-0052: GetNumericModifier(eType) adds, for every owned and unblocked policy, the value of the policy entry's getter
+// selected by the switch (every case is 'rtnValue += entry->GetX(); break;', a pure database read). Per type, the policies
+// whose term is nonzero are a pure function of the loaded database: they are found by evaluating golden's own switch for
+// one policy at a time ("probe": the loop runs for that single policy id without the ownership test) and kept as
+// ascending id lists (OPT-0041's lists and DB epoch). The normal call then visits only the listed ids with golden's
+// ownership test and switch; every skipped policy adds 0 in golden. Types outside the list range use golden's full loop.
+namespace
+{
+const int HEADLESS_NUMERIC_MOD_KEYS = 256;	// > number of PolicyModifierType values; types without a case get empty lists
+int s_iHeadlessNumericProbe = -1;	// >= 0: evaluate only this policy id, ownership ignored (list building)
+bool s_bHeadlessNumericFullLoop = false;	// true: golden's full loop (shadow reference)
+CvHeadlessSparseLists s_kHeadlessNumericModLists;
+
+struct HeadlessNumericModRel
+{
+	explicit HeadlessNumericModRel(CvPlayerPolicies* pPolicies) : m_pPolicies(pPolicies) {}
+	bool operator()(int iPolicy, int iType) const
+	{
+		// a missing entry (id gap) stays listed: golden dereferences it only if owned, and so does the sparse loop
+		if(m_pPolicies->GetPolicies()->GetPolicyEntry(iPolicy) == NULL)
+			return true;
+		s_iHeadlessNumericProbe = iPolicy;
+		const int iTerm = m_pPolicies->GetNumericModifier((PolicyModifierType)iType);
+		s_iHeadlessNumericProbe = -1;
+		return iTerm != 0;
+	}
+	CvPlayerPolicies* m_pPolicies;
+};
+}
+#endif
+
 /// Get numeric modifier by adding up its value from all purchased policies
 int CvPlayerPolicies::GetNumericModifier(PolicyModifierType eType)
 {
 	int rtnValue = 0;
 
 	int iNumPolicies = m_pPolicies->GetNumPolicies();
+#if defined(LEKMOD_HEADLESS_OPT_POLICY_NUMERIC_SPARSE)
+	// OPT-0052: listed policy ids only (see HeadlessNumericModRel); probe and shadow-reference calls run golden's loop shape
+	const bool bHeadlessProbe = (s_iHeadlessNumericProbe >= 0);
+	const bool bHeadlessSparse = !bHeadlessProbe && !s_bHeadlessNumericFullLoop && eType >= 0 && eType < HEADLESS_NUMERIC_MOD_KEYS;
+	if(bHeadlessSparse && !s_kHeadlessNumericModLists.IsValid(iNumPolicies, HEADLESS_NUMERIC_MOD_KEYS))
+		s_kHeadlessNumericModLists.Build(iNumPolicies, HEADLESS_NUMERIC_MOD_KEYS, HeadlessNumericModRel(this));
+	const int iHeadlessBegin = bHeadlessProbe ? s_iHeadlessNumericProbe : 0;
+	const int iHeadlessEnd = bHeadlessProbe ? s_iHeadlessNumericProbe + 1 : (bHeadlessSparse ? s_kHeadlessNumericModLists.Count(eType) : iNumPolicies);
+	for(int iHeadlessPos = iHeadlessBegin; iHeadlessPos < iHeadlessEnd; iHeadlessPos++)
+	{
+		const int i = bHeadlessSparse ? s_kHeadlessNumericModLists.Id(eType, iHeadlessPos) : iHeadlessPos;
+		// Do we have this policy?
+		if(bHeadlessProbe || (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i)))
+		{
+#else
 	for(int i = 0; i < iNumPolicies; i++)
 	{
 		// Do we have this policy?
 		if(m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
 		{
+#endif
 			// Yes, so add it to our counts
 			switch(eType)
 			{
@@ -3959,6 +4109,15 @@ int CvPlayerPolicies::GetNumericModifier(PolicyModifierType eType)
 		}
 	}
 
+#if defined(LEKMOD_HEADLESS_OPT_POLICY_NUMERIC_SPARSE) && defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	if(bHeadlessSparse)
+	{
+		s_bHeadlessNumericFullLoop = true;
+		const int iRef = GetNumericModifier(eType);
+		s_bHeadlessNumericFullLoop = false;
+		HEADLESS_OPT_VERIFY(iRef == rtnValue, 52, "CvPlayerPolicies::GetNumericModifier sparse");
+	}
+#endif
 	return rtnValue;
 }
 
@@ -4050,6 +4209,31 @@ int CvPlayerPolicies::GetBuildingClassYieldChange(BuildingClassTypes eBuildingCl
 int CvPlayerPolicies::GetPolicyTerrainYieldChange(TerrainTypes eTerrain, YieldTypes eYield, bool bUnimprovedPlot, bool bNoResourcePlot, bool bLakePlot)
 {
 	int rtnValue = 0;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	// OPT-0041: only the policies whose entry can return nonzero for (eTerrain, eYield), ascending
+	if(eTerrain >= 0 && eTerrain < GC.getNumTerrainInfos() && eYield >= 0 && eYield < NUM_YIELD_TYPES)
+	{
+		const CvHeadlessSparseLists& kLists = HeadlessPolicyLists(s_kHeadlessPolicyTerrainLists, m_pPolicies, GC.getNumTerrainInfos() * NUM_YIELD_TYPES, HeadlessPolicyTerrainRel(m_pPolicies));
+		const int iKey = eTerrain * NUM_YIELD_TYPES + eYield;
+		const int iCount = kLists.Count(iKey);
+		for(int iPos = 0; iPos < iCount; iPos++)
+		{
+			const int i = kLists.Id(iKey, iPos);
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				rtnValue += m_pPolicies->GetPolicyEntry(i)->GetPolicyTerrainYieldChange(eTerrain, eYield, bUnimprovedPlot, bNoResourcePlot, bLakePlot);
+			}
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		int iRef = 0;
+		for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+				iRef += m_pPolicies->GetPolicyEntry(i)->GetPolicyTerrainYieldChange(eTerrain, eYield, bUnimprovedPlot, bNoResourcePlot, bLakePlot);
+		HEADLESS_OPT_VERIFY(iRef == rtnValue, 41, "CvPlayerPolicies::GetPolicyTerrainYieldChange sparse");
+#endif
+		return rtnValue;
+	}
+#endif
 #ifdef AUI_WARNING_FIXES
 	for (uint i = 0; i < m_pPolicies->GetNumPolicies(); i++)
 #else
@@ -4067,6 +4251,31 @@ int CvPlayerPolicies::GetPolicyTerrainYieldChange(TerrainTypes eTerrain, YieldTy
 int CvPlayerPolicies::GetPolicyFeatureYieldChange(FeatureTypes eFeature, YieldTypes eYield, bool bUnimprovedPlot, bool bNoResourcePlot)
 {
 	int rtnValue = 0;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	// OPT-0041: only the policies whose entry can return nonzero for (eFeature, eYield), ascending
+	if(eFeature >= 0 && eFeature < GC.getNumFeatureInfos() && eYield >= 0 && eYield < NUM_YIELD_TYPES)
+	{
+		const CvHeadlessSparseLists& kLists = HeadlessPolicyLists(s_kHeadlessPolicyFeatureLists, m_pPolicies, GC.getNumFeatureInfos() * NUM_YIELD_TYPES, HeadlessPolicyFeatureRel(m_pPolicies));
+		const int iKey = eFeature * NUM_YIELD_TYPES + eYield;
+		const int iCount = kLists.Count(iKey);
+		for(int iPos = 0; iPos < iCount; iPos++)
+		{
+			const int i = kLists.Id(iKey, iPos);
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				rtnValue += m_pPolicies->GetPolicyEntry(i)->GetPolicyFeatureYieldChange(eFeature, eYield, bUnimprovedPlot, bNoResourcePlot);
+			}
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		int iRef = 0;
+		for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+				iRef += m_pPolicies->GetPolicyEntry(i)->GetPolicyFeatureYieldChange(eFeature, eYield, bUnimprovedPlot, bNoResourcePlot);
+		HEADLESS_OPT_VERIFY(iRef == rtnValue, 41, "CvPlayerPolicies::GetPolicyFeatureYieldChange sparse");
+#endif
+		return rtnValue;
+	}
+#endif
 #ifdef AUI_WARNING_FIXES
 	for (uint i = 0; i < m_pPolicies->GetNumPolicies(); i++)
 #else
@@ -4117,6 +4326,37 @@ bool CvPlayerPolicies::IsMinorBullyNoPenalty() const
 int CvPlayerPolicies::GetPolicyGreatPersonImprovementAdjacencyYieldBonus(ImprovementTypes eImprovement, YieldTypes eYield)
 {
 	int rtnValue = 0;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	// OPT-0041: only the policies whose entry can return nonzero for the key, ascending
+	if(eImprovement >= 0 && eImprovement < GC.getNumImprovementInfos() && eYield >= 0 && eYield < NUM_YIELD_TYPES)
+	{
+		const CvHeadlessSparseLists& kLists = HeadlessPolicyLists(s_kHeadlessPolicyGPAdjacencyLists, m_pPolicies, GC.getNumImprovementInfos() * NUM_YIELD_TYPES, HeadlessPolicyRel2(m_pPolicies, &CvPolicyEntry::GetGreatPersonImprovementAdjacencyYieldBonus));
+		const int iKey = eImprovement * NUM_YIELD_TYPES + eYield;
+		const int iCount = kLists.Count(iKey);
+		for(int iPos = 0; iPos < iCount; iPos++)
+		{
+			const int i = kLists.Id(iKey, iPos);
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				CvPolicyEntry* pPolicy = m_pPolicies->GetPolicyEntry(i);
+				rtnValue += pPolicy->GetGreatPersonImprovementAdjacencyYieldBonus(eImprovement, eYield);
+			}
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		int iRef = 0;
+		for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
+		{
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				CvPolicyEntry* pPolicy = m_pPolicies->GetPolicyEntry(i);
+				iRef += pPolicy->GetGreatPersonImprovementAdjacencyYieldBonus(eImprovement, eYield);
+			}
+		}
+		HEADLESS_OPT_VERIFY(iRef == rtnValue, 41, "CvPlayerPolicies::GetPolicyGreatPersonImprovementAdjacencyYieldBonus sparse");
+#endif
+		return rtnValue;
+	}
+#endif
 #ifdef AUI_WARNING_FIXES
 	for (uint i = 0; i < m_pPolicies->GetNumPolicies(); i++)
 #else
@@ -4178,6 +4418,31 @@ int CvPlayerPolicies::GetBuildingClassProductionModifier(BuildingClassTypes eBui
 int CvPlayerPolicies::GetBuildingClassTourismModifier(BuildingClassTypes eBuildingClass)
 {
 	int rtnValue = 0;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	// OPT-0041: only the policies whose entry can return nonzero for the building class, ascending
+	if(eBuildingClass >= 0 && eBuildingClass < GC.getNumBuildingClassInfos())
+	{
+		const CvHeadlessSparseLists& kLists = HeadlessPolicyLists(s_kHeadlessPolicyTourismModLists, m_pPolicies, GC.getNumBuildingClassInfos(), HeadlessPolicyRel1(m_pPolicies, &CvPolicyEntry::GetBuildingClassTourismModifier));
+		const int iKey = eBuildingClass;
+		const int iCount = kLists.Count(iKey);
+		for(int iPos = 0; iPos < iCount; iPos++)
+		{
+			const int i = kLists.Id(iKey, iPos);
+			if(m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				rtnValue += m_pPolicies->GetPolicyEntry(i)->GetBuildingClassTourismModifier(eBuildingClass);
+			}
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		int iRef = 0;
+		for(int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
+			if(m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+				iRef += m_pPolicies->GetPolicyEntry(i)->GetBuildingClassTourismModifier(eBuildingClass);
+		HEADLESS_OPT_VERIFY(iRef == rtnValue, 41, "CvPlayerPolicies::GetBuildingClassTourismModifier sparse");
+#endif
+		return rtnValue;
+	}
+#endif
 
 #ifdef AUI_WARNING_FIXES
 	for (uint i = 0; i < m_pPolicies->GetNumPolicies(); i++)
@@ -4405,6 +4670,40 @@ int CvPlayerPolicies::GetPolicyResourceQuantity(ResourceTypes eResource) const
 int CvPlayerPolicies::GetPolicyResourceYieldChanges(ResourceTypes eResource, YieldTypes eYield) const
 {
 	int iYield = 0;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	// OPT-0041: only the policies whose entry can return nonzero for the key, ascending
+	if(eResource >= 0 && eResource < GC.getNumResourceInfos() && eYield >= 0 && eYield < NUM_YIELD_TYPES)
+	{
+		const CvHeadlessSparseLists& kLists = HeadlessPolicyLists(s_kHeadlessPolicyResourceLists, m_pPolicies, GC.getNumResourceInfos() * NUM_YIELD_TYPES, HeadlessPolicyRel2(m_pPolicies, &CvPolicyEntry::GetPolicyResourceYieldChanges));
+		const int iKey = eResource * NUM_YIELD_TYPES + eYield;
+		const int iCount = kLists.Count(iKey);
+		for(int iPos = 0; iPos < iCount; iPos++)
+		{
+			const int i = kLists.Id(iKey, iPos);
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				CvPolicyEntry* pPolicy = m_pPolicies->GetPolicyEntry(i);
+				if (pPolicy->GetPolicyResourceYieldChanges(eResource, eYield) > 0)
+				{
+					iYield += pPolicy->GetPolicyResourceYieldChanges(eResource, eYield);
+				}
+			}
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		int iRef = 0;
+		for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
+		{
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				CvPolicyEntry* pPolicy = m_pPolicies->GetPolicyEntry(i);
+				if (pPolicy->GetPolicyResourceYieldChanges(eResource, eYield) > 0) iRef += pPolicy->GetPolicyResourceYieldChanges(eResource, eYield);
+			}
+		}
+		HEADLESS_OPT_VERIFY(iRef == iYield, 41, "CvPlayerPolicies::GetPolicyResourceYieldChanges sparse");
+#endif
+		return iYield;
+	}
+#endif
 	for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
 	{
 		// Do we have this policy?
@@ -4423,6 +4722,40 @@ int CvPlayerPolicies::GetPolicyResourceYieldChanges(ResourceTypes eResource, Yie
 int CvPlayerPolicies::GetPolicyResourceClassYieldChanges(ResourceClassTypes eResourceClass, YieldTypes eYield) const
 {
 	int iYield = 0;
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	// OPT-0041: only the policies whose entry can return nonzero for the key, ascending
+	if(eResourceClass >= 0 && eResourceClass < GC.getNumResourceClassInfos() && eYield >= 0 && eYield < NUM_YIELD_TYPES)
+	{
+		const CvHeadlessSparseLists& kLists = HeadlessPolicyLists(s_kHeadlessPolicyResourceClassLists, m_pPolicies, GC.getNumResourceClassInfos() * NUM_YIELD_TYPES, HeadlessPolicyRel2(m_pPolicies, &CvPolicyEntry::GetPolicyResourceClassYieldChanges));
+		const int iKey = eResourceClass * NUM_YIELD_TYPES + eYield;
+		const int iCount = kLists.Count(iKey);
+		for(int iPos = 0; iPos < iCount; iPos++)
+		{
+			const int i = kLists.Id(iKey, iPos);
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				CvPolicyEntry* pPolicy = m_pPolicies->GetPolicyEntry(i);
+				if (pPolicy->GetPolicyResourceClassYieldChanges(eResourceClass, eYield) > 0)
+				{
+					iYield += pPolicy->GetPolicyResourceClassYieldChanges(eResourceClass, eYield);
+				}
+			}
+		}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+		int iRef = 0;
+		for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
+		{
+			if (m_pabHasPolicy[i] && !IsPolicyBlocked((PolicyTypes)i))
+			{
+				CvPolicyEntry* pPolicy = m_pPolicies->GetPolicyEntry(i);
+				if (pPolicy->GetPolicyResourceClassYieldChanges(eResourceClass, eYield) > 0) iRef += pPolicy->GetPolicyResourceClassYieldChanges(eResourceClass, eYield);
+			}
+		}
+		HEADLESS_OPT_VERIFY(iRef == iYield, 41, "CvPlayerPolicies::GetPolicyResourceClassYieldChanges sparse");
+#endif
+		return iYield;
+	}
+#endif
 	for (int i = 0; i < m_pPolicies->GetNumPolicies(); i++)
 	{
 		// Do we have this policy?

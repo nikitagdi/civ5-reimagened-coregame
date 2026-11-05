@@ -2447,6 +2447,9 @@ int CvDiplomacyAI::GetRandomPersonalityWeight(int iOriginalValue) const
 /// Runs every turn!  The order matters for a lot of this stuff, so be VERY careful about moving anything around (!)
 void CvDiplomacyAI::DoTurn(PlayerTypes eTargetPlayer)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_DIPLOMACY);
+#endif
 	m_eTargetPlayer = eTargetPlayer;
 	// Military Stuff
 	DoWarDamageDecay();
@@ -17068,6 +17071,26 @@ const char* CvDiplomacyAI::GetDiploStringForMessage(DiploMessageTypes eDiploMess
 /// Message from UI to gameplay about something that should happen with regards to diplomacy
 void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEventTypes eEvent, int iArg1, int iArg2)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0027)
+	// FIX-0027 / DS-0008: the synced half of CvDealAI::DoTradeScreenClosed (golden ran it on the closing human's machine only)
+	if(eEvent == HEADLESS_FROM_UI_DIPLO_EVENT_TRADE_SCREEN_CLOSED)
+	{
+		HEADLESS_FIX_TRIGGER(27);
+		ClearDealToRenew();
+		if(iArg1 != 0)
+		{
+			// If AI was planning on a mutual Research Agreement, cancel it because the human left (as golden did locally)
+			if(IsWantsResearchAgreementWithPlayer(eFromPlayer))
+			{
+				if(IsCanMakeResearchAgreementRightNow(eFromPlayer))
+				{
+					DoCancelWantsResearchAgreementWithPlayer(eFromPlayer);
+				}
+			}
+		}
+		return;
+	}
+#endif
 	CvAssertMsg(eEvent >= 0, "DIPLOMACY_AI: Invalid FromUIDiploEventType.  Please send Jon this with your last 5 autosaves and what changelist # you're playing.");
 	CvAssertMsg(eEvent < NUM_FROM_UI_DIPLO_EVENTS, "DIPLOMACY_AI: Invalid FromUIDiploEventType.  Please send Jon this with your last 5 autosaves and what changelist # you're playing.");
 
@@ -17124,6 +17147,9 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 				//pUIDeal->AddPeaceTreaty(eFromPlayer, GC.getPEACE_TREATY_LENGTH());
 
 				// This is essentially the same as the human opening the trade screen
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+				HEADLESS_UI_TREASURY_SCOPE();	// FIX-0030 / DS-0037: active player's machine only (peace valuation -> calculateGoldRate)
+#endif
 				GetPlayer()->GetDealAI()->DoTradeScreenOpened();
 
 				strText = GetDiploStringForMessage(DIPLO_MESSAGE_PEACE_WHAT_WILL_HUMAN_OFFER);
@@ -17279,9 +17305,21 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 	// *********************************************
 	case FROM_UI_DIPLO_EVENT_HUMAN_DISCUSSION_STOP_SPREADING_RELIGION:
 		{
+#if defined(LEKMOD_HEADLESS_FIX_0028)
+			// FIX-0028 / DS-0006: the request and the AI's answer are synced, serialized state (missionary targeting reads
+			// IsPlayerAgreeNotToConvert); record them on every peer, keep only the leader reply on the asker's machine
+			SetPlayerAskedNotToConvert(eFromPlayer, true);
+			SetPlayerAgreeNotToConvert(eFromPlayer, IsStopSpreadingReligionAcceptable(eFromPlayer));
+			if(!bActivePlayer)
+			{
+				HEADLESS_FIX_TRIGGER(28);
+			}
+#endif
 			if (bActivePlayer)
 			{	
+#if !defined(LEKMOD_HEADLESS_FIX_0028)
 				SetPlayerAskedNotToConvert(eFromPlayer, true);
+#endif
 				DiploUIStateTypes eStateType = DIPLO_UI_STATE_DISCUSS_HUMAN_INVOKED;
 				if(iArg1 == 1)
 				{
@@ -17302,7 +17340,9 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 					eAnimType = LEADERHEAD_ANIM_NO;
 				}
 
+#if !defined(LEKMOD_HEADLESS_FIX_0028)
 				SetPlayerAgreeNotToConvert(eFromPlayer, bIsYes);
+#endif
 				gDLL->GameplayDiplomacyAILeaderMessage(eMyPlayer, eStateType, strText, eAnimType);
 			}
 			break;
@@ -17313,9 +17353,20 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 		// *********************************************
 	case FROM_UI_DIPLO_EVENT_HUMAN_DISCUSSION_STOP_DIGGING:
 		{
+#if defined(LEKMOD_HEADLESS_FIX_0028)
+			// FIX-0028 / DS-0006: as above for the stop-digging request (archaeology promise state)
+			SetPlayerAskedNotToDig(eFromPlayer, true);
+			SetPlayerAgreeNotToDig(eFromPlayer, IsStopDiggingAcceptable(eFromPlayer));
+			if(!bActivePlayer)
+			{
+				HEADLESS_FIX_TRIGGER(28);
+			}
+#endif
 			if (bActivePlayer)
 			{	
+#if !defined(LEKMOD_HEADLESS_FIX_0028)
 				SetPlayerAskedNotToDig(eFromPlayer, true);
+#endif
 				DiploUIStateTypes eStateType = DIPLO_UI_STATE_DISCUSS_HUMAN_INVOKED;
 				if(iArg1 == 1)
 				{
@@ -17336,7 +17387,9 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 					eAnimType = LEADERHEAD_ANIM_NO;
 				}
 
+#if !defined(LEKMOD_HEADLESS_FIX_0028)
 				SetPlayerAgreeNotToDig(eFromPlayer, bIsYes);
+#endif
 				gDLL->GameplayDiplomacyAILeaderMessage(eMyPlayer, eStateType, strText, eAnimType);
 			}
 			break;

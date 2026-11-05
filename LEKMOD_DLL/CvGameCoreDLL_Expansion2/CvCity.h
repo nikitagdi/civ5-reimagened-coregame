@@ -39,7 +39,7 @@ class CvPlayer;
 
 struct SCityExtraYields
 {
-	vector<pair<ImprovementTypes, int>> forImprovement;
+	vector<pair<ImprovementTypes, int> > forImprovement;
 };
 
 class CvCity

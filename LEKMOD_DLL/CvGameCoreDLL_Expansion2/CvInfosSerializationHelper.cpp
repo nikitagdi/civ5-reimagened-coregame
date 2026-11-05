@@ -154,7 +154,11 @@ int Read(FDataStream& kStream, bool* bValid /*= NULL*/)
 #ifdef AUI_WARNING_FIXES
 			szError.Format("LOAD ERROR: Type not found: %s", sTemp.GetCString());
 #else
+#if defined(LEKMOD_PORTABLE)	// a non-POD FString cannot go through "..." outside MSVC
+			szError.Format("LOAD ERROR: Type not found: %s", sTemp.GetCString());
+#else
 			szError.Format("LOAD ERROR: Type not found: %s", sTemp);
+#endif
 #endif
 			GC.LogMessage(szError.GetCString());
 			CvAssertMsg(false, szError);

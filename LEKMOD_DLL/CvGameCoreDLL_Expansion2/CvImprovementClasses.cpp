@@ -1430,12 +1430,15 @@ CvImprovementXMLEntries::~CvImprovementXMLEntries(void)
 }
 
 /// Returns vector of improvement entries
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 std::vector<CvImprovementEntry*>& CvImprovementXMLEntries::GetImprovementEntries()
 {
 	return m_paImprovementEntries;
 }
+#endif
 
 /// Number of defined projects
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvImprovementXMLEntries::GetNumImprovements() const
 #else
@@ -1444,6 +1447,7 @@ int CvImprovementXMLEntries::GetNumImprovements()
 {
 	return m_paImprovementEntries.size();
 }
+#endif
 
 /// Get a specific entry
 #ifdef AUI_WARNING_FIXES

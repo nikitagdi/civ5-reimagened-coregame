@@ -1,0 +1,725 @@
+{
+  "schema": 1,
+  "sets": {
+    "opt": [
+      {
+        "id": "HYG-0001",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK"
+      },
+      {
+        "id": "HYG-0002",
+        "flag": "LEKMOD_HEADLESS_HYG_REPLAY_MSG_INIT"
+      },
+      {
+        "id": "HYG-0003",
+        "flag": "LEKMOD_HEADLESS_HYG_NOTIFICATION_INIT"
+      },
+      {
+        "id": "HYG-0004",
+        "flag": "LEKMOD_HEADLESS_HYG_PANTHEON_HOLYCITY_INIT"
+      },
+      {
+        "id": "HYG-0005",
+        "flag": "LEKMOD_HEADLESS_HYG_MILITARY_AI_LASTTURN_INIT"
+      },
+      {
+        "id": "HYG-0006",
+        "flag": "LEKMOD_HEADLESS_HYG_MINOR_BULLY_TOTALS_INIT"
+      },
+      {
+        "id": "HYG-0007",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_COMBAT_IMPROVEMENT_INIT"
+      },
+      {
+        "id": "HYG-0008",
+        "flag": "LEKMOD_HEADLESS_HYG_CULTURE_OPINION_INIT"
+      },
+      {
+        "id": "HYG-0009",
+        "flag": "LEKMOD_HEADLESS_HYG_AIOP_REPLACE_LOSSES_INIT"
+      },
+      {
+        "id": "HYG-0011",
+        "flag": "LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL"
+      },
+      {
+        "id": "OPT-0001",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_REMOVE_MALLOC"
+      },
+      {
+        "id": "OPT-0002",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_PRECALC_NEIGHBORS"
+      },
+      {
+        "id": "OPT-0003",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_CACHE_PLOTS"
+      },
+      {
+        "id": "OPT-0004",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_PARTNERS_ARRAY"
+      },
+      {
+        "id": "OPT-0005",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_PLOTLIST_POD"
+      },
+      {
+        "id": "OPT-0006",
+        "flag": "LEKMOD_HEADLESS_OPT_FAST_MINMAX"
+      },
+      {
+        "id": "OPT-0007",
+        "flag": "LEKMOD_HEADLESS_OPT_HEX_SIGN_TEST"
+      },
+      {
+        "id": "OPT-0008",
+        "flag": "LEKMOD_HEADLESS_OPT_ECONAI_INPLACE_FILTER"
+      },
+      {
+        "id": "OPT-0009",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADEAI_SCOREPROD_BYREF"
+      },
+      {
+        "id": "OPT-0010",
+        "flag": "LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE"
+      },
+      {
+        "id": "OPT-0011",
+        "flag": "LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH"
+      },
+      {
+        "id": "OPT-0014",
+        "flag": "LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO"
+      },
+      {
+        "id": "OPT-0016",
+        "flag": "LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO"
+      },
+      {
+        "id": "OPT-0018",
+        "flag": "LEKMOD_HEADLESS_OPT_TOURISM_BUILDING_FIRST"
+      },
+      {
+        "id": "OPT-0019",
+        "flag": "LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO"
+      },
+      {
+        "id": "OPT-0020",
+        "flag": "LEKMOD_HEADLESS_OPT_BELIEF_PLOT_HOIST"
+      },
+      {
+        "id": "OPT-0012",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_MOVE_MEMO"
+      },
+      {
+        "id": "OPT-0013",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO"
+      },
+      {
+        "id": "OPT-0017",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_FROM_PLOT_MEMO"
+      },
+      {
+        "id": "OPT-0022",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO"
+      },
+      {
+        "id": "OPT-0040",
+        "flag": "LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP"
+      },
+      {
+        "id": "OPT-0041",
+        "flag": "LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS"
+      },
+      {
+        "id": "OPT-0042",
+        "flag": "LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO"
+      },
+      {
+        "id": "OPT-0043",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_NEED_SHARE"
+      },
+      {
+        "id": "OPT-0044",
+        "flag": "LEKMOD_HEADLESS_OPT_NATURE_PREREQ_SKIP"
+      },
+      {
+        "id": "OPT-0047",
+        "flag": "LEKMOD_HEADLESS_OPT_CITIZEN_FOOD_MEMO"
+      },
+      {
+        "id": "OPT-0048",
+        "flag": "LEKMOD_HEADLESS_OPT_BULLY_DISK_LISTS"
+      },
+      {
+        "id": "OPT-0049",
+        "flag": "LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES"
+      },
+      {
+        "id": "OPT-0050",
+        "flag": "LEKMOD_HEADLESS_OPT_GOODY_TEST_ORDER"
+      },
+      {
+        "id": "OPT-0051",
+        "flag": "LEKMOD_HEADLESS_OPT_SITE_RING_TABLE"
+      },
+      {
+        "id": "OPT-0052",
+        "flag": "LEKMOD_HEADLESS_OPT_POLICY_NUMERIC_SPARSE"
+      },
+      {
+        "id": "OPT-0015",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO"
+      },
+      {
+        "id": "OPT-0061",
+        "flag": "LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS"
+      },
+      {
+        "id": "OPT-0062",
+        "flag": "LEKMOD_HEADLESS_OPT_MAP_PLOT_FASTPATH"
+      },
+      {
+        "id": "OPT-0086",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS"
+      },
+      {
+        "id": "HYG-0010",
+        "flag": "LEKMOD_HEADLESS_DIAG_TURN_LOG"
+      }
+    ],
+    "fix": [
+      {
+        "id": "HYG-0002",
+        "flag": "LEKMOD_HEADLESS_HYG_REPLAY_MSG_INIT"
+      },
+      {
+        "id": "HYG-0003",
+        "flag": "LEKMOD_HEADLESS_HYG_NOTIFICATION_INIT"
+      },
+      {
+        "id": "HYG-0004",
+        "flag": "LEKMOD_HEADLESS_HYG_PANTHEON_HOLYCITY_INIT"
+      },
+      {
+        "id": "HYG-0005",
+        "flag": "LEKMOD_HEADLESS_HYG_MILITARY_AI_LASTTURN_INIT"
+      },
+      {
+        "id": "HYG-0006",
+        "flag": "LEKMOD_HEADLESS_HYG_MINOR_BULLY_TOTALS_INIT"
+      },
+      {
+        "id": "HYG-0007",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_COMBAT_IMPROVEMENT_INIT"
+      },
+      {
+        "id": "HYG-0008",
+        "flag": "LEKMOD_HEADLESS_HYG_CULTURE_OPINION_INIT"
+      },
+      {
+        "id": "HYG-0009",
+        "flag": "LEKMOD_HEADLESS_HYG_AIOP_REPLACE_LOSSES_INIT"
+      },
+      {
+        "id": "HYG-0011",
+        "flag": "LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL"
+      },
+      {
+        "id": "FIX-0001",
+        "flag": "LEKMOD_HEADLESS_FIX_0001"
+      },
+      {
+        "id": "FIX-0002",
+        "flag": "LEKMOD_HEADLESS_FIX_0002"
+      },
+      {
+        "id": "FIX-0009",
+        "flag": "LEKMOD_HEADLESS_FIX_0009"
+      },
+      {
+        "id": "FIX-0010",
+        "flag": "LEKMOD_HEADLESS_FIX_0010"
+      },
+      {
+        "id": "FIX-0011",
+        "flag": "LEKMOD_HEADLESS_FIX_0011"
+      },
+      {
+        "id": "FIX-0012",
+        "flag": "LEKMOD_HEADLESS_FIX_0012"
+      },
+      {
+        "id": "FIX-0013",
+        "flag": "LEKMOD_HEADLESS_FIX_0013"
+      },
+      {
+        "id": "FIX-0014",
+        "flag": "LEKMOD_HEADLESS_FIX_0014"
+      },
+      {
+        "id": "FIX-0015",
+        "flag": "LEKMOD_HEADLESS_FIX_0015"
+      },
+      {
+        "id": "FIX-0016",
+        "flag": "LEKMOD_HEADLESS_FIX_0016"
+      },
+      {
+        "id": "FIX-0017",
+        "flag": "LEKMOD_HEADLESS_FIX_0017"
+      },
+      {
+        "id": "FIX-0018",
+        "flag": "LEKMOD_HEADLESS_FIX_0018"
+      },
+      {
+        "id": "FIX-0019",
+        "flag": "LEKMOD_HEADLESS_FIX_0019"
+      },
+      {
+        "id": "FIX-0020",
+        "flag": "LEKMOD_HEADLESS_FIX_0020"
+      },
+      {
+        "id": "FIX-0101",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH"
+      },
+      {
+        "id": "FIX-0102",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_CHANGE_WAR"
+      },
+      {
+        "id": "FIX-0104",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_FOUND_RELIGION"
+      },
+      {
+        "id": "FIX-0105",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_ENHANCE_RELIGION"
+      },
+      {
+        "id": "FIX-0106",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_DIPLOMACY_FROM_UI"
+      },
+      {
+        "id": "FIX-0107",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV"
+      },
+      {
+        "id": "FIX-0108",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_GOODY_CHOICE"
+      },
+      {
+        "id": "FIX-0109",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_LEAGUE"
+      },
+      {
+        "id": "FIX-0021",
+        "flag": "LEKMOD_HEADLESS_FIX_0021"
+      },
+      {
+        "id": "FIX-0022",
+        "flag": "LEKMOD_HEADLESS_FIX_0022"
+      },
+      {
+        "id": "FIX-0023",
+        "flag": "LEKMOD_HEADLESS_FIX_0023"
+      },
+      {
+        "id": "FIX-0025",
+        "flag": "LEKMOD_HEADLESS_FIX_0025"
+      },
+      {
+        "id": "FIX-0111",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH_TECH"
+      },
+      {
+        "id": "FIX-0112",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_PUSH_MISSION"
+      },
+      {
+        "id": "FIX-0113",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_LUA_FOUNDER"
+      },
+      {
+        "id": "FIX-0026",
+        "flag": "LEKMOD_HEADLESS_FIX_0026"
+      },
+      {
+        "id": "FIX-0027",
+        "flag": "LEKMOD_HEADLESS_FIX_0027"
+      },
+      {
+        "id": "FIX-0028",
+        "flag": "LEKMOD_HEADLESS_FIX_0028"
+      },
+      {
+        "id": "FIX-0029",
+        "flag": "LEKMOD_HEADLESS_FIX_0029"
+      },
+      {
+        "id": "FIX-0030",
+        "flag": "LEKMOD_HEADLESS_FIX_0030"
+      }
+    ],
+    "release": [
+      {
+        "id": "HYG-0001",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK"
+      },
+      {
+        "id": "HYG-0002",
+        "flag": "LEKMOD_HEADLESS_HYG_REPLAY_MSG_INIT"
+      },
+      {
+        "id": "HYG-0003",
+        "flag": "LEKMOD_HEADLESS_HYG_NOTIFICATION_INIT"
+      },
+      {
+        "id": "HYG-0004",
+        "flag": "LEKMOD_HEADLESS_HYG_PANTHEON_HOLYCITY_INIT"
+      },
+      {
+        "id": "HYG-0005",
+        "flag": "LEKMOD_HEADLESS_HYG_MILITARY_AI_LASTTURN_INIT"
+      },
+      {
+        "id": "HYG-0006",
+        "flag": "LEKMOD_HEADLESS_HYG_MINOR_BULLY_TOTALS_INIT"
+      },
+      {
+        "id": "HYG-0007",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_COMBAT_IMPROVEMENT_INIT"
+      },
+      {
+        "id": "HYG-0008",
+        "flag": "LEKMOD_HEADLESS_HYG_CULTURE_OPINION_INIT"
+      },
+      {
+        "id": "HYG-0009",
+        "flag": "LEKMOD_HEADLESS_HYG_AIOP_REPLACE_LOSSES_INIT"
+      },
+      {
+        "id": "HYG-0011",
+        "flag": "LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL"
+      },
+      {
+        "id": "OPT-0001",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_REMOVE_MALLOC"
+      },
+      {
+        "id": "OPT-0002",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_PRECALC_NEIGHBORS"
+      },
+      {
+        "id": "OPT-0003",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_CACHE_PLOTS"
+      },
+      {
+        "id": "OPT-0004",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_PARTNERS_ARRAY"
+      },
+      {
+        "id": "OPT-0005",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_PLOTLIST_POD"
+      },
+      {
+        "id": "OPT-0006",
+        "flag": "LEKMOD_HEADLESS_OPT_FAST_MINMAX"
+      },
+      {
+        "id": "OPT-0007",
+        "flag": "LEKMOD_HEADLESS_OPT_HEX_SIGN_TEST"
+      },
+      {
+        "id": "OPT-0008",
+        "flag": "LEKMOD_HEADLESS_OPT_ECONAI_INPLACE_FILTER"
+      },
+      {
+        "id": "OPT-0009",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADEAI_SCOREPROD_BYREF"
+      },
+      {
+        "id": "FIX-0001",
+        "flag": "LEKMOD_HEADLESS_FIX_0001"
+      },
+      {
+        "id": "FIX-0002",
+        "flag": "LEKMOD_HEADLESS_FIX_0002"
+      },
+      {
+        "id": "FIX-0009",
+        "flag": "LEKMOD_HEADLESS_FIX_0009"
+      },
+      {
+        "id": "FIX-0010",
+        "flag": "LEKMOD_HEADLESS_FIX_0010"
+      },
+      {
+        "id": "FIX-0011",
+        "flag": "LEKMOD_HEADLESS_FIX_0011"
+      },
+      {
+        "id": "FIX-0012",
+        "flag": "LEKMOD_HEADLESS_FIX_0012"
+      },
+      {
+        "id": "FIX-0013",
+        "flag": "LEKMOD_HEADLESS_FIX_0013"
+      },
+      {
+        "id": "FIX-0014",
+        "flag": "LEKMOD_HEADLESS_FIX_0014"
+      },
+      {
+        "id": "FIX-0015",
+        "flag": "LEKMOD_HEADLESS_FIX_0015"
+      },
+      {
+        "id": "FIX-0016",
+        "flag": "LEKMOD_HEADLESS_FIX_0016"
+      },
+      {
+        "id": "FIX-0017",
+        "flag": "LEKMOD_HEADLESS_FIX_0017"
+      },
+      {
+        "id": "FIX-0018",
+        "flag": "LEKMOD_HEADLESS_FIX_0018"
+      },
+      {
+        "id": "FIX-0019",
+        "flag": "LEKMOD_HEADLESS_FIX_0019"
+      },
+      {
+        "id": "FIX-0020",
+        "flag": "LEKMOD_HEADLESS_FIX_0020"
+      },
+      {
+        "id": "FIX-0101",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH"
+      },
+      {
+        "id": "FIX-0102",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_CHANGE_WAR"
+      },
+      {
+        "id": "FIX-0104",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_FOUND_RELIGION"
+      },
+      {
+        "id": "FIX-0105",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_ENHANCE_RELIGION"
+      },
+      {
+        "id": "FIX-0106",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_DIPLOMACY_FROM_UI"
+      },
+      {
+        "id": "FIX-0107",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV"
+      },
+      {
+        "id": "FIX-0108",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_GOODY_CHOICE"
+      },
+      {
+        "id": "FIX-0109",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_LEAGUE"
+      },
+      {
+        "id": "OPT-0010",
+        "flag": "LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE"
+      },
+      {
+        "id": "OPT-0011",
+        "flag": "LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH"
+      },
+      {
+        "id": "OPT-0014",
+        "flag": "LEKMOD_HEADLESS_OPT_SITE_PLOT_MEMO"
+      },
+      {
+        "id": "OPT-0016",
+        "flag": "LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO"
+      },
+      {
+        "id": "OPT-0018",
+        "flag": "LEKMOD_HEADLESS_OPT_TOURISM_BUILDING_FIRST"
+      },
+      {
+        "id": "OPT-0019",
+        "flag": "LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO"
+      },
+      {
+        "id": "OPT-0020",
+        "flag": "LEKMOD_HEADLESS_OPT_BELIEF_PLOT_HOIST"
+      },
+      {
+        "id": "OPT-0012",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_MOVE_MEMO"
+      },
+      {
+        "id": "OPT-0013",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_NODE_CACHE_MEMO"
+      },
+      {
+        "id": "OPT-0017",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_FROM_PLOT_MEMO"
+      },
+      {
+        "id": "OPT-0022",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO"
+      },
+      {
+        "id": "OPT-0040",
+        "flag": "LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP"
+      },
+      {
+        "id": "OPT-0041",
+        "flag": "LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS"
+      },
+      {
+        "id": "OPT-0042",
+        "flag": "LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO"
+      },
+      {
+        "id": "OPT-0043",
+        "flag": "LEKMOD_HEADLESS_OPT_TRADE_NEED_SHARE"
+      },
+      {
+        "id": "OPT-0044",
+        "flag": "LEKMOD_HEADLESS_OPT_NATURE_PREREQ_SKIP"
+      },
+      {
+        "id": "OPT-0047",
+        "flag": "LEKMOD_HEADLESS_OPT_CITIZEN_FOOD_MEMO"
+      },
+      {
+        "id": "OPT-0048",
+        "flag": "LEKMOD_HEADLESS_OPT_BULLY_DISK_LISTS"
+      },
+      {
+        "id": "OPT-0049",
+        "flag": "LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES"
+      },
+      {
+        "id": "OPT-0050",
+        "flag": "LEKMOD_HEADLESS_OPT_GOODY_TEST_ORDER"
+      },
+      {
+        "id": "OPT-0051",
+        "flag": "LEKMOD_HEADLESS_OPT_SITE_RING_TABLE"
+      },
+      {
+        "id": "OPT-0052",
+        "flag": "LEKMOD_HEADLESS_OPT_POLICY_NUMERIC_SPARSE"
+      },
+      {
+        "id": "OPT-0015",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_WALK_MEMO"
+      },
+      {
+        "id": "OPT-0061",
+        "flag": "LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS"
+      },
+      {
+        "id": "OPT-0062",
+        "flag": "LEKMOD_HEADLESS_OPT_MAP_PLOT_FASTPATH"
+      },
+      {
+        "id": "OPT-0086",
+        "flag": "LEKMOD_HEADLESS_OPT_ASTAR_OPEN_BUCKETS"
+      },
+      {
+        "id": "HYG-0010",
+        "flag": "LEKMOD_HEADLESS_DIAG_TURN_LOG"
+      },
+      {
+        "id": "FIX-0021",
+        "flag": "LEKMOD_HEADLESS_FIX_0021"
+      },
+      {
+        "id": "FIX-0022",
+        "flag": "LEKMOD_HEADLESS_FIX_0022"
+      },
+      {
+        "id": "FIX-0023",
+        "flag": "LEKMOD_HEADLESS_FIX_0023"
+      },
+      {
+        "id": "FIX-0025",
+        "flag": "LEKMOD_HEADLESS_FIX_0025"
+      },
+      {
+        "id": "FIX-0111",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_RESEARCH_TECH"
+      },
+      {
+        "id": "FIX-0112",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_PUSH_MISSION"
+      },
+      {
+        "id": "FIX-0113",
+        "flag": "LEKMOD_HEADLESS_FIX_VAL_LUA_FOUNDER"
+      },
+      {
+        "id": "FIX-0026",
+        "flag": "LEKMOD_HEADLESS_FIX_0026"
+      },
+      {
+        "id": "FIX-0027",
+        "flag": "LEKMOD_HEADLESS_FIX_0027"
+      },
+      {
+        "id": "FIX-0028",
+        "flag": "LEKMOD_HEADLESS_FIX_0028"
+      },
+      {
+        "id": "FIX-0030",
+        "flag": "LEKMOD_HEADLESS_FIX_0030"
+      }
+    ],
+    "hyg": [
+      {
+        "id": "HYG-0001",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK"
+      },
+      {
+        "id": "HYG-0002",
+        "flag": "LEKMOD_HEADLESS_HYG_REPLAY_MSG_INIT"
+      },
+      {
+        "id": "HYG-0003",
+        "flag": "LEKMOD_HEADLESS_HYG_NOTIFICATION_INIT"
+      },
+      {
+        "id": "HYG-0004",
+        "flag": "LEKMOD_HEADLESS_HYG_PANTHEON_HOLYCITY_INIT"
+      },
+      {
+        "id": "HYG-0005",
+        "flag": "LEKMOD_HEADLESS_HYG_MILITARY_AI_LASTTURN_INIT"
+      },
+      {
+        "id": "HYG-0006",
+        "flag": "LEKMOD_HEADLESS_HYG_MINOR_BULLY_TOTALS_INIT"
+      },
+      {
+        "id": "HYG-0007",
+        "flag": "LEKMOD_HEADLESS_HYG_TRAIT_COMBAT_IMPROVEMENT_INIT"
+      },
+      {
+        "id": "HYG-0008",
+        "flag": "LEKMOD_HEADLESS_HYG_CULTURE_OPINION_INIT"
+      },
+      {
+        "id": "HYG-0009",
+        "flag": "LEKMOD_HEADLESS_HYG_AIOP_REPLACE_LOSSES_INIT"
+      },
+      {
+        "id": "HYG-0011",
+        "flag": "LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL"
+      }
+    ]
+  }
+}

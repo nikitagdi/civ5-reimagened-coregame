@@ -755,7 +755,7 @@ bool CvBuildingEntry::CacheResults(Database::Results& kResults, CvDatabaseUtilit
 		pResults->Reset();
 
 		//Trim extra memory off container since this is mostly read-only.
-		std::map<int, std::map<int, int>>(m_ppiResourceYieldChangeGlobal).swap(m_ppiResourceYieldChangeGlobal);
+		std::map<int, std::map<int, int> >(m_ppiResourceYieldChangeGlobal).swap(m_ppiResourceYieldChangeGlobal);
 	}
 #if defined(MISC_CHANGES) // CvBuildingClasses arrays
 	{
@@ -2544,7 +2544,7 @@ int CvBuildingEntry::GetResourceYieldChangeGlobal(int iResource, int iYieldType)
 	CvAssertMsg(iResource > -1, "Index out of bounds");
 	CvAssertMsg(iYieldType < NUM_YIELD_TYPES, "Index out of bounds");
 	CvAssertMsg(iYieldType > -1, "Index out of bounds");
-	std::map<int, std::map<int, int>>::const_iterator itResource = m_ppiResourceYieldChangeGlobal.find(iResource);
+	std::map<int, std::map<int, int> >::const_iterator itResource = m_ppiResourceYieldChangeGlobal.find(iResource);
 	if (itResource != m_ppiResourceYieldChangeGlobal.end()) // find returns the iterator to map::end if the key iResource is not present in the map
 	{
 		std::map<int, int>::const_iterator itYield = itResource->second.find(iYieldType);
@@ -2836,12 +2836,15 @@ CvBuildingXMLEntries::~CvBuildingXMLEntries(void)
 }
 
 /// Returns vector of policy entries
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 std::vector<CvBuildingEntry*>& CvBuildingXMLEntries::GetBuildingEntries()
 {
 	return m_paBuildingEntries;
 }
+#endif
 
 /// Number of defined policies
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 uint CvBuildingXMLEntries::GetNumBuildings() const
 #else
@@ -2850,6 +2853,7 @@ int CvBuildingXMLEntries::GetNumBuildings()
 {
 	return m_paBuildingEntries.size();
 }
+#endif
 
 /// Clear policy entries
 void CvBuildingXMLEntries::DeleteArray()
@@ -2863,6 +2867,7 @@ void CvBuildingXMLEntries::DeleteArray()
 }
 
 /// Get a specific entry
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvBuildingEntry* CvBuildingXMLEntries::GetEntry(uint index)
 #else
@@ -2871,6 +2876,7 @@ CvBuildingEntry* CvBuildingXMLEntries::GetEntry(int index)
 {
 	return m_paBuildingEntries[index];
 }
+#endif
 
 //=====================================
 // CvCityBuildings
@@ -3105,6 +3111,7 @@ void CvCityBuildings::ChangeNumBuildings(int iChange)
 }
 
 /// Accessor: How many of these buildings in the city?
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 int CvCityBuildings::GetNumBuilding(BuildingTypes eIndex) const
 {
 	CvAssertMsg(eIndex != NO_BUILDING, "BuildingType eIndex is expected to not be NO_BUILDING");
@@ -3118,6 +3125,7 @@ int CvCityBuildings::GetNumBuilding(BuildingTypes eIndex) const
 		return (GetNumRealBuilding(eIndex) + GetNumFreeBuilding(eIndex));
 	}
 }
+#endif
 
 /// Accessor: Is there at least one building of the class in the city? Potentially faster function than the above.
 bool CvCityBuildings::HasBuildingClass(BuildingClassTypes eIndex) const
@@ -3421,12 +3429,14 @@ void CvCityBuildings::SetBuildingOriginalTime(BuildingTypes eIndex, int iNewValu
 }
 
 /// Accessor: How many of these buildings have been constructed in the city?
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 int CvCityBuildings::GetNumRealBuilding(BuildingTypes eIndex) const
 {
 	CvAssertMsg(eIndex >= 0, "eIndex expected to be >= 0");
 	CvAssertMsg(eIndex < m_pBuildings->GetNumBuildings(), "eIndex expected to be < m_pBuildings->GetNumBuildings()");
 	return m_paiNumRealBuilding[eIndex];
 }
+#endif
 
 /// Accessor: Set number of these buildings that have been constructed in the city
 void CvCityBuildings::SetNumRealBuilding(BuildingTypes eIndex, int iNewValue)
@@ -3663,12 +3673,14 @@ void CvCityBuildings::SetNumRealBuildingTimed(BuildingTypes eIndex, int iNewValu
 }
 
 /// Accessor: Get number of free buildings of this type in city
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 int CvCityBuildings::GetNumFreeBuilding(BuildingTypes eIndex) const
 {
 	CvAssertMsg(eIndex >= 0, "eIndex expected to be >= 0");
 	CvAssertMsg(eIndex < m_pBuildings->GetNumBuildings(), "eIndex expected to be < m_pBuildings->GetNumBuildings()");
 	return m_paiNumFreeBuilding[eIndex];
 }
+#endif
 
 /// Accessor: Set number of free buildings of this type in city
 void CvCityBuildings::SetNumFreeBuilding(BuildingTypes eIndex, int iNewValue)

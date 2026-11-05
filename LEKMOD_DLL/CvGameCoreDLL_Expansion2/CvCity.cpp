@@ -7,6 +7,7 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#include "HeadlessMsgGuard.h"	// HYG-0013
 #include "CvGlobals.h"
 #include "CvCity.h"
 #include "CvArea.h"
@@ -107,9 +108,9 @@ void ClearCityDeltas()
 }
 
 template <typename T>
-bool ModifierUpdateInsertRemove(vector<pair<T, int>>& container, T key, int value, bool modifyExisting)
+bool ModifierUpdateInsertRemove(vector<pair<T, int> >& container, T key, int value, bool modifyExisting)
 {
-	for (vector<pair<T, int>>::iterator it = container.begin(); it != container.end(); ++it)
+	for (vector<pair<T, int> >::iterator it = container.begin(); it != container.end(); ++it)
 	{
 		if (it->first == key)
 		{
@@ -144,9 +145,9 @@ bool ModifierUpdateInsertRemove(vector<pair<T, int>>& container, T key, int valu
 }
 
 template <typename T>
-int ModifierLookup(const vector<pair<T, int>>& container, T key)
+int ModifierLookup(const vector<pair<T, int> >& container, T key)
 {
-	for (vector<pair<T, int>>::const_iterator it = container.begin(); it != container.end(); ++it)
+	for (vector<pair<T, int> >::const_iterator it = container.begin(); it != container.end(); ++it)
 		if (it->first == key)
 			return it->second;
 
@@ -1869,6 +1870,9 @@ void CvCity::doResourceDemands()
 //	--------------------------------------------------------------------------------
 void CvCity::doTurn()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_CITY_DOTURN);
+#endif
 #ifdef AUI_PERF_LOGGING_FORMATTING_TWEAKS
 	AI_PERF_FORMAT("City-AI-perf.csv", ("CvCity::doTurn, Turn %03d, %s, %s", GC.getGame().getElapsedGameTurns(), GetPlayer()->getCivilizationShortDescription(), getName().c_str()));
 #else
@@ -8435,17 +8439,21 @@ HandicapTypes CvCity::getHandicapType() const
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvCivilizationInfo& CvCity::getCivilizationInfo() const
 {
 	return GET_PLAYER(getOwner()).getCivilizationInfo();
 }
+#endif
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CivilizationTypes CvCity::getCivilizationType() const
 {
 	VALIDATE_OBJECT
 	return GET_PLAYER(getOwner()).getCivilizationType();
 }
+#endif
 
 
 //	--------------------------------------------------------------------------------
@@ -9007,12 +9015,14 @@ void CvCity::SetID(int iID)
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvPlot* CvCity::plot() const 
 { 
 	if ((m_iX != INVALID_PLOT_COORD) && (m_iY != INVALID_PLOT_COORD))
 		return GC.getMap().plotUnchecked(m_iX, m_iY); 
 	return NULL;
 }
+#endif
 
 //	--------------------------------------------------------------------------------
 bool CvCity::at(int iX,  int iY) const
@@ -9303,7 +9313,11 @@ void CvCity::changePopulation(int iChange, bool bReassignPop)
 long CvCity::getRealPopulation() const
 {
 	VALIDATE_OBJECT
+#if defined(LEKMOD_PORTABLE)	// 32-bit arithmetic as with MSVC long, on LP64 and ILP32 alike
+	return (long)(((int)(pow((double)getPopulation(), 2.8))) * 1000);
+#else
 	return (((long)(pow((double)getPopulation(), 2.8))) * 1000);
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -12926,7 +12940,7 @@ void CvCity::setName(const char* szNewValue, bool bFound)
 void CvCity::doFoundMessage()
 {
 	VALIDATE_OBJECT
-	if(getOwner() == GC.getGame().getActivePlayer())
+	if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 	{
 		Localization::String localizedText = Localization::Lookup("TXT_KEY_MISC_CITY_HAS_BEEN_FOUNDED");
 		localizedText << getNameKey();
@@ -13096,11 +13110,13 @@ void CvCity::changeSpecialistProductionTimes100(SpecialistTypes eIndex, int iCha
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvCityBuildings* CvCity::GetCityBuildings() const
 {
 	VALIDATE_OBJECT
 	return m_pCityBuildings;
 }
+#endif
 
 //	--------------------------------------------------------------------------------
 int CvCity::getUnitProduction(UnitTypes eIndex)	const
@@ -14730,6 +14746,11 @@ int CvCity::GetBuyPlotScore(int& iBestX, int& iBestY)
 #endif
 {
 	VALIDATE_OBJECT
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+	// OPT-0042: GetIndividualPlotScore asks IsYieldDeficient for every yield of every candidate plot; the answers do not
+	// depend on the candidate and nothing below writes what they read (CanBuyPlot's Lua hook clears the memo if it had listeners)
+	CvHeadlessDeficientMemoScope kHeadlessDeficientMemo(GetCityStrategyAI());
+#endif
 	CvPlot* pLoopPlot = NULL;
 	const int iMaxRange = /*3*/ GC.getMAXIMUM_BUY_PLOT_DISTANCE();
 
@@ -17020,7 +17041,7 @@ bool CvCity::doCheckProduction()
 							thisPlayer.ChangeProductionGoldFromWonders(iProductionGold);
 #endif
 
-							if(getOwner() == GC.getGame().getActivePlayer())
+							if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 							{
 								Localization::String localizedText = Localization::Lookup("TXT_KEY_MISC_LOST_WONDER_PROD_CONVERTED");
 								localizedText << getNameKey() << GC.getUnitInfo((UnitTypes)iI)->GetTextKey() << iProductionGold;
@@ -17092,7 +17113,7 @@ bool CvCity::doCheckProduction()
 						thisPlayer.ChangeProductionGoldFromWonders(iProductionGold);
 #endif
 
-						if(getOwner() == GC.getGame().getActivePlayer())
+						if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 						{
 							Localization::String localizedText = Localization::Lookup("TXT_KEY_MISC_LOST_WONDER_PROD_CONVERTED");
 							localizedText << getNameKey() << pkExpiredBuildingInfo->GetTextKey() << iProductionGold;
@@ -17130,7 +17151,7 @@ bool CvCity::doCheckProduction()
 						thisPlayer.ChangeProductionGoldFromWonders(iProductionGold);
 #endif
 
-						if(getOwner() == GC.getGame().getActivePlayer())
+						if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 						{
 							Localization::String localizedText = Localization::Lookup("TXT_KEY_MISC_LOST_WONDER_PROD_CONVERTED");
 							localizedText << getNameKey() << GC.getProjectInfo((ProjectTypes)iI)->GetTextKey() << iProductionGold;
@@ -17485,7 +17506,7 @@ void CvCity::doMeltdown()
 
 					CvUnitCombat::ApplyNuclearExplosionDamage(plot(), 1);
 
-					if(getOwner() == GC.getGame().getActivePlayer())
+					if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 					{
 						Localization::String localizedText = Localization::Lookup("TXT_KEY_MISC_MELTDOWN_CITY");
 						localizedText << getNameKey();

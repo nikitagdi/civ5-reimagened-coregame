@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	ï¿½ 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -19,6 +19,46 @@ extern "C" ICvGameContext1* DllGetGameContext()
 {
 	return CvDllGameContext::GetSingleton();
 }
+//------------------------------------------------------------------------------
+#if defined(LEKMOD_HEADLESS_DIAG)
+// Headless platform: diagnostic sink installed by the host, see HeadlessDiag.h
+ICvHeadlessDiagSink1* g_pHeadlessDiag = NULL;
+const void* g_pHeadlessRandCaller = NULL;
+
+extern "C" __declspec(dllexport) int __cdecl HeadlessDiagInstall(ICvHeadlessDiagSink1* pSink)
+{
+	g_pHeadlessDiag = NULL;
+	g_pHeadlessRandCaller = NULL;
+	// A sink built against another interface version must never be called through our vtable layout:
+	// stay uninstalled and let the host compare the returned version with its own.
+	if(pSink && pSink->GetVersion() == HEADLESS_DIAG_VERSION)
+		g_pHeadlessDiag = pSink;
+	return HEADLESS_DIAG_VERSION;
+}
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+// OPT shadow mismatch (HeadlessDiag.h, HEADLESS_OPT_VERIFY): sink if installed, else stderr + exit code 86.
+void HeadlessOptVerifyMismatch(int iOptId, const char* pszWhat)
+{
+	if(g_pHeadlessDiag)
+	{
+		g_pHeadlessDiag->OnOptVerifyMismatch(iOptId, pszWhat);
+		return;
+	}
+	char szBuf[512];
+	_snprintf(szBuf, sizeof(szBuf) - 1, "HEADLESS_OPT_VERIFY mismatch: OPT-%04d %s (game turn %d)\n", iOptId, pszWhat ? pszWhat : "", GC.getGame().getGameTurn());
+	szBuf[sizeof(szBuf) - 1] = 0;
+	HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+	if(hErr != NULL && hErr != INVALID_HANDLE_VALUE)
+	{
+		DWORD dwWritten = 0;
+		WriteFile(hErr, szBuf, (DWORD)strlen(szBuf), &dwWritten, NULL);
+		FlushFileBuffers(hErr);
+	}
+	OutputDebugStringA(szBuf);
+	TerminateProcess(GetCurrentProcess(), 86);
+}
+#endif
+#endif
 //------------------------------------------------------------------------------
 BOOL APIENTRY DllMain(HANDLE hModule,
                       DWORD  ul_reason_for_call,

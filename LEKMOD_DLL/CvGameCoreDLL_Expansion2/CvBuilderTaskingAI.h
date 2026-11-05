@@ -86,6 +86,9 @@ public:
 
 	void Update(void);
 	void UpdateRoutePlots(void);
+#if defined(LEKMOD_HEADLESS_FIX_0013)
+	void HeadlessAfterLoad();	// FIX-0013 / DS-0010: CvMap::Validate after a load
+#endif
 
 	bool EvaluateBuilder(CvUnit* pUnit, BuilderDirective* paDirectives, UINT uaDirectives, bool bKeepOnlyBest = false, bool bOnlyEvaluateWorkersPlot = false);
 

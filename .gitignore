@@ -73,3 +73,11 @@ desktop.ini
 
 # Build artifacts
 *.exe (except in releases)
+## Headless platform (build outputs, generated variant projects, game data snapshots)
+headless/out/
+LEKMOD_DLL/CvGameCoreDLL_Expansion2/*.hl-*.vcproj
+__pycache__/
+# generated references (python -m civsim.* render) and profiling leftovers
+headless/generated-docs/
+*.profraw
+headless/reference/

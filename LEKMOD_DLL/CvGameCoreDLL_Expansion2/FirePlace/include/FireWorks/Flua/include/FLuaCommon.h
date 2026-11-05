@@ -69,6 +69,29 @@ namespace FLua
 	public:
 		typedef void(*ErrorHandlerStaticFunc)(const TCHAR*);
 
+#if defined(LEKMOD_PORTABLE)
+		// Member function pointers are twice the size of function pointers outside MSVC, so the static
+		// handler gets its own slot instead of being type-punned into m_pfnFunc.
+		ErrorHandler(ErrorHandlerStaticFunc pfn) :
+			m_pkClass(NULL),
+			m_pfnFunc(NULL),
+			m_pfnStatic(pfn)
+			{ assert(pfn); }
+
+		template<class T, class TFuncOwner>
+		ErrorHandler(T *p, void(TFuncOwner::*pfn)(const TCHAR*)) :
+			m_pkClass(reinterpret_cast<ErrorHandlerClass*>(static_cast<TFuncOwner*>(p))),
+			m_pfnFunc(reinterpret_cast<ErrorHandlerFunc>(pfn)),
+			m_pfnStatic(NULL)
+			{ assert(pfn); }
+
+		template<class T, class TFuncOwner>
+		ErrorHandler(const T *p, void(TFuncOwner::*pfn)(const TCHAR*)const) :
+			m_pkClass(reinterpret_cast<ErrorHandlerClass*>(const_cast<TFuncOwner*>(static_cast<const TFuncOwner*>(p)))),
+			m_pfnFunc(reinterpret_cast<ErrorHandlerFunc>(pfn)),
+			m_pfnStatic(NULL)
+			{ assert(pfn); }
+#else
 		// Static functions
 		ErrorHandler(ErrorHandlerStaticFunc pfn) :
 			m_pkClass(NULL),
@@ -88,6 +111,7 @@ namespace FLua
 			m_pkClass(Details::UnsafeCast<ErrorHandlerClass*>(p)),
 			m_pfnFunc(Details::UnsafeCast<ErrorHandlerFunc>(pfn))
 			{ assert(pfn); }
+#endif
 
 		// Call the error handler
 		void operator()( _In_z_ const TCHAR *szError) const;
@@ -97,6 +121,9 @@ namespace FLua
 		typedef void(ErrorHandlerClass::*ErrorHandlerFunc)(const TCHAR*);
 		ErrorHandlerClass *m_pkClass;
 		ErrorHandlerFunc m_pfnFunc;
+#if defined(LEKMOD_PORTABLE)
+		ErrorHandlerStaticFunc m_pfnStatic;
+#endif
 	};
 
 	namespace Details {

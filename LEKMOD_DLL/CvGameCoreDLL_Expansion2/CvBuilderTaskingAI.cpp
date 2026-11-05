@@ -155,6 +155,25 @@ void CvBuilderTaskingAI::Read(FDataStream& kStream)
 	m_pTargetPlot = NULL;		//Force everyone to recalculate current yields after loading.
 }
 
+#if defined(LEKMOD_HEADLESS_FIX_0013)
+/// FIX-0013 / DS-0010: called once for every player after a load (CvMap::Validate). Golden's Read forces the next
+/// EvaluateBuilder into Update(): UpdateRoutePlots then refilled the shared static m_aiNonTerritoryPlots with this
+/// player's list (the continuous game still has the list of the player updated last) and UpdateBestYields ran at that
+/// moment instead of at the owner's turn start. Reproduce the continuous state instead: the static list is loaded as
+/// saved, m_iNumCities = current count (no forced Update), and the city best yields (not serialized) are recomputed
+/// now so worker scoring does not read heap garbage / NO_YIELD until the owner's next turn start.
+void CvBuilderTaskingAI::HeadlessAfterLoad()
+{
+	HEADLESS_FIX_TRIGGER(13);
+	m_iNumCities = m_pPlayer->getNumCities();
+	int iLoop;
+	for(CvCity* pCity = m_pPlayer->firstCity(&iLoop); pCity != NULL; pCity = m_pPlayer->nextCity(&iLoop))
+	{
+		pCity->GetCityStrategyAI()->UpdateBestYields();
+	}
+}
+#endif
+
 /// Serialization write
 void CvBuilderTaskingAI::Write(FDataStream& kStream)
 {
@@ -778,6 +797,21 @@ bool CvBuilderTaskingAI::EvaluateBuilder(CvUnit* pUnit, BuilderDirective* paDire
 		paDirectives[0].m_sMoveTurnsAway = 0;
 		return true;
 	}
+
+#if defined(LEKMOD_HEADLESS_FIX_0014)
+	// FIX-0014 / DS-0010: ScorePlot weighs every candidate by the working city's yield deltas and focus yield
+	// (CvCityStrategyAI::UpdateBestYields). Golden computed them only in Update(), at the owner's turn start, before
+	// doTurn re-assigns city specializations, grows cities and so on; they are not serialized, so a game loaded mid-turn
+	// (resync, hot-join, reload) could not reproduce them and its workers chose differently. Compute them from the
+	// current state for every evaluation instead: the same in a continuous and in a loaded game. Save format unchanged.
+	{
+		int iHeadlessLoop;
+		for(CvCity* pHeadlessCity = m_pPlayer->firstCity(&iHeadlessLoop); pHeadlessCity != NULL; pHeadlessCity = m_pPlayer->nextCity(&iHeadlessLoop))
+		{
+			pHeadlessCity->GetCityStrategyAI()->UpdateBestYields();
+		}
+	}
+#endif
 
 	m_aiPlots.clear();
 	if(bOnlyEvaluateWorkersPlot)

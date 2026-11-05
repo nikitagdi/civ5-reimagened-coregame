@@ -2600,6 +2600,18 @@ void CvEconomicAI::AssignExplorersToHuts()
 		{
 			m_aiGoodyHutUnitAssignments[uiGoodyPlots] = GoodyHutUnitAssignment(iUnitID, iStepPlotID);
 
+#if defined(LEKMOD_HEADLESS_OPT_ECONAI_INPLACE_FILTER)
+			// OPT-0008: stable in-place removal (same survivors in the same order) instead of copying and rebuilding
+			uint uiKeptExplorers = 0;
+			for(uint uiExplorer = 0; uiExplorer < m_apExplorers.size(); uiExplorer++)
+			{
+				if(m_apExplorers[uiExplorer]->GetID() != iUnitID)
+				{
+					m_apExplorers[uiKeptExplorers++] = m_apExplorers[uiExplorer];
+				}
+			}
+			m_apExplorers.resize(uiKeptExplorers);
+#else
 			FFastVector<CvUnit*> tempExplorers = m_apExplorers;
 			m_apExplorers.clear();
 			for(uint uiExplorer = 0; uiExplorer < tempExplorers.size(); uiExplorer++)
@@ -2609,6 +2621,7 @@ void CvEconomicAI::AssignExplorersToHuts()
 					m_apExplorers.push_back(tempExplorers[uiExplorer]);
 				}
 			}
+#endif
 		}
 	}
 }
@@ -2662,6 +2675,18 @@ void CvEconomicAI::AssignHutsToExplorers()
 		{
 			m_aiGoodyHutUnitAssignments[uiHutIndex] = GoodyHutUnitAssignment( pUnit->GetID(), -1);
 
+#if defined(LEKMOD_HEADLESS_OPT_ECONAI_INPLACE_FILTER)
+			// OPT-0008: stable in-place removal (same survivors in the same order) instead of copying and rebuilding
+			uint uiKeptHuts = 0;
+			for(uint uiHut = 0; uiHut < aiHutIndices.size(); uiHut++)
+			{
+				if(aiHutIndices[uiHut] != uiHutIndex)
+				{
+					aiHutIndices[uiKeptHuts++] = aiHutIndices[uiHut];
+				}
+			}
+			aiHutIndices.resize(uiKeptHuts);
+#else
 			FFastVector<unsigned int> tempHutIndices = aiHutIndices;
 			aiHutIndices.clear();
 			for(uint uiHut = 0; uiHut < tempHutIndices.size(); uiHut++)
@@ -2671,6 +2696,7 @@ void CvEconomicAI::AssignHutsToExplorers()
 					aiHutIndices.push_back(tempHutIndices[uiHut]);
 				}
 			}
+#endif
 		}
 	}
 }

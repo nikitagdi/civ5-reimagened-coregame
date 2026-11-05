@@ -489,6 +489,13 @@ public:
 
 	bool CanMajorBullyGold(PlayerTypes ePlayer);
 	bool CanMajorBullyGold(PlayerTypes ePlayer, int iSpecifiedBullyMetric);
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+	// OPT-0011: the (major, minor) CanMajorBullyGold table of the bully-icon block in CvUnit::setXY / setDamage,
+	// index iMajor * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + iMinor - MAX_MAJOR_CIVS; false for dead majors.
+	static void FillBullyGoldIconTable(bool* abCanBully);
+	static void GetBullyGlobalMilitaryScores(int* aiGlobalMilitaryScore);
+	void GetCanMajorBullyGoldForAllMajors(const int* aiGlobalMilitaryScore, const int* aiPoliciesMod, const int* aiTraitMod, const bool* abMajorAlive, bool* abCanBully);
+#endif
 	CvString GetMajorBullyGoldDetails(PlayerTypes ePlayer);
 	bool CanMajorBullyUnit(PlayerTypes ePlayer);
 	bool CanMajorBullyUnit(PlayerTypes ePlayer, int iSpecifiedBullyMetric);

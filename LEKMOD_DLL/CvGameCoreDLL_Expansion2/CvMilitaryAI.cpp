@@ -348,6 +348,19 @@ void CvMilitaryAI::Reset()
 		m_paeLastTurnMilitaryStrength[iI] = NO_STRENGTH_VALUE;
 		m_paeLastTurnTargetValue[iI] = NO_TARGET_VALUE;
 	}
+#if defined(LEKMOD_HEADLESS_HYG_MILITARY_AI_LASTTURN_INIT)
+	// HYG-0005 / DS-0023: the four per-player arrays have MAX_CIV_PLAYERS entries, the loop above only runs over the
+	// number of military AI strategies, so the entries behind it kept heap garbage that Write serializes. Nothing reads
+	// them (UpdateThreats / UpdateWarStates stop at MAX_MAJOR_CIVS). They get 0, the value a zero-filled heap gave, so the
+	// canonical digest of a zero-heap run does not change while peers with a dirty heap now agree.
+	for(iI = m_pAIStrategies->GetNumMilitaryAIStrategies(); iI < MAX_CIV_PLAYERS; iI++)
+	{
+		m_paeLastTurnWarState[iI] = 0;
+		m_paeLastTurnMilitaryThreat[iI] = 0;
+		m_paeLastTurnMilitaryStrength[iI] = 0;
+		m_paeLastTurnTargetValue[iI] = 0;
+	}
+#endif
 }
 
 /// Serialization read
@@ -414,6 +427,50 @@ void CvMilitaryAI::Write(FDataStream& kStream)
 	kStream << ArrayWrapper<int>(MAX_CIV_PLAYERS, m_paeLastTurnTargetValue);
 }
 
+#if defined(LEKMOD_PORTABLE)
+/// The per-turn counts, at the end of CvPlayer's record (version 18; see CvMilitaryAI.h).
+void CvMilitaryAI::WriteTurnCounts(FDataStream& kStream) const
+{
+	kStream << m_iNumLandUnits;
+	kStream << m_iNumRangedLandUnits;
+	kStream << m_iNumMobileLandUnits;
+	kStream << m_iNumMeleeLandUnits;
+	kStream << m_iNumNavalUnits;
+	kStream << m_iNumLandUnitsInArmies;
+	kStream << m_iNumNavalUnitsInArmies;
+	kStream << m_iNumAirUnits;
+	kStream << m_iNumAntiAirUnits;
+	kStream << m_iBarbarianCampCount;
+	kStream << m_iVisibleBarbarianCount;
+	kStream << m_iRecommendedMilitarySize;
+	kStream << m_iMandatoryReserveSize;
+	kStream << (int)m_eLandDefenseState;
+	kStream << (int)m_eNavalDefenseState;
+}
+
+void CvMilitaryAI::ReadTurnCounts(FDataStream& kStream)
+{
+	kStream >> m_iNumLandUnits;
+	kStream >> m_iNumRangedLandUnits;
+	kStream >> m_iNumMobileLandUnits;
+	kStream >> m_iNumMeleeLandUnits;
+	kStream >> m_iNumNavalUnits;
+	kStream >> m_iNumLandUnitsInArmies;
+	kStream >> m_iNumNavalUnitsInArmies;
+	kStream >> m_iNumAirUnits;
+	kStream >> m_iNumAntiAirUnits;
+	kStream >> m_iBarbarianCampCount;
+	kStream >> m_iVisibleBarbarianCount;
+	kStream >> m_iRecommendedMilitarySize;
+	kStream >> m_iMandatoryReserveSize;
+	int iTemp;
+	kStream >> iTemp;
+	m_eLandDefenseState = (DefenseState)iTemp;
+	kStream >> iTemp;
+	m_eNavalDefenseState = (DefenseState)iTemp;
+}
+#endif
+
 /// Returns the Player object the Strategies are associated with
 CvPlayer* CvMilitaryAI::GetPlayer()
 {
@@ -470,6 +527,9 @@ void CvMilitaryAI::SetTurnStrategyAdopted(MilitaryAIStrategyTypes eStrategy, int
 /// Process through all the military activities for a player's turn
 void CvMilitaryAI::DoTurn()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_MILITARY);
+#endif
 	AI_PERF_FORMAT("AI-perf.csv", ("MilitaryAI DoTurn, Turn %03d, %s", GC.getGame().getElapsedGameTurns(), m_pPlayer->getCivilizationShortDescription()) );
 
 	ScanForBarbarians();
@@ -1242,7 +1302,11 @@ void CvMilitaryAI::ShouldAttackBySea(PlayerTypes eEnemy, CvMilitaryTarget& targe
 /// Come up with a target priority looking at distance, strength, approaches (high score = more desirable target)
 int CvMilitaryAI::ScoreTarget(CvMilitaryTarget& target, AIOperationTypes eAIOperationType)
 {
+#if defined(LEKMOD_PORTABLE)	// the score relies on 32-bit wraparound, as with MSVC unsigned long
+	unsigned int uliRtnValue = 1;  // Start with a high base number since divide into it later
+#else
 	unsigned long int uliRtnValue = 1;  // Start with a high base number since divide into it later
+#endif
 
 	// Take into account distance to target (and use higher multipliers for land paths)
 	if(!target.m_bAttackBySea)
@@ -1372,7 +1436,11 @@ int CvMilitaryAI::ScoreTarget(CvMilitaryTarget& target, AIOperationTypes eAIOper
 	uliRtnValue /= 1000;
 
 	// Economic value of target
+#if defined(LEKMOD_PORTABLE)
+	unsigned int iEconomicValue = 1 + (target.m_pTargetCity->getPopulation() / 3);
+#else
 	unsigned long int iEconomicValue = 1 + (target.m_pTargetCity->getPopulation() / 3);
+#endif
 	// TODO: unhardcode this
 	// filter out all but the most productive
 	iEconomicValue += target.m_pTargetCity->getYieldRateTimes100(YIELD_FOOD, false) / 10;

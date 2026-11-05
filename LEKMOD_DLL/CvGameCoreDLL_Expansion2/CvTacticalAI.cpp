@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	ï¿½ 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -234,6 +234,9 @@ FDataStream& operator>>(FDataStream& loadFrom, CvTemporaryZone& writeTo)
 CvTacticalAI::CvTacticalAI(void)
 {
 	m_iCurrentZoneIndex = -1;
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	m_bHeadlessTrailerFollows = false;
+#endif
 }
 
 /// Destructor
@@ -341,6 +344,12 @@ void CvTacticalAI::Read(FDataStream& kStream)
 
 	int phony = 0;
 	kStream >> phony;
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	// FIX-0019 (DS-0032): the magic announces the save trailer that carries the postures (read by
+	// CvGame::ReadSupportingClassData). Without it (save of another DLL) they start empty, as in a fresh golden process.
+	m_bHeadlessTrailerFollows = ((uint)phony == HeadlessSaveTrailer::MAGIC);
+	m_Postures.clear();
+#endif
 	kStream >> m_TempZones;
 }
 
@@ -350,10 +359,183 @@ void CvTacticalAI::Write(FDataStream& kStream)
 	// Current version number
 	uint uiVersion = 1;
 	kStream << uiVersion;
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	int phony = (int)HeadlessSaveTrailer::MAGIC;	// FIX-0019: announces the save trailer; golden readers discard this int
+#else
 	int phony = 0;
+#endif
 	kStream << phony;
 	kStream << m_TempZones;
 }
+
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+/// FIX-0019: the postures FindPosture can return on the next turn: the first entry of each (owner, water, city) key, and
+/// only when it is not NONE (FindPosture returns NONE for a missing key). Same lookup results, fewer bytes.
+void CvTacticalAI::HeadlessGetSavedPostures(std::vector<CvTacticalPosture>& akOut)
+{
+	akOut.clear();
+	for(unsigned int iI = 0; iI < m_Postures.size(); iI++)
+	{
+		CvTacticalPosture kPosture = m_Postures[iI];
+		if(kPosture.GetPosture() == AI_TACTICAL_POSTURE_NONE)
+		{
+			continue;
+		}
+		bool bShadowed = false;
+		for(unsigned int iJ = 0; iJ < iI && !bShadowed; iJ++)
+		{
+			CvTacticalPosture kEarlier = m_Postures[iJ];
+			bShadowed = kEarlier.GetPlayer() == kPosture.GetPlayer() && kEarlier.IsWater() == kPosture.IsWater() && kEarlier.GetCityID() == kPosture.GetCityID();
+		}
+		if(!bShadowed)
+		{
+			akOut.push_back(kPosture);
+		}
+	}
+}
+
+/// FIX-0019: postures restored from the save trailer
+void CvTacticalAI::HeadlessSetSavedPostures(const std::vector<CvTacticalPosture>& akPostures)
+{
+	m_Postures.clear();
+	for(size_t i = 0; i < akPostures.size(); i++)
+	{
+		m_Postures.push_back(akPostures[i]);
+	}
+}
+
+/// FIX-0019: write the save trailer (see CvTacticalAI.h). Must stay the last bytes of WriteSupportingClassData.
+void HeadlessSaveTrailer::Write(FDataStream& kStream)
+{
+	std::vector<CvTacticalPosture> aakPostures[MAX_PLAYERS];
+	uint uiPlayers = 0;
+	uint uiBytes = 4;
+	for(int iI = 0; iI < MAX_PLAYERS; iI++)
+	{
+		GET_PLAYER((PlayerTypes)iI).GetTacticalAI()->HeadlessGetSavedPostures(aakPostures[iI]);
+		CvAssertMsg(aakPostures[iI].size() <= 0xFFFF, "FIX-0019: too many postures for the trailer record");
+		if(!aakPostures[iI].empty())
+		{
+			uiPlayers++;
+			uiBytes += 4 + 8 * (uint)aakPostures[iI].size();
+		}
+	}
+
+	const uint uiRecords = 1;
+	kStream << MAGIC;
+	kStream << VERSION;
+	kStream << uiRecords;
+
+	kStream << TAG_TACTICAL_POSTURES;
+	kStream << uiBytes;
+	kStream << uiPlayers;
+	for(int iI = 0; iI < MAX_PLAYERS; iI++)
+	{
+		const std::vector<CvTacticalPosture>& akPostures = aakPostures[iI];
+		if(akPostures.empty())
+		{
+			continue;
+		}
+		const short sPlayer = (short)iI;
+		const unsigned short usCount = (unsigned short)akPostures.size();
+		kStream << sPlayer;
+		kStream << usCount;
+		for(unsigned short i = 0; i < usCount; i++)
+		{
+			CvTacticalPosture kPosture = akPostures[i];
+			const int iCityID = kPosture.GetCityID();
+			const short sOwnerWater = (short)kPosture.HeadlessGetPlayerWaterInfo();
+			const short sPosture = (short)kPosture.GetPosture();
+			kStream << iCityID;
+			kStream << sOwnerWater;
+			kStream << sPosture;
+		}
+	}
+}
+
+/// FIX-0019: FDataStream::Skip is a no-op in the exe's inflating body stream, so unknown records are read and dropped.
+static void HeadlessSaveTrailerSkip(FDataStream& kStream, uint uiBytes)
+{
+	char acBuffer[256];
+	while(uiBytes > 0)
+	{
+		const uint uiChunk = uiBytes < sizeof(acBuffer) ? uiBytes : (uint)sizeof(acBuffer);
+		kStream.ReadIt(uiChunk, acBuffer);
+		uiBytes -= uiChunk;
+	}
+}
+
+/// FIX-0019: read the save trailer, but only when CvTacticalAI::Read saw its marker: the end of the exe's body stream
+/// cannot be detected, and a read past it throws.
+void HeadlessSaveTrailer::Read(FDataStream& kStream)
+{
+	bool bTrailer = false;
+	for(int iI = 0; iI < MAX_PLAYERS && !bTrailer; iI++)
+	{
+		bTrailer = GET_PLAYER((PlayerTypes)iI).GetTacticalAI()->HeadlessTrailerFollows();
+	}
+	if(!bTrailer)
+	{
+		return;
+	}
+
+	uint uiMagic = 0;
+	kStream >> uiMagic;
+	if(uiMagic != MAGIC)
+	{
+		CvAssertMsg(false, "FIX-0019: save trailer announced, but its magic is missing");
+		return;
+	}
+	uint uiVersion = 0;
+	uint uiRecords = 0;
+	kStream >> uiVersion;	// the record framing is fixed; the version is informative
+	kStream >> uiRecords;
+	for(uint uiRecord = 0; uiRecord < uiRecords; uiRecord++)
+	{
+		uint uiTag = 0;
+		uint uiBytes = 0;
+		kStream >> uiTag;
+		kStream >> uiBytes;
+		if(uiTag != TAG_TACTICAL_POSTURES || uiBytes < 4)
+		{
+			HeadlessSaveTrailerSkip(kStream, uiBytes);
+			continue;
+		}
+		uint uiUsed = 4;
+		uint uiPlayers = 0;
+		kStream >> uiPlayers;
+		for(uint uiP = 0; uiP < uiPlayers && uiUsed + 4 <= uiBytes; uiP++)
+		{
+			short sPlayer = 0;
+			unsigned short usCount = 0;
+			kStream >> sPlayer;
+			kStream >> usCount;
+			uiUsed += 4;
+			std::vector<CvTacticalPosture> akPostures;
+			for(unsigned short i = 0; i < usCount && uiUsed + 8 <= uiBytes; i++)
+			{
+				int iCityID = -1;
+				short sOwnerWater = 0;
+				short sPosture = 0;
+				kStream >> iCityID;
+				kStream >> sOwnerWater;
+				kStream >> sPosture;
+				uiUsed += 8;
+				akPostures.push_back(CvTacticalPosture::HeadlessFromSaved(sOwnerWater, iCityID, (AITacticalPosture)sPosture));
+			}
+			if(sPlayer >= 0 && sPlayer < MAX_PLAYERS)
+			{
+				GET_PLAYER((PlayerTypes)sPlayer).GetTacticalAI()->HeadlessSetSavedPostures(akPostures);
+				HEADLESS_FIX_TRIGGER(19);
+			}
+		}
+		if(uiUsed < uiBytes)
+		{
+			HeadlessSaveTrailerSkip(kStream, uiBytes - uiUsed);
+		}
+	}
+}
+#endif
 
 /// Mark all the units that will be under tactical AI control this turn
 void CvTacticalAI::CommandeerUnits()
@@ -423,6 +605,9 @@ void CvTacticalAI::DoTurn()
 /// Update the AI for units
 void CvTacticalAI::Update()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_TACTICAL);
+#endif
 	AI_PERF_FORMAT("AI-perf.csv", ("Tactical AI, Turn %03d, %s", GC.getGame().getElapsedGameTurns(), m_pPlayer->getCivilizationShortDescription()) );
 
 	FindTacticalTargets();
@@ -5823,6 +6008,7 @@ void CvTacticalAI::ExecuteFleetMoveToTarget(CvArmyAI* pArmy, CvPlot* pTarget)
 /// Mark units that can damage key items as priority targets
 void CvTacticalAI::IdentifyPriorityTargets()
 {
+	HEADLESS_PATH_QUERY_SCOPE();	// OPT-0090: only target types change below (AI data, not read by path searches)
 	CvCity* pLoopCity;
 	int iCityLoop;
 	FFastVector<CvTacticalTarget> possibleAttackers;
@@ -8853,6 +9039,7 @@ bool CvTacticalAI::FindUnitsForThisMove(TacticalAIMoveTypes eMove, CvPlot* pTarg
 /// Fills m_CurrentMoveUnits with all units within X turns of a target (returns TRUE if 1 or more found)
 bool CvTacticalAI::FindUnitsWithinStrikingDistance(CvPlot* pTarget, int iNumTurnsAway, int iPreferredDamageLevel, bool bNoRangedUnits, bool bNavalOnly, bool bMustMoveThrough, bool bIncludeBlockedUnits, bool bWillPillage, bool bTargetUndefended)
 {
+	HEADLESS_PATH_QUERY_SCOPE();	// OPT-0090: pure queries (m_CurrentMoveUnits is AI data)
 	list<int>::iterator it;
 	UnitHandle pLoopUnit;
 
@@ -9056,6 +9243,7 @@ bool CvTacticalAI::FindParatroopersWithinStrikingDistance(CvPlot* pTarget)
 /// Fills m_CurrentMoveUnits with all units within X turns of a target (returns TRUE if 1 or more found)
 bool CvTacticalAI::FindClosestUnit(CvPlot* pTarget, int iNumTurnsAway, bool bMustHaveHalfHP, bool bMustBeRangedUnit, int iRangeRequired, bool bNeedsIgnoreLOS, bool bMustBeMeleeUnit, bool bIgnoreUnits, CvPlot* pRangedAttackTarget)
 {
+	HEADLESS_PATH_QUERY_SCOPE();	// OPT-0090: pure queries (m_CurrentMoveUnits is AI data)
 	list<int>::iterator it;
 	UnitHandle pLoopUnit;
 
@@ -9134,7 +9322,12 @@ bool CvTacticalAI::FindClosestUnit(CvPlot* pTarget, int iNumTurnsAway, bool bMus
 
 			if(bValidUnit)
 			{
+#if defined(LEKMOD_HEADLESS_OPT_ASTAR_UNREACHABLE_STOP)
+				// OPT-0090: iTurns is only used when it is <= iNumTurnsAway
+				int iTurns = HeadlessTurnsToReachTargetAtMost(pLoopUnit, pTarget, false /*bReusePaths*/, bIgnoreUnits, (iNumTurnsAway==0), iNumTurnsAway);
+#else
 				int iTurns = TurnsToReachTarget(pLoopUnit, pTarget, false /*bReusePaths*/, bIgnoreUnits, (iNumTurnsAway==0));
+#endif
 				if(iTurns <= iNumTurnsAway)
 				{
 					CvTacticalUnit unit;
@@ -9158,12 +9351,46 @@ bool CvTacticalAI::FindClosestUnit(CvPlot* pTarget, int iNumTurnsAway, bool bMus
 /// Fills m_CurrentMoveUnits with all units in operation that can get to target (returns TRUE if 1 or more found)
 bool CvTacticalAI::FindClosestOperationUnit(CvPlot* pTarget, bool bSafeForRanged, bool bMustBeRangedUnit)
 {
+	HEADLESS_PATH_QUERY_SCOPE();	// OPT-0090: pure queries (m_CurrentMoveUnits is AI data)
 	FStaticVector<CvOperationUnit, SAFE_ESTIMATE_NUM_MULTIUNITFORMATION_ENTRIES, true, c_eCiv5GameplayDLL, 0>::iterator it;
 	UnitHandle pLoopUnit;
 
 	bool rtnValue = false;
 	m_CurrentMoveUnits.clear();
 
+#if defined(LEKMOD_HEADLESS_OPT_PAR_CLOSEST_OP_UNIT)
+	// OPT-0080: the same validity tests on the same units in the same order (const getters), then all TurnsToReachTarget
+	// searches as one batch (HeadlessParTurnsToReachTarget: worker threads, per-thread finder clones), merged below in unit
+	// order, so m_CurrentMoveUnits gets the same elements in the same order before the same stable_sort.
+	FStaticVector<CvHeadlessParTurnsItem, 64, true, c_eCiv5GameplayDLL, 0> aHeadlessItems;
+#ifdef AUI_ITERATOR_POSTFIX_INCREMENT_OPTIMIZATIONS
+	for (it = m_OperationUnits.begin(); it != m_OperationUnits.end(); ++it)
+#else
+	for(it = m_OperationUnits.begin(); it != m_OperationUnits.end(); it++)
+#endif
+	{
+		CvUnit* pHeadlessUnit = m_pPlayer->getUnit(it->GetUnitID());
+		if(pHeadlessUnit == NULL || pHeadlessUnit->hasMoved())
+			continue;
+		if(!bSafeForRanged && pHeadlessUnit->IsCanAttackRanged())
+			continue;
+		if(bMustBeRangedUnit && !pHeadlessUnit->IsCanAttackRanged())
+			continue;
+		CvHeadlessParTurnsItem kItem;
+		kItem.pUnit = pHeadlessUnit;
+		kItem.pTarget = pTarget;
+		kItem.iTurns = MAX_INT;
+		aHeadlessItems.push_back(kItem);
+	}
+	if(aHeadlessItems.size() > 0)
+		HeadlessParTurnsToReachTarget(&aHeadlessItems[0], (int)aHeadlessItems.size());
+	for(uint uiHeadless = 0; uiHeadless < aHeadlessItems.size(); ++uiHeadless)
+	{
+		pLoopUnit = aHeadlessItems[uiHeadless].pUnit;
+		{
+			{
+				int iTurns = aHeadlessItems[uiHeadless].iTurns;
+#else
 	// Loop through all units available to operation
 #ifdef AUI_ITERATOR_POSTFIX_INCREMENT_OPTIMIZATIONS
 	for (it = m_OperationUnits.begin(); it != m_OperationUnits.end(); ++it)
@@ -9194,6 +9421,7 @@ bool CvTacticalAI::FindClosestOperationUnit(CvPlot* pTarget, bool bSafeForRanged
 			if(bValidUnit)
 			{
 				int iTurns = TurnsToReachTarget(pLoopUnit, pTarget, false /*bReusePaths*/, false /*bIgnoreUnits*/);
+#endif
 
 				if(iTurns != MAX_INT)
 				{
@@ -9996,6 +10224,7 @@ CvPlot* CvTacticalAI::FindBarbarianGankTradeRouteTarget(UnitHandle pUnit)
 /// Find a multi-turn target for a land unit to wander towards
 CvPlot* CvTacticalAI::FindNearbyTarget(UnitHandle pUnit, int iRange, AITacticalTargetType eType, CvUnit* pNoLikeUnit)
 {
+	HEADLESS_PATH_QUERY_SCOPE();	// OPT-0090: pure queries
 	CvPlot* pBestMovePlot = NULL;
 	int iBestValue;
 	int iValue;

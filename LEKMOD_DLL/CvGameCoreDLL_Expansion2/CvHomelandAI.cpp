@@ -146,6 +146,9 @@ void CvHomelandAI::DoTurn()
 /// Update the AI for units
 void CvHomelandAI::Update()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_HOMELAND);
+#endif
 	AI_PERF_FORMAT("AI-perf.csv", ("Homeland AI, Turn %03d, %s", GC.getGame().getElapsedGameTurns(), m_pPlayer->getCivilizationShortDescription()));
 
 	// Make sure we have a unit to handle
@@ -5614,6 +5617,7 @@ CvPlot* CvHomelandAI::FindPatrolTarget(CvUnit* pUnit)
 /// Get the closest 
 bool CvHomelandAI::GetClosestUnitByTurnsToTarget(CvHomelandAI::MoveUnitsArray &kMoveUnits, CvPlot* pTarget, int iMaxTurns, CvUnit** ppClosestUnit, int* piClosestTurns)
 {
+	HEADLESS_PATH_QUERY_SCOPE();	// OPT-0090: pure queries (kMoveUnits is AI data)
 	CvUnit* pBestUnit = NULL;
 	int iMinTurns = MAX_INT;
 	MoveUnitsArray::iterator it;

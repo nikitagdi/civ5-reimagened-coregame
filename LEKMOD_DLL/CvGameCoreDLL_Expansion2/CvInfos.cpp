@@ -2189,12 +2189,14 @@ ReligionTypes CvCivilizationInfo::GetReligion() const
 	return NO_RELIGION;
 }
 //------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 int CvCivilizationInfo::getCivilizationBuildings(int i) const
 {
 	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
 	CvAssertMsg(i > -1, "Index out of bounds");
 	return m_piCivilizationBuildings ? m_piCivilizationBuildings[i] : -1;
 }
+#endif
 //------------------------------------------------------------------------------
 int CvCivilizationInfo::getCivilizationUnits(int i) const
 {
@@ -4776,7 +4778,7 @@ int CvResourceInfo::getUnitCombatProductionCostModifiersLocal(UnitCombatTypes eU
 	int iUnitEra = (int)eUnitEra;
 	int iMod = 0;
 
-	std::map<int, std::vector<ProductionCostModifiers>>::const_iterator itMap = m_piiiUnitCombatProductionCostModifiersLocal.find(iUnitCombat);
+	std::map<int, std::vector<ProductionCostModifiers> >::const_iterator itMap = m_piiiUnitCombatProductionCostModifiersLocal.find(iUnitCombat);
 	if (itMap != m_piiiUnitCombatProductionCostModifiersLocal.end()) // find returns the iterator to map::end if the key iUnitCombat is not present in the map
 	{
 		for (std::vector<ProductionCostModifiers>::const_iterator itVector = itMap->second.begin(); itVector != itMap->second.end(); ++itVector)
@@ -4813,7 +4815,7 @@ std::vector<ProductionCostModifiers> CvResourceInfo::getUnitCombatProductionCost
 
 	int iUnitCombat = (int)eUnitCombat;
 
-	std::map<int, std::vector<ProductionCostModifiers>>::const_iterator it = m_piiiUnitCombatProductionCostModifiersLocal.find(iUnitCombat);
+	std::map<int, std::vector<ProductionCostModifiers> >::const_iterator it = m_piiiUnitCombatProductionCostModifiersLocal.find(iUnitCombat);
 	if (it != m_piiiUnitCombatProductionCostModifiersLocal.end()) // find returns the iterator to map::end if the key iUnitCombat is not present in the map
 	{
 		return it->second;
@@ -5055,7 +5057,7 @@ bool CvResourceInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 		pResults->Reset();
 
 		//Trim extra memory off container since this is mostly read-only.
-		std::map<int, std::vector<ProductionCostModifiers>>(m_piiiUnitCombatProductionCostModifiersLocal).swap(m_piiiUnitCombatProductionCostModifiersLocal);
+		std::map<int, std::vector<ProductionCostModifiers> >(m_piiiUnitCombatProductionCostModifiersLocal).swap(m_piiiUnitCombatProductionCostModifiersLocal);
 	}
 
 	//Resource_BuildingProductionCostModifiersLocal
@@ -6244,6 +6246,28 @@ bool CvWorldInfo::operator!=(const CvWorldInfo& rhs) const
 	return !(*this == rhs);
 }
 
+#if defined(LEKMOD_HEADLESS_FIX_0016)
+// FIX-0016 / DS-0029: writeTo/readFrom do not carry m_iEstimatedNumCities (the BNW column), so after a load or a
+// pregame sync the value is whatever this CvWorldInfo held before (0 in a fresh process): GetWarmongerOffset then
+// returns 0 and city conquests give no warmonger penalty. Re-read it from the Worlds row of the loaded ID. The value
+// is a pure function of the world size (CreateCustomWorldSize keeps the template's ID and value). No save format change.
+static void HeadlessFix16RestoreEstimatedNumCities(int iWorldID, int& iEstimatedNumCities)
+{
+	if(iWorldID < 0)
+		return;
+	Database::SingleResult kResult;
+	if(DB.SelectAt(kResult, "Worlds", iWorldID))
+	{
+		const int iFromDatabase = kResult.GetInt("EstimatedNumCities");
+		if(iFromDatabase != iEstimatedNumCities)
+		{
+			HEADLESS_FIX_TRIGGER(16);
+			iEstimatedNumCities = iFromDatabase;
+		}
+	}
+}
+#endif
+
 void CvWorldInfo::readFrom(FDataStream& loadFrom)
 {
 	int iVersion;
@@ -6278,6 +6302,9 @@ void CvWorldInfo::readFrom(FDataStream& loadFrom)
 	{
 		m_iNumCitiesTechCostMod = 0;
 	}
+#if defined(LEKMOD_HEADLESS_FIX_0016)
+	HeadlessFix16RestoreEstimatedNumCities(GetID(), m_iEstimatedNumCities);
+#endif
 }
 
 // A special reader for version 0 (pre-versioning)
@@ -6301,6 +6328,9 @@ void CvWorldInfo::readFromVersion0(FDataStream& loadFrom)
 	loadFrom >> m_iAdvancedStartPointsMod;
 	loadFrom >> m_iNumCitiesUnhappinessPercent;
 	loadFrom >> m_iNumCitiesPolicyCostMod;
+#if defined(LEKMOD_HEADLESS_FIX_0016)
+	HeadlessFix16RestoreEstimatedNumCities(GetID(), m_iEstimatedNumCities);
+#endif
 }
 
 void CvWorldInfo::writeTo(FDataStream& saveTo) const

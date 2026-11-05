@@ -240,6 +240,23 @@ CvTraitEntry::CvTraitEntry() :
 	m_ppiUnimprovedFeatureYieldChanges(NULL)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK) && !defined(AUI_WARNING_FIXES)
+	// HYG-0001: these three pointers are only NULL-initialised under AUI_WARNING_FIXES (off in v34.15); the destructor
+	// below now frees them, so an entry that was never cached must not hold garbage pointers.
+	m_piMovesChangeUnitCombats = NULL;
+	m_piMaintenanceModifierUnitCombats = NULL;
+#if defined(LEKMOD_TRAIT_BUILDING_CLASS_PRODUCTION_MODIFIERS)
+	m_paiBuildingClassProductionModifiers = NULL;
+#endif
+#endif
+#if defined(LEKMOD_HEADLESS_HYG_TRAIT_COMBAT_IMPROVEMENT_INIT) && !defined(AUI_WARNING_FIXES)
+	// HYG-0007 / DS-0025: the initialiser of m_eCombatBonusImprovement sits in the AUI_WARNING_FIXES block of the
+	// initialiser list (off in v34.15) and CacheResults only assigns it for rows with CombatBonusImprovement text, so every
+	// other trait entry held heap garbage; InitPlayerTraits copies it into CvPlayerTraits, which is serialized. It is only
+	// read behind GetNearbyImprovementCombatBonus() != 0, i.e. for the one trait that also sets it. 0 is the value a
+	// zero-filled heap gave (canonical digest unchanged); NO_IMPROVEMENT would be the tidier value but changes the digest.
+	m_eCombatBonusImprovement = (ImprovementTypes)0;
+#endif
 }
 
 /// Destructor
@@ -297,6 +314,27 @@ CvTraitEntry::~CvTraitEntry()
 	SAFE_DELETE_ARRAY(m_paiYieldChange);
 	SAFE_DELETE_ARRAY(m_paiYieldChangeStrategicResources);
 	SAFE_DELETE_ARRAY(m_paiYieldChangeLuxuryResources); // NQMP GJS - New Netherlands UA
+	SAFE_DELETE_ARRAY(m_paiYieldChangeNaturalWonder);
+	SAFE_DELETE_ARRAY(m_paiYieldChangePerTradePartner);
+	SAFE_DELETE_ARRAY(m_paiYieldChangeIncomingTradeRoute);
+	SAFE_DELETE_ARRAY(m_paiYieldModifier);
+	SAFE_DELETE_ARRAY(m_piStrategicResourceQuantityModifier);
+	SAFE_DELETE_ARRAY(m_piResourceQuantityModifiers);
+	SAFE_DELETE_ARRAY(m_piMovesChangeUnitCombats);
+	SAFE_DELETE_ARRAY(m_piMaintenanceModifierUnitCombats);
+#if defined(LEKMOD_TRAIT_BUILDING_CLASS_PRODUCTION_MODIFIERS)
+	SAFE_DELETE_ARRAY(m_paiBuildingClassProductionModifiers);
+#endif
+#endif
+#if defined(LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK) && !defined(AUI_WARNING_FIXES)
+	// HYG-0001: without AUI_WARNING_FIXES (the v34.15 build) none of the 1D arrays below were freed: one leak per trait
+	// entry on every database reload. Same list as the AUI_WARNING_FIXES block above.
+	// (With AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION the TRAITIFY/LEKMOD 2D arrays would additionally need
+	// row counts; that switch is off in v34.15, where those arrays are single blocks freed by the #else branch above.)
+	SAFE_DELETE_ARRAY(m_paiExtraYieldThreshold);
+	SAFE_DELETE_ARRAY(m_paiYieldChange);
+	SAFE_DELETE_ARRAY(m_paiYieldChangeStrategicResources);
+	SAFE_DELETE_ARRAY(m_paiYieldChangeLuxuryResources);
 	SAFE_DELETE_ARRAY(m_paiYieldChangeNaturalWonder);
 	SAFE_DELETE_ARRAY(m_paiYieldChangePerTradePartner);
 	SAFE_DELETE_ARRAY(m_paiYieldChangeIncomingTradeRoute);
@@ -1288,7 +1326,13 @@ int CvTraitEntry::GetPrereqTech() const
 /// Accessor:: Does the civ get free promotions?
 bool CvTraitEntry::IsFreePromotionUnitCombat(const int promotionID, const int unitCombatID) const
 {
+#ifdef LEKMOD_HEADLESS_HYG_MULTIMAP_FIRST_EQUAL
+	// HYG-0011: the loop below needs the first element of the key. lower_bound is that element (MSVC's find returns
+	// it too); libc++ 22's find may return any equal element and the loop then skips entries.
+	std::multimap<int, int>::const_iterator it = m_FreePromotionUnitCombats.lower_bound(promotionID);
+#else
 	std::multimap<int, int>::const_iterator it = m_FreePromotionUnitCombats.find(promotionID);
+#endif
 	if(it != m_FreePromotionUnitCombats.end())
 	{
 		// get an iterator to the element that is one past the last element associated with key
@@ -1380,7 +1424,7 @@ int CvTraitEntry::GetBuildTimeOverride(BuildTypes eBuild, ResourceClassTypes eRe
 	int iBestTime = -1;
 	bool bFoundGenericMatch = false;
 
-	typedef std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>>::const_iterator it_type;
+	typedef std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> >::const_iterator it_type;
 	std::pair<it_type, it_type> range = m_BuildTimeOverrides.equal_range(eBuild);
 
 	// First pass: look for exact resource class match
@@ -1849,7 +1893,11 @@ bool CvTraitEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& 
 		pResults->Reset();
 	}
 	{
+#if defined(LEKMOD_HEADLESS_HYG_TRAIT_DTOR_LEAK)
+		// HYG-0001: m_ppiCityTechYieldChange was already allocated above (same size, all default); allocating it again leaked the first block
+#else
 		kUtility.Initialize2DArray(m_ppiCityTechYieldChange, "Technologies", "Yields");
+#endif
 		std::string strKey("Trait_CityTechYieldChange");
 		Database::Results* pResults = kUtility.GetResults(strKey);
 		if (pResults == NULL)
@@ -2596,7 +2644,7 @@ inner join BuildingClasses on BuildingClasses.Type = BuildingClassType inner joi
 		}
 
 		//Trim extra memory off container since this is mostly read-only.
-		std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>>(m_BuildTimeOverrides).swap(m_BuildTimeOverrides);
+		std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> >(m_BuildTimeOverrides).swap(m_BuildTimeOverrides);
 	}
 #endif
 
@@ -3211,8 +3259,8 @@ void CvPlayerTraits::InitPlayerTraits()
 	}
 
 	// Copy all build time overrides in the multimap
-	typedef std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>>::const_iterator it_type;
-	const std::multimap<BuildTypes, std::pair<int, ResourceClassTypes>>& buildTimeOverrides = trait->GetBuildTimeOverridesMultimap();
+	typedef std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> >::const_iterator it_type;
+	const std::multimap<BuildTypes, std::pair<int, ResourceClassTypes> >& buildTimeOverrides = trait->GetBuildTimeOverridesMultimap();
 	for (it_type it = buildTimeOverrides.begin(); it != buildTimeOverrides.end(); ++it)
 	{
 		m_BuildTimeOverrides.insert(*it);

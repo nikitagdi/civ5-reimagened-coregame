@@ -538,6 +538,20 @@ public:
 	{
 		return m_ePosture;
 	};
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	// FIX-0019 (save trailer): exact round trip of the packed owner/water value ((NO_PLAYER, water) packs to -1, which
+	// GetPlayer() reports as player 0).
+	int HeadlessGetPlayerWaterInfo() const
+	{
+		return m_iPlayerWaterInfo;
+	}
+	static CvTacticalPosture HeadlessFromSaved(int iPlayerWaterInfo, int iCityID, AITacticalPosture ePosture)
+	{
+		CvTacticalPosture kPosture(NO_PLAYER, false, iCityID, ePosture);
+		kPosture.m_iPlayerWaterInfo = iPlayerWaterInfo;
+		return kPosture;
+	}
+#endif
 
 private:
 	int m_iPlayerWaterInfo;
@@ -803,6 +817,15 @@ public:
 	// Serialization routines
 	void Read(FDataStream& kStream);
 	void Write(FDataStream& kStream);
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	// FIX-0019 (DS-0032): last turn's zone postures travel in the save trailer (HeadlessSaveTrailer below).
+	bool HeadlessTrailerFollows() const
+	{
+		return m_bHeadlessTrailerFollows;
+	}
+	void HeadlessGetSavedPostures(std::vector<CvTacticalPosture>& akOut);
+	void HeadlessSetSavedPostures(const std::vector<CvTacticalPosture>& akPostures);
+#endif
 
 	// Public turn update routines
 	void CommandeerUnits();
@@ -1043,11 +1066,33 @@ private:
 	FStaticVector<CvOperationUnit, SAFE_ESTIMATE_NUM_MULTIUNITFORMATION_ENTRIES, true, c_eCiv5GameplayDLL, 0> m_ParatroopersToMove;
 
 	int m_CachedInfoTypes[eNUM_TACTICAL_INFOTYPES];
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+	bool m_bHeadlessTrailerFollows;		// the save being read carries the trailer (Read found the marker in the phony int)
+#endif
 };
 
 namespace TacticalAIHelpers
 {
 bool CvBlockingUnitDistanceSort(CvBlockingUnit obj1, CvBlockingUnit obj2);
 }
+
+#if defined(LEKMOD_HEADLESS_FIX_0019)
+// FIX-0019: optional trailer at the very end of the save body, written after the supporting class data.
+//   u32 magic, u32 container version, u32 record count, then per record: u32 tag, u32 payload bytes, payload.
+//   A reader skips a record with an unknown tag by its length; a later fix adds a record, not a new container.
+// The exe's body stream (inflating, exe vtable 0xa77708) cannot report its end: AtEnd() asks the compressed file stream and
+// GetSizeLeft() is 0x7fffffff - position; a read past the end throws. So the trailer is announced up front:
+// CvTacticalAI::Write stores the magic in its "phony" int, which every reader (golden v34.15 included) reads and
+// discards. An old save has 0 there and no trailer; an old DLL never reads the trailer, and the exe reads nothing after
+// ReadSupportingClassData, so new saves still load in old DLLs.
+namespace HeadlessSaveTrailer
+{
+	const uint MAGIC = 0x52544B4C;					// "LKTR"
+	const uint VERSION = 1;
+	const uint TAG_TACTICAL_POSTURES = 0x534F5054;	// "TPOS": u32 players, per player {i16 player, u16 n, n x {i32 city, i16 owner/water, i16 posture}}
+	void Write(FDataStream& kStream);
+	void Read(FDataStream& kStream);
+}
+#endif
 
 #endif //CIV5_TACTICAL_AI_H

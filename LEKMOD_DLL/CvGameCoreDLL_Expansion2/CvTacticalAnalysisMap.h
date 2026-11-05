@@ -615,6 +615,14 @@ public:
 
 	void Init(int iNumPlots);
 	void RefreshDataForNextPlayer(CvPlayer* pPlayer);
+#if defined(LEKMOD_HEADLESS_FIX_0015)
+	// FIX-0015 / DS-0027: rebuild for pPlayer from the current state, whoever and whenever it was built for last.
+	void HeadlessRebuildForPlayer(CvPlayer* pPlayer)
+	{
+		m_iTurnBuilt = -1;
+		RefreshDataForNextPlayer(pPlayer);
+	}
+#endif
 	bool IsBuilt() const
 	{
 		return m_bIsBuilt;

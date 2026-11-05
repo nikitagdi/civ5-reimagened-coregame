@@ -646,15 +646,98 @@ static double citystrategyround(double x)
 	return (x >= 0) ? floor(x + .5) : ceil(x - .5);
 };
 
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+extern unsigned int g_uiHeadlessLuaListenerEpoch;	// Lua/CvLuaSupport.cpp
+extern int g_iHeadlessLuaHookDepth;
+namespace
+{
+// OPT-0042: IsYieldDeficient(e) of one city strategy AI is a pure function of game state (the owner's plot list, which plots
+// the city works, CvPlot::calculateYield of those plots, a global define): no RNG, no Lua, no writes. Inside the scopes that
+// open the memo nothing writes that state, except Lua listeners of a GameEvents hook (CanBuyPlot's CityCanBuyPlot), which
+// move g_uiHeadlessLuaListenerEpoch and so clear the memo; inside a nested hook call (a listener calling back into the DLL)
+// the memo is not used.
+struct HeadlessDeficientMemo
+{
+	const CvCityStrategyAI* m_pOwner;
+	int m_iDepth;
+	unsigned int m_uiLuaEpoch;
+	int m_iLuaHookDepth;
+	signed char m_acValue[NUM_YIELD_TYPES];	// -1 unknown, else the bool
+};
+HeadlessDeficientMemo s_kHeadlessDeficientMemo = { NULL, 0, 0, 0 };
+
+void HeadlessDeficientMemoClear()
+{
+	for(int i = 0; i < NUM_YIELD_TYPES; i++)
+		s_kHeadlessDeficientMemo.m_acValue[i] = -1;
+	s_kHeadlessDeficientMemo.m_uiLuaEpoch = g_uiHeadlessLuaListenerEpoch;
+}
+
+// -2: no memo for this call; -1: unknown (store the result); 0/1: memoised value
+int HeadlessDeficientMemoLookup(const CvCityStrategyAI* pAI, YieldTypes eYield)
+{
+	HeadlessDeficientMemo& kMemo = s_kHeadlessDeficientMemo;
+	if(kMemo.m_iDepth <= 0 || kMemo.m_pOwner != pAI || eYield < 0 || eYield >= NUM_YIELD_TYPES || g_iHeadlessLuaHookDepth != kMemo.m_iLuaHookDepth)
+		return -2;
+	if(kMemo.m_uiLuaEpoch != g_uiHeadlessLuaListenerEpoch)
+		HeadlessDeficientMemoClear();
+	return kMemo.m_acValue[eYield];
+}
+}
+
+CvHeadlessDeficientMemoScope::CvHeadlessDeficientMemoScope(const CvCityStrategyAI* pAI) : m_bOpened(false)
+{
+	HeadlessDeficientMemo& kMemo = s_kHeadlessDeficientMemo;
+	if(kMemo.m_iDepth == 0)
+	{
+		kMemo.m_pOwner = pAI;
+		kMemo.m_iLuaHookDepth = g_iHeadlessLuaHookDepth;
+		HeadlessDeficientMemoClear();
+		kMemo.m_iDepth = 1;
+		m_bOpened = true;
+	}
+	else if(kMemo.m_pOwner == pAI)
+	{
+		kMemo.m_iDepth++;
+		m_bOpened = true;
+	}
+	// a scope of another city while one is open: that city gets no memo (golden path)
+}
+
+CvHeadlessDeficientMemoScope::~CvHeadlessDeficientMemoScope()
+{
+	if(m_bOpened && --s_kHeadlessDeficientMemo.m_iDepth == 0)
+		s_kHeadlessDeficientMemo.m_pOwner = NULL;
+}
+#endif
+
 /// Determines if the yield is below a sustainable amount
 bool CvCityStrategyAI::IsYieldDeficient(YieldTypes eYieldType)
 {
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+	// OPT-0042: the golden computation below runs unchanged unless the open memo already holds this yield
+	const int iHeadlessMemo = HeadlessDeficientMemoLookup(this, eYieldType);
+#if !defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	if(iHeadlessMemo >= 0)
+		return iHeadlessMemo != 0;
+#endif
+#endif
 	double fDesiredYield = GetDeficientYieldValue(eYieldType);
 	double fYieldAverage = GetYieldAverage(eYieldType);
 
 	int iDesiredYield = (int)citystrategyround(fDesiredYield * 100);
 	int iYieldAverage = (int)citystrategyround(fYieldAverage * 100);
 
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+	const bool bHeadlessResult = (iYieldAverage < iDesiredYield);
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	if(iHeadlessMemo >= 0)
+		HEADLESS_OPT_VERIFY((iHeadlessMemo != 0) == bHeadlessResult, 42, "CvCityStrategyAI::IsYieldDeficient memo");
+#endif
+	if(iHeadlessMemo == -1)
+		s_kHeadlessDeficientMemo.m_acValue[eYieldType] = bHeadlessResult ? 1 : 0;
+	return bHeadlessResult;
+#else
 	if(iYieldAverage < iDesiredYield)
 	{
 		return true;
@@ -663,11 +746,15 @@ bool CvCityStrategyAI::IsYieldDeficient(YieldTypes eYieldType)
 	{
 		return false;
 	}
+#endif
 }
 
 // Determines what yield type is in a deficient state. If none, then NO_YIELD is returned
 YieldTypes CvCityStrategyAI::GetDeficientYield(void)
 {
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+	CvHeadlessDeficientMemoScope kHeadlessDeficientMemo(this);	// OPT-0042: FOOD and PRODUCTION are asked twice below
+#endif
 	if(IsYieldDeficient(YIELD_FOOD))
 	{
 		return YIELD_FOOD;
@@ -1223,6 +1310,15 @@ void CvCityStrategyAI::DoTurn()
 
 	int iCityStrategiesLoop = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_NEED_SHARE)
+	// OPT-0043: NO_NEED_INTERNATIONAL_<domain>_TRADE_ROUTE == !NEED_INTERNATIONAL_<domain>_TRADE_ROUTE for the same state
+	// (same two reads, opposite answers). When the NO_NEED test directly follows the NEED test of the same domain and nothing
+	// that their reads depend on can have changed in between, the NEED result is reused. eHeadlessNeedDomain is the domain of
+	// the NEED test that the next trigger test may reuse (NO_DOMAIN: none).
+	DomainTypes eHeadlessNeedDomain = NO_DOMAIN;
+	bool bHeadlessNeedValue = false;
+#endif
+
 	// Loop through all CityStrategies
 	for(iCityStrategiesLoop = 0; iCityStrategiesLoop < GetAICityStrategies()->GetNumAICityStrategies(); iCityStrategiesLoop++)
 	{
@@ -1291,6 +1387,11 @@ void CvCityStrategyAI::DoTurn()
 		if(bTestCityStrategyStart || bTestCityStrategyEnd)
 		{
 			bool bStrategyShouldBeActive = false;
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_NEED_SHARE)
+			// OPT-0043: only the trigger test right after the NEED test may reuse its result
+			const DomainTypes eHeadlessReuseDomain = eHeadlessNeedDomain;
+			eHeadlessNeedDomain = NO_DOMAIN;
+#endif
 
 			// Has the Tech which obsoletes this Strategy? If so, Strategy should be deactivated regardless of other factors
 			if(pCityStrategy->GetTechObsolete() != NO_TECH && GET_TEAM(GetCity()->getTeam()).GetTeamTechs()->HasTech((TechTypes) pCityStrategy->GetTechObsolete()))
@@ -1374,6 +1475,50 @@ void CvCityStrategyAI::DoTurn()
 					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_KeyScienceCity(GetCity());
 				else if(strStrategyName == "AICITYSTRATEGY_GOOD_GP_CITY")
 					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_GoodGPCity(GetCity());
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_NEED_SHARE)
+				// OPT-0043: GetNumTradeRoutesRemaining / GetNumPotentialConnections read players, cities, teams, techs, plots
+				// and the existing trade connections; between the two tests only this loop's own bookkeeping runs
+				// (SetUsingCityStrategy, flavour propagation into the city's production AIs, logging) plus the
+				// CityStrategyCanActivate hook, which ends the reuse when it had listeners. The trade route path finders run
+				// only with bReuse = false, so skipping the repeated searches leaves them in the same state (that of the last
+				// search, which is the same search in both orders).
+				else if(strStrategyName == "AICITYSTRATEGY_NEED_INTERNATIONAL_LAND_TRADE_ROUTE")
+				{
+					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NeedInternationalTradeRoute(GetCity(), DOMAIN_LAND);
+					eHeadlessNeedDomain = DOMAIN_LAND;
+					bHeadlessNeedValue = bStrategyShouldBeActive;
+				}
+				else if(strStrategyName == "AICITYSTRATEGY_NO_NEED_INTERNATIONAL_LAND_TRADE_ROUTE")
+				{
+					if(eHeadlessReuseDomain == DOMAIN_LAND)
+					{
+						bStrategyShouldBeActive = !bHeadlessNeedValue;
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+						HEADLESS_OPT_VERIFY(bStrategyShouldBeActive == CityStrategyAIHelpers::IsTestCityStrategy_NoNeedInternationalTradeRoute(GetCity(), DOMAIN_LAND), 43, "NO_NEED_INTERNATIONAL_LAND_TRADE_ROUTE reuse");
+#endif
+					}
+					else
+						bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NoNeedInternationalTradeRoute(GetCity(), DOMAIN_LAND);
+				}
+				else if(strStrategyName == "AICITYSTRATEGY_NEED_INTERNATIONAL_SEA_TRADE_ROUTE")
+				{
+					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NeedInternationalTradeRoute(GetCity(), DOMAIN_SEA);
+					eHeadlessNeedDomain = DOMAIN_SEA;
+					bHeadlessNeedValue = bStrategyShouldBeActive;
+				}
+				else if(strStrategyName == "AICITYSTRATEGY_NO_NEED_INTERNATIONAL_SEA_TRADE_ROUTE")
+				{
+					if(eHeadlessReuseDomain == DOMAIN_SEA)
+					{
+						bStrategyShouldBeActive = !bHeadlessNeedValue;
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+						HEADLESS_OPT_VERIFY(bStrategyShouldBeActive == CityStrategyAIHelpers::IsTestCityStrategy_NoNeedInternationalTradeRoute(GetCity(), DOMAIN_SEA), 43, "NO_NEED_INTERNATIONAL_SEA_TRADE_ROUTE reuse");
+#endif
+					}
+					else
+						bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NoNeedInternationalTradeRoute(GetCity(), DOMAIN_SEA);
+				}
+#else
 				else if(strStrategyName == "AICITYSTRATEGY_NEED_INTERNATIONAL_LAND_TRADE_ROUTE")
 					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NeedInternationalTradeRoute(GetCity(), DOMAIN_LAND);
 				else if(strStrategyName == "AICITYSTRATEGY_NO_NEED_INTERNATIONAL_LAND_TRADE_ROUTE")
@@ -1382,6 +1527,7 @@ void CvCityStrategyAI::DoTurn()
 					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NeedInternationalTradeRoute(GetCity(), DOMAIN_SEA);
 				else if(strStrategyName == "AICITYSTRATEGY_NO_NEED_INTERNATIONAL_SEA_TRADE_ROUTE")
 					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_NoNeedInternationalTradeRoute(GetCity(), DOMAIN_SEA);
+#endif
 				else if(strStrategyName == "AICITYSTRATEGY_INTERNATIONAL_TRADE_DESTINATION")
 					bStrategyShouldBeActive = CityStrategyAIHelpers::IsTestCityStrategy_IsInternationalTradeDestination(GetCity());
 				else if(strStrategyName == "AICITYSTRATEGY_INTERNATIONAL_TRADE_ORIGIN")
@@ -1407,6 +1553,9 @@ void CvCityStrategyAI::DoTurn()
 					bool bResult = false;
 					if(LuaSupport::CallTestAll(pkScriptSystem, "CityStrategyCanActivate", args.get(), bResult))
 					{
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_NEED_SHARE)
+						eHeadlessNeedDomain = NO_DOMAIN;	// OPT-0043: Lua listeners ran; they may have changed anything
+#endif
 						// Check the result.
 						if(bResult == false)
 						{

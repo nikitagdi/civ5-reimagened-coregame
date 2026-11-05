@@ -6,7 +6,9 @@
 // If in debug, use the semi-undocumented RtlCaptureStackBackTrace function.  It is exposed in Vista, but it is part of XP too.
 // There are limitations to it though, the code cannot be compiled with FPO (Frame Pointer Optimizations) on.
 //#ifdef _DEBUG
+#if !defined(LEKMOD_PORTABLE)
 #define USE_RTL_CAPTURE_STACK
+#endif
 //#endif
 
 #ifdef USE_RTL_CAPTURE_STACK

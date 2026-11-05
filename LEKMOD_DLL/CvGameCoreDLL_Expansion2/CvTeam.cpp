@@ -7,6 +7,10 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#include "HeadlessMsgGuard.h"	// HYG-0013
+#if defined(LEKMOD_HEADLESS_OPT_TEAM_MINOR_SCAN)
+#include <emmintrin.h>	// OPT-0060: SSE2 integer compare (intrinsics only, no /arch change)
+#endif
 #include "CvPlayerAI.h"
 #include "CvDefines.h"
 #include "CvGameCoreUtils.h"
@@ -431,7 +435,7 @@ void CvTeam::addTeam(TeamTypes eTeam)
 			{
 				if(GET_TEAM(GET_PLAYER((PlayerTypes)iI).getTeam()).isHasMet(GetID()) && GET_TEAM(GET_PLAYER((PlayerTypes)iI).getTeam()).isHasMet(eTeam))
 				{
-					if(iI == GC.getGame().getActivePlayer())
+					if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), iI))
 					{
 						strBuffer = GetLocalizedText("TXT_KEY_MISC_PLAYER_PERMANENT_ALLIANCE", getName().GetCString(), GET_TEAM(eTeam).getName().GetCString());
 						DLLUI->AddMessage(0, ((PlayerTypes)iI), false, GC.getEVENT_MESSAGE_TIME(), strBuffer/*, "AS2D_THEIRALLIANCE", MESSAGE_TYPE_MINOR_EVENT, NULL, (ColorTypes)GC.getInfoTypeForString("COLOR_HIGHLIGHT_TEXT")*/);
@@ -1080,7 +1084,12 @@ bool CvTeam::canDeclareWar(TeamTypes eTeam) const
 		return false;
 	}
 #ifdef AI_CANT_DECLARE_WAR
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+	static CvPreGame::HeadlessOptionSite s_kHeadlessAITweaks = { 0, false };	// OPT-0046
+	if(CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessAITweaks, "GAMEOPTION_AI_TWEAKS"))
+#else
 	if(GC.getGame().isOption("GAMEOPTION_AI_TWEAKS"))
+#endif
 	{
 		if(!isHuman())
 		{
@@ -1127,7 +1136,12 @@ bool CvTeam::canDeclareWar(TeamTypes eTeam) const
 #endif
 
 #ifdef CS_ALLYING_WAR_RESCTRICTION
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+	static CvPreGame::HeadlessOptionSite s_kHeadlessCSAllyingWar = { 0, false };	// OPT-0046
+	if (GC.getGame().isOption(GAMEOPTION_END_TURN_TIMER_ENABLED) && CvPreGame::HeadlessIsOptionAtSite(s_kHeadlessCSAllyingWar, "GAMEOPTION_CS_ALLYING_WAR_RESCTRICTION"))
+#else
 	if (GC.getGame().isOption(GAMEOPTION_END_TURN_TIMER_ENABLED) && GC.getGame().isOption("GAMEOPTION_CS_ALLYING_WAR_RESCTRICTION"))
+#endif
 	{
 		for (int kK = MAX_MAJOR_CIVS; kK < MAX_CIV_PLAYERS; kK++)
 		{
@@ -1368,7 +1382,7 @@ void CvTeam::DoDeclareWar(TeamTypes eTeam, bool bDefensivePact, bool bMinorAllyP
 							// Players on team that declared
 							if (GET_PLAYER(ePlayer).getTeam() == GetID())
 							{
-								if (ePlayer == GC.getGame().getActivePlayer())
+								if (HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), ePlayer))
 								{
 									locString = Localization::Lookup("TXT_KEY_MISC_YOU_DECLARED_WAR_ON");
 									locString << GET_TEAM(eTeam).getName().GetCString();
@@ -2602,6 +2616,52 @@ bool CvTeam::isBarbarian() const
 //	--------------------------------------------------------------------------------
 bool CvTeam::isMinorCiv() const
 {
+#if defined(LEKMOD_HEADLESS_OPT_TEAM_MINOR_SCAN)
+	// OPT-0060: the same scan over the minor slots, but the slot's team is read from CvPreGame's dense team array
+	// (CvPreGame::teamType) before CvPlayer::isAlive (a strided read of the large CvPlayer object, one cache line and usually
+	// one TLB page per slot), four slots per SSE2 compare. All three tests are side-effect free; a slot passes exactly when
+	// golden's "isAlive() && getTeam() == GetID()" holds (the getTeam() re-check covers a CvPlayer whose m_eID is not its
+	// slot), and slots are tested in ascending order, so the first passing slot and the result are golden's.
+	const TeamTypes eID = GetID();
+	const std::vector<TeamTypes>& kTeamTypes = CvPreGame::sr_TeamTypes;
+	if(sizeof(TeamTypes) == sizeof(int) && kTeamTypes.size() >= (size_t)MAX_PLAYERS && (MAX_PLAYERS % 4) == 0)
+	{
+		const int* piTeams = reinterpret_cast<const int*>(&kTeamTypes[0]);
+		const __m128i vID = _mm_set1_epi32((int)eID);
+		for(int iBlock = MAX_MAJOR_CIVS & ~3; iBlock < MAX_PLAYERS; iBlock += 4)
+		{
+			int iMask = _mm_movemask_epi8(_mm_cmpeq_epi32(_mm_loadu_si128(reinterpret_cast<const __m128i*>(piTeams + iBlock)), vID));
+			while(iMask != 0)
+			{
+				int iLane = 0;
+				while(((iMask >> (4 * iLane)) & 0xF) == 0)
+					iLane++;
+				iMask &= ~(0xF << (4 * iLane));
+				const int iI = iBlock + iLane;
+				if(iI < MAX_MAJOR_CIVS)
+					continue;
+				const CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iI);
+				if(kPlayer.isAlive() && kPlayer.getTeam() == eID)
+				{
+					return kPlayer.isMinorCiv();
+				}
+			}
+		}
+		return false;
+	}
+	for(int iI = MAX_MAJOR_CIVS; iI < MAX_PLAYERS; iI++)
+	{
+		if(CvPreGame::teamType((PlayerTypes)iI) == eID)
+		{
+			const CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iI);
+			if(kPlayer.isAlive() && kPlayer.getTeam() == eID)
+			{
+				return kPlayer.isMinorCiv();
+			}
+		}
+	}
+	return false;
+#else
 	bool bValid;
 	int iI;
 
@@ -2628,6 +2688,7 @@ bool CvTeam::isMinorCiv() const
 	}
 
 	return bValid;
+#endif
 }
 //  --------------------------------------------------------------------------------
 bool CvTeam::isMajorCiv() const
@@ -4896,7 +4957,7 @@ void CvTeam::changeProjectCount(ProjectTypes eIndex, int iChange)
 					{
 						if(isHasMet(kPlayer.getTeam()))
 						{
-							if(ePlayer == GC.getGame().getActivePlayer())
+							if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), ePlayer))
 							{
 								DLLUI->AddCityMessage(0, pLeadersCapital->GetIDInfo(), ePlayer, false, GC.getEVENT_MESSAGE_TIME(), strSomeoneCompletedProject);
 							}
@@ -4905,7 +4966,7 @@ void CvTeam::changeProjectCount(ProjectTypes eIndex, int iChange)
 						}
 						else
 						{
-							if(ePlayer == GC.getGame().getActivePlayer())
+							if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), ePlayer))
 							{
 								DLLUI->AddCityMessage(0, pLeadersCapital->GetIDInfo(), ePlayer, false, GC.getEVENT_MESSAGE_TIME(), strUnknownCompletesProject);
 							}
@@ -5600,7 +5661,7 @@ void CvTeam::announceTechToPlayers(TechTypes eIndex, bool bPartial)
 
 		if(kPlayer.isAlive() && kPlayer.getTeam() == GetID())
 		{
-			if(ePlayer == GC.getGame().getActivePlayer())
+			if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), ePlayer))
 			{
 				CvString strBuffer = GetLocalizedText((bPartial ? "TXT_KEY_MISC_PROGRESS_TOWARDS_TECH" : "TXT_KEY_MISC_YOU_DISCOVERED_TECH"), szTechTextKey);
 				DLLUI->AddMessage(0, ePlayer, false, (bSound ? GC.getEVENT_MESSAGE_TIME() : -1), strBuffer/*, (bSound ? GC.getTechInfo(eIndex)->GetSoundMP() : NULL), MESSAGE_TYPE_MAJOR_EVENT, NULL, (ColorTypes)GC.getInfoTypeForString("COLOR_TECH_TEXT")*/);
@@ -6072,7 +6133,7 @@ void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, b
 						{
 							const PlayerTypes eLoopPlayer = static_cast<PlayerTypes>(iI);
 							CvPlayerAI& kLoopPLayer = GET_PLAYER(eLoopPlayer);
-							if(kLoopPLayer.isAlive() && GC.getGame().getActivePlayer())
+							if(kLoopPLayer.isAlive() && HEADLESS_ACTIVE_SET())
 							{
 								if(isHasMet(kLoopPLayer.getTeam()))
 								{
@@ -6171,7 +6232,7 @@ void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, b
 					{
 						eLoopPlayer = (PlayerTypes) iPlayerLoop;
 
-						if(GET_PLAYER(eLoopPlayer).getTeam() == GetID() && eLoopPlayer == GC.getGame().getActivePlayer())
+						if(GET_PLAYER(eLoopPlayer).getTeam() == GetID() && HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), eLoopPlayer))
 						{
 							// Look at all Cities
 							for(pLoopCity = GET_PLAYER(eLoopPlayer).firstCity(&iLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER(eLoopPlayer).nextCity(&iLoop))

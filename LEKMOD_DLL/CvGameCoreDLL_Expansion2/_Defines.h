@@ -1464,3 +1464,10 @@ TXT_KEY_LEAGUE_OVERVIEW_MEMBER_DETAILS_TRAIT_VOTES
 // Also adds a new leader screen exit lua method called with Game.ExitLeaderScreen. This will run lExitLeaderscreen in here.
 //#define LUAAPIEXTN(method, type, ...) static int l##method(lua_State* L)
 
+
+// Headless platform: dll-improvements flags and diag hooks. Included only in non-golden builds
+// (build-dll.ps1 defines LEKMOD_HEADLESS_BUILD): any change to the PCH contents reshuffles the code layout of the
+// whole DLL, so golden must compile exactly the original headers.
+#if defined(LEKMOD_HEADLESS_BUILD)
+#include "HeadlessImprovements.h"
+#endif

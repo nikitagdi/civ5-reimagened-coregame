@@ -68,6 +68,19 @@ void LuaSupport::DumpCallStack(lua_State* L)
 	}
 }
 
+#if defined(LEKMOD_HEADLESS_OPT_YIELD_DEFICIENT_MEMO)
+// OPT-0042: g_uiHeadlessLuaListenerEpoch moves after every GameEvents hook call that had listeners (Lua code ran and may have
+// changed any game state); g_iHeadlessLuaHookDepth counts the hook calls in progress. Memos of pure DLL queries compare both.
+// Not game state, never serialised; the hook calls themselves are unchanged.
+unsigned int g_uiHeadlessLuaListenerEpoch = 1;
+int g_iHeadlessLuaHookDepth = 0;
+#define HEADLESS_LUA_HOOK_ENTER()			++g_iHeadlessLuaHookDepth
+#define HEADLESS_LUA_HOOK_LEAVE(bResult)	do { --g_iHeadlessLuaHookDepth; if(bResult) ++g_uiHeadlessLuaListenerEpoch; } while(0)
+#else
+#define HEADLESS_LUA_HOOK_ENTER()
+#define HEADLESS_LUA_HOOK_LEAVE(bResult)
+#endif
+
 //------------------------------------------------------------------------------
 #ifdef AUI_WARNING_FIXES
 bool LuaSupport::CallHook(_In_ ICvEngineScriptSystem1* pkScriptSystem, _In_z_ const char* szName, _In_opt_ ICvEngineScriptSystemArgs1* args, bool& value)
@@ -75,11 +88,16 @@ bool LuaSupport::CallHook(_In_ ICvEngineScriptSystem1* pkScriptSystem, _In_z_ co
 bool LuaSupport::CallHook(ICvEngineScriptSystem1* pkScriptSystem, const char* szName, ICvEngineScriptSystemArgs1* args, bool& value)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_LUA_HOOK);
+#endif
 	// Must release our lock so that if the main thread has the Lua lock and is waiting for the Game Core lock, we don't freeze
 	bool bHadLock = gDLL->HasGameCoreLock();
 	if(bHadLock)
 		gDLL->ReleaseGameCoreLock();
+	HEADLESS_LUA_HOOK_ENTER();	// OPT-0042
 	bool bResult = pkScriptSystem->CallHook(szName, args, value);
+	HEADLESS_LUA_HOOK_LEAVE(bResult);	// OPT-0042
 	if(bHadLock)
 		gDLL->GetGameCoreLock();
 	return bResult;
@@ -92,11 +110,16 @@ bool LuaSupport::CallTestAll(_In_ ICvEngineScriptSystem1* pkScriptSystem, _In_z_
 bool LuaSupport::CallTestAll(ICvEngineScriptSystem1* pkScriptSystem, const char* szName, ICvEngineScriptSystemArgs1* args, bool& value)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_LUA_HOOK);
+#endif
 	// Must release our lock so that if the main thread has the Lua lock and is waiting for the Game Core lock, we don't freeze
 	bool bHadLock = gDLL->HasGameCoreLock();
 	if(bHadLock)
 		gDLL->ReleaseGameCoreLock();
+	HEADLESS_LUA_HOOK_ENTER();	// OPT-0042
 	bool bResult = pkScriptSystem->CallTestAll(szName, args, value);
+	HEADLESS_LUA_HOOK_LEAVE(bResult);	// OPT-0042
 	if(bHadLock)
 		gDLL->GetGameCoreLock();
 	return bResult;
@@ -109,11 +132,16 @@ bool LuaSupport::CallTestAny(_In_ ICvEngineScriptSystem1* pkScriptSystem, _In_z_
 bool LuaSupport::CallTestAny(ICvEngineScriptSystem1* pkScriptSystem, const char* szName, ICvEngineScriptSystemArgs1* args, bool& value)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_LUA_HOOK);
+#endif
 	// Must release our lock so that if the main thread has the Lua lock and is waiting for the Game Core lock, we don't freeze
 	bool bHadLock = gDLL->HasGameCoreLock();
 	if(bHadLock)
 		gDLL->ReleaseGameCoreLock();
+	HEADLESS_LUA_HOOK_ENTER();	// OPT-0042
 	bool bResult = pkScriptSystem->CallTestAny(szName, args, value);
+	HEADLESS_LUA_HOOK_LEAVE(bResult);	// OPT-0042
 	if(bHadLock)
 		gDLL->GetGameCoreLock();
 	return bResult;
@@ -122,11 +150,16 @@ bool LuaSupport::CallTestAny(ICvEngineScriptSystem1* pkScriptSystem, const char*
 //------------------------------------------------------------------------------
 bool LuaSupport::CallAccumulator(_In_ ICvEngineScriptSystem1* pkScriptSystem, _In_z_ const char* szName, _In_opt_ ICvEngineScriptSystemArgs1* args, int& value)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_LUA_HOOK);
+#endif
 	// Must release our lock so that if the main thread has the Lua lock and is waiting for the Game Core lock, we don't freeze
 	bool bHadLock = gDLL->HasGameCoreLock();
 	if(bHadLock)
 		gDLL->ReleaseGameCoreLock();
+	HEADLESS_LUA_HOOK_ENTER();	// OPT-0042
 	bool bResult = pkScriptSystem->CallAccumulator(szName, args, value);
+	HEADLESS_LUA_HOOK_LEAVE(bResult);	// OPT-0042
 	if(bHadLock)
 		gDLL->GetGameCoreLock();
 	return bResult;
@@ -135,11 +168,16 @@ bool LuaSupport::CallAccumulator(_In_ ICvEngineScriptSystem1* pkScriptSystem, _I
 //------------------------------------------------------------------------------
 bool LuaSupport::CallAccumulator(_In_ ICvEngineScriptSystem1* pkScriptSystem, _In_z_ const char* szName, _In_opt_ ICvEngineScriptSystemArgs1* args, float& value)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_LUA_HOOK);
+#endif
 	// Must release our lock so that if the main thread has the Lua lock and is waiting for the Game Core lock, we don't freeze
 	bool bHadLock = gDLL->HasGameCoreLock();
 	if(bHadLock)
 		gDLL->ReleaseGameCoreLock();
+	HEADLESS_LUA_HOOK_ENTER();	// OPT-0042
 	bool bResult = pkScriptSystem->CallAccumulator(szName, args, value);
+	HEADLESS_LUA_HOOK_LEAVE(bResult);	// OPT-0042
 	if(bHadLock)
 		gDLL->GetGameCoreLock();
 	return bResult;

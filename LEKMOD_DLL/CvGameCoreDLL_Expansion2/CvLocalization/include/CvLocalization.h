@@ -287,6 +287,11 @@ namespace Localization
 		CvLocalizationAPI String();
 		CvLocalizationAPI String(const char* szString);
 		CvLocalizationAPI String(const char* szString, unsigned int uiLen);
+#if defined(LEKMOD_PORTABLE)
+		// MSVC chains CvString -> const char* -> String; standard C++ allows only one user conversion.
+		CvLocalizationAPI String(const std::string& str);
+		String& operator = (const std::string& str) { return *this = str.c_str(); }
+#endif
 		CvLocalizationAPI String(const String& other);
 
 		CvLocalizationAPI virtual ~String();
@@ -335,6 +340,10 @@ namespace Localization
 		CvLocalizationAPI bool PushArgument(_In_z_ const char* szText);
 		CvLocalizationAPI bool PushArgument(_In_bytecount_(length) const char* szText, size_t length);
 		CvLocalizationAPI bool PushArgument(const int val);
+#if defined(LEKMOD_PORTABLE)
+		bool PushArgument(const long val) { return PushArgument((int)val); }	// MSVC long is 32 bit
+		bool PushArgument(const std::string& str) { return PushArgument(str.c_str()); }
+#endif
 		CvLocalizationAPI bool PushArgument(const __int64 val);
 		CvLocalizationAPI bool PushArgument(const float val);
 		CvLocalizationAPI bool PushArgument(const double val);

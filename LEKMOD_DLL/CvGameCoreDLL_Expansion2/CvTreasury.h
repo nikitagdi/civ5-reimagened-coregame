@@ -133,6 +133,41 @@ protected:
 	std::vector<int> m_GoldChangeForTurnTimes100;
 };
 
+#if defined(LEKMOD_HEADLESS_FIX_0023) || defined(LEKMOD_HEADLESS_FIX_0030)
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// FIX-0023 / DS-0037: CalculatePreInflatedCosts stores the unit maintenance and supply costs in m_iExpensePerTurnUnitMaintenance /
+// m_iExpensePerTurnUnitSupply as a side effect. Both are saved (CvTreasury::Write) and read by AI code before DoGold
+// (CvEconomicAI::DisbandExtraWorkers, CvMilitaryAI::DisbandObsoleteUnits, CvVotingClasses). Lua getters that the UI calls on
+// one machine only (top panel gold and science, tech tree turns left, trade screen, city-state science bonus, advisors)
+// reach it through calculateGoldRate / GetScienceTimes100 / IsPossibleToTradeItem. Those getters open this scope around
+// their C++ call (after reading their Lua arguments, so no Lua error can leave the scope open); while it is open
+// CalculatePreInflatedCosts computes the same costs into locals and returns the same value without storing them.
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+class CvHeadlessUiTreasuryScope
+{
+public:
+	CvHeadlessUiTreasuryScope()
+	{
+		++s_iDepth;
+	}
+	~CvHeadlessUiTreasuryScope()
+	{
+		--s_iDepth;
+	}
+	static bool IsActive()
+	{
+		return s_iDepth > 0;
+	}
+
+private:
+	CvHeadlessUiTreasuryScope(const CvHeadlessUiTreasuryScope&);
+	CvHeadlessUiTreasuryScope& operator=(const CvHeadlessUiTreasuryScope&);
+
+	static int s_iDepth;
+};
+#define HEADLESS_UI_TREASURY_SCOPE()	CvHeadlessUiTreasuryScope kHeadlessUiTreasuryScope
+#endif
+
 namespace TreasuryHelpers
 {
 	void AppendToLog (CvString& strHeader, CvString& strLog, CvString strHeaderValue, CvString strValue);

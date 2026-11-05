@@ -624,7 +624,7 @@ private:
 #endif
 #endif
 	int** m_ppaiFeatureYieldChange;
-	std::map<int, std::map<int, int>> m_ppiResourceYieldChangeGlobal;
+	std::map<int, std::map<int, int> > m_ppiResourceYieldChangeGlobal;
 	int** m_ppaiImprovementYieldChange;
 	int** m_ppaiImprovementYieldChangeGlobal;
 	int** m_ppaiSpecialistYieldChange;

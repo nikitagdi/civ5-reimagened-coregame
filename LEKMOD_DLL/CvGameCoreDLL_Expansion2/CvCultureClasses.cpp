@@ -18,6 +18,159 @@
 
 #include "LintFree.h"
 
+#if defined(LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES)
+#if !defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+#error LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES (OPT-0049) needs LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS (OPT-0041)
+#endif
+#include "HeadlessSparseLists.h"
+// OPT-0049: the four building-class loops of the city tourism computation (religion building tourism, mountain tourism,
+// tech-enhanced tourism, policy building-class tourism modifier) add a term per building class that is zero unless the
+// owner's civilization has a building for the class and a database value of that building / of some belief / of some
+// policy is nonzero. Per civilization, the classes for which the term can be nonzero are a pure function of the loaded
+// database (OPT-0041's lists and epoch); only those are visited, ascending, with golden's per-class code (HeadlessTourismTerm).
+// Every skipped term is a pure read that is 0, so the integer sums and all calls with an effect are the same.
+namespace
+{
+enum
+{
+	HEADLESS_TOURISM_RELIGION,
+	HEADLESS_TOURISM_MOUNTAIN,
+	HEADLESS_TOURISM_TECH,
+	HEADLESS_TOURISM_POLICYMOD,
+	NUM_HEADLESS_TOURISM_LISTS
+};
+
+struct HeadlessTourismRel
+{
+	explicit HeadlessTourismRel(int iKind) : m_iKind(iKind) {}
+	bool operator()(int iClass, int iCiv) const
+	{
+		const BuildingClassTypes eBuildingClass = (BuildingClassTypes)iClass;
+		if(m_iKind != HEADLESS_TOURISM_POLICYMOD && GC.getBuildingClassInfo(eBuildingClass) == NULL)
+			return false;
+		const CvCivilizationInfo* pkCiv = GC.getCivilizationInfo((CivilizationTypes)iCiv);
+		if(pkCiv == NULL)
+			return true;
+		const BuildingTypes eBuilding = (BuildingTypes)pkCiv->getCivilizationBuildings(eBuildingClass);
+		if(eBuilding == NO_BUILDING)
+			return false;
+		if(m_iKind == HEADLESS_TOURISM_RELIGION)
+		{
+			CvBeliefXMLEntries* pBeliefs = GC.GetGameBeliefs();
+			for(int i = 0; i < pBeliefs->GetNumBeliefs(); i++)
+			{
+				const CvBeliefEntry* pkBelief = pBeliefs->GetEntry(i);
+				if(pkBelief == NULL || pkBelief->GetBuildingClassTourism(eBuildingClass) != 0)
+					return true;
+			}
+			return false;
+		}
+		const CvBuildingEntry* pkEntry = GC.getBuildingInfo(eBuilding);
+		if(pkEntry == NULL)
+			return false;
+		if(m_iKind == HEADLESS_TOURISM_MOUNTAIN)
+			return pkEntry->GetMountainTourism() > 0;
+		if(m_iKind == HEADLESS_TOURISM_TECH)
+			return pkEntry->GetTechEnhancedTourism() > 0;
+		CvPolicyXMLEntries* pPolicies = GC.GetGamePolicies();
+		for(int i = 0; i < pPolicies->GetNumPolicies(); i++)
+		{
+			const CvPolicyEntry* pkPolicy = pPolicies->GetPolicyEntry(i);
+			if(pkPolicy == NULL || pkPolicy->GetBuildingClassTourismModifier(eBuildingClass) != 0)
+				return true;
+		}
+		return false;
+	}
+	int m_iKind;
+};
+
+CvHeadlessSparseLists s_akHeadlessTourismLists[NUM_HEADLESS_TOURISM_LISTS];
+
+// NULL when the civilization is out of range or has no info: the caller then runs golden's loop
+const CvHeadlessSparseLists* HeadlessTourismLists(int iKind, int iCiv)
+{
+	const int iNumCivs = GC.getNumCivilizationInfos();
+	if(iCiv < 0 || iCiv >= iNumCivs || GC.getCivilizationInfo((CivilizationTypes)iCiv) == NULL)
+		return NULL;
+	CvHeadlessSparseLists& kLists = s_akHeadlessTourismLists[iKind];
+	const int iNumClasses = GC.getNumBuildingClassInfos();
+	if(!kLists.IsValid(iNumClasses, iNumCivs))
+		kLists.Build(iNumClasses, iNumCivs, HeadlessTourismRel(iKind));
+	return &kLists;
+}
+
+// golden's per-class body of each loop, as the amount it adds (0 when golden adds nothing); pure reads only
+int HeadlessTourismTerm(int iKind, CvCity* pCity, CvCivilizationInfo& playerCivilizationInfo, const CvReligion* pReligion, int iMountainCount, int jJ)
+{
+	const BuildingClassTypes eBuildingClass = (BuildingClassTypes)jJ;
+	if(iKind != HEADLESS_TOURISM_POLICYMOD)
+	{
+		CvBuildingClassInfo* pkBuildingClassInfo = GC.getBuildingClassInfo(eBuildingClass);
+		if(!pkBuildingClassInfo)
+			return 0;
+	}
+	const BuildingTypes eBuilding = (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings(eBuildingClass);
+	if(eBuilding == NO_BUILDING)
+		return 0;
+	if(iKind == HEADLESS_TOURISM_RELIGION)
+	{
+		if(pCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
+			return pReligion->m_Beliefs.GetBuildingClassTourism(eBuildingClass);
+		return 0;
+	}
+	CvBuildingEntry* pkEntry = GC.getBuildingInfo(eBuilding);
+	if(!pkEntry || pCity->GetCityBuildings()->GetNumBuilding(eBuilding) <= 0)
+		return 0;
+	if(iKind == HEADLESS_TOURISM_MOUNTAIN)
+	{
+		int iTourismPerMountain = pkEntry->GetMountainTourism();
+		if(iTourismPerMountain > 0)
+			return iMountainCount * iTourismPerMountain;
+		return 0;
+	}
+	if(iKind == HEADLESS_TOURISM_TECH)
+	{
+		int iTourism = pkEntry->GetTechEnhancedTourism();
+#ifdef LEKMOD_TECH_ENHANCED_TOURISM_MULTIPLIER
+		iTourism *= pCity->GetCityBuildings()->GetNumBuilding(eBuilding);
+#endif
+		if(iTourism > 0 && GET_TEAM(pCity->getTeam()).GetTeamTechs()->HasTech((TechTypes)pkEntry->GetEnhancedYieldTech()))
+			return iTourism;
+		return 0;
+	}
+	// HEADLESS_TOURISM_POLICYMOD: golden adds the modifier when it is nonzero and the city has the building
+	return GET_PLAYER(pCity->getOwner()).GetPlayerPolicies()->GetBuildingClassTourismModifier(eBuildingClass);
+}
+
+// sum of the terms over the listed classes (ascending); bHandled = false -> the caller runs golden's loop
+int HeadlessTourismSum(int iKind, CvCity* pCity, const CvReligion* pReligion, int iMountainCount, bool& bHandled)
+{
+	CvPlayer& kOwner = GET_PLAYER(pCity->getOwner());
+	const int iCiv = kOwner.getCivilizationType();
+	const CvHeadlessSparseLists* pkLists = HeadlessTourismLists(iKind, iCiv);
+	bHandled = (pkLists != NULL);
+	if(!bHandled)
+		return 0;
+	const int iCount = pkLists->Count(iCiv);
+#if !defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	if(iCount == 0)
+		return 0;
+#endif
+	CvCivilizationInfo& kCivInfo = kOwner.getCivilizationInfo();
+	int iSum = 0;
+	for(int iPos = 0; iPos < iCount; iPos++)
+		iSum += HeadlessTourismTerm(iKind, pCity, kCivInfo, pReligion, iMountainCount, pkLists->Id(iCiv, iPos));
+#if defined(LEKMOD_HEADLESS_OPT_VERIFY)
+	int iRef = 0;
+	for(int jJ = 0; jJ < GC.getNumBuildingClassInfos(); jJ++)
+		iRef += HeadlessTourismTerm(iKind, pCity, kCivInfo, pReligion, iMountainCount, jJ);
+	HEADLESS_OPT_VERIFY(iRef == iSum, 49, "CvCityCulture tourism building-class loop");
+#endif
+	return iSum;
+}
+}
+#endif
+
 //=====================================
 // CvGreatWork
 //=====================================
@@ -841,6 +994,15 @@ void CvPlayerCulture::Init(CvPlayer* pPlayer)
 	m_iSwappableMusicIndex    = -1;
 
 	m_iTurnIdeologySwitch = -1;
+
+#if defined(LEKMOD_HEADLESS_HYG_CULTURE_OPINION_INIT)
+	// HYG-0008 / DS-0026: these three are assigned at the top of DoPublicOpinion (once per turn of a player that takes
+	// turns) and were never initialised, but they are serialized: slots that never play wrote heap garbage. 0 is the value
+	// a zero-filled heap gave (canonical digest unchanged); DoPublicOpinion overwrites it before any read that matters.
+	m_eOpinion = (PublicOpinionTypes)0;
+	m_ePreferredIdeology = (PolicyBranchTypes)0;
+	m_eOpinionBiggestInfluence = (PlayerTypes)0;
+#endif
 }
 
 // GREAT WORKS
@@ -2031,7 +2193,11 @@ void CvPlayerCulture::RemoveDigCompletePlot(CvPlot *pPlot)
 	{
 		if (*it == pPlot)
 		{
+#if defined(LEKMOD_PORTABLE)
+			m_aDigCompletePlots.erase(lekmod_portable::mutable_iterator(m_aDigCompletePlots, it));
+#else
 			m_aDigCompletePlots.erase(it);
+#endif
 			break;
 		}
 	}
@@ -4616,6 +4782,13 @@ int CvCityCulture::GetBaseTourismBeforeModifiers()
 		}
 
 		// Buildings
+#if defined(LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES)
+		bool bHeadlessDone = false;
+		const int iHeadlessSum = HeadlessTourismSum(HEADLESS_TOURISM_RELIGION, m_pCity, pReligion, 0, bHeadlessDone);	// OPT-0049
+		if(bHeadlessDone)
+			iBase += iHeadlessSum;
+		else
+#endif
 #ifdef AUI_WARNING_FIXES
 		for (uint jJ = 0; jJ < GC.getNumBuildingClassInfos(); jJ++)
 #else
@@ -4646,6 +4819,13 @@ int CvCityCulture::GetBaseTourismBeforeModifiers()
 	// Buildings - Without Religion
 	{
 		int iMountainCount = m_pCity->GetNumMountainsNearCity(3, true);
+#if defined(LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES)
+		bool bHeadlessDone = false;
+		const int iHeadlessSum = HeadlessTourismSum(HEADLESS_TOURISM_MOUNTAIN, m_pCity, NULL, iMountainCount, bHeadlessDone);	// OPT-0049
+		if(bHeadlessDone)
+			iBase += iHeadlessSum;
+		else
+#endif
 		for (int jJ = 0; jJ < GC.getNumBuildingClassInfos(); jJ++)
 		{
 			BuildingClassTypes eBuildingClass = (BuildingClassTypes)jJ;
@@ -4676,6 +4856,13 @@ int CvCityCulture::GetBaseTourismBeforeModifiers()
 	}
 #endif
 	// Tech enhanced Tourism
+#if defined(LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES)
+	bool bHeadlessTechDone = false;
+	const int iHeadlessTechSum = HeadlessTourismSum(HEADLESS_TOURISM_TECH, m_pCity, NULL, 0, bHeadlessTechDone);	// OPT-0049
+	if(bHeadlessTechDone)
+		iBase += iHeadlessTechSum;
+	else
+#endif
 #ifdef AUI_WARNING_FIXES
 	for (uint jJ = 0; jJ < GC.getNumBuildingClassInfos(); jJ++)
 #else
@@ -4754,6 +4941,13 @@ int CvCityCulture::GetBaseTourism()
 	
 
 	int iBuildingMod = 0;
+#if defined(LEKMOD_HEADLESS_OPT_TOURISM_SPARSE_CLASSES)
+	bool bHeadlessModDone = false;
+	const int iHeadlessModSum = HeadlessTourismSum(HEADLESS_TOURISM_POLICYMOD, m_pCity, NULL, 0, bHeadlessModDone);	// OPT-0049
+	if(bHeadlessModDone)
+		iModifier += iHeadlessModSum;
+	else
+#endif
 #ifdef AUI_WARNING_FIXES
 	for (uint iBuildingClassLoop = 0; iBuildingClassLoop < GC.getNumBuildingClassInfos(); iBuildingClassLoop++)
 #else
@@ -4767,11 +4961,24 @@ int CvCityCulture::GetBaseTourism()
 			CvBuildingEntry *pkEntry = GC.getBuildingInfo(eBuilding);
 			if (pkEntry)
 			{
+#if defined(LEKMOD_HEADLESS_OPT_TOURISM_BUILDING_FIRST)
+				// OPT-0018: test the (pure, O(1)) building count before the (pure, O(policies)) policy modifier; the sum gets
+				// the same terms in the same order, iBuildingMod is not read after the loop.
+				if (m_pCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
+				{
+					iBuildingMod = kPlayer.GetPlayerPolicies()->GetBuildingClassTourismModifier((BuildingClassTypes)iBuildingClassLoop);
+					if (iBuildingMod != 0)
+					{
+						iModifier += iBuildingMod;
+					}
+				}
+#else
 				iBuildingMod = kPlayer.GetPlayerPolicies()->GetBuildingClassTourismModifier((BuildingClassTypes)iBuildingClassLoop);
 				if (iBuildingMod != 0 && m_pCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
 				{
 					iModifier += iBuildingMod;
 				}
+#endif
 			}
 		}
 	}

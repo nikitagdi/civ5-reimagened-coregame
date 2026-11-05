@@ -593,6 +593,9 @@ public:
 	int countNumAirUnits(TeamTypes eTeam) const;
 
 	int getFoundValue(PlayerTypes eIndex);
+#if defined(LEKMOD_PORTABLE)
+	int getFoundValueCached(PlayerTypes eIndex) const { return m_aiFoundValue[eIndex]; }  // B4 gc-replica: -1 = not computed; lets the test bot undo its lookups
+#endif
 	bool isBestAdjacentFound(PlayerTypes eIndex);
 	void setFoundValue(PlayerTypes eIndex, int iNewValue);
 

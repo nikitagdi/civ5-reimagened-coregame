@@ -75,6 +75,11 @@ public:
 		bool m_bNeedsBroadcast; // internal use - have we broadcast this message?
 		bool m_bDismissed;		// internal use - has this message been dismissed?
 		bool m_bWaitExtraTurn;	// Should this wait for an extra turn before it auto-expires?
+#if defined(LEKMOD_PORTABLE)
+		// B4 gc-replica: m_bNeedsBroadcast as the expiry rule sees it. Saved, unlike m_bNeedsBroadcast (a load re-broadcasts to the UI), and
+		// untouched by the UI's Rebroadcast, so a game loaded from a save or run on another machine expires notifications on the same turns.
+		bool m_bRuleNeedsBroadcast;
+#endif
 	};
 
 	void Activate(Notification& notification);

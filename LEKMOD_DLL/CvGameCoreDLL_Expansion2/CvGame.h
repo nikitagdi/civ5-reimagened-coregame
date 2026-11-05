@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	ï¿½ 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -770,6 +770,14 @@ protected:
 	int** m_ppaaiTeamVictoryRank;
 
 	Database::Results* m_pDiploResponseQuery;
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	// OPT-0016: rows (Tag, Bias) of the diplo response query per (leader, response), in query order. Same lifetime as
+	// m_pDiploResponseQuery (cleared in uninit) and dropped when the game database is (re)loaded.
+	typedef std::vector< std::pair<std::string, int> > DiploResponseRows;
+	std::map<std::string, DiploResponseRows> m_kDiploResponseMemo;
+	unsigned int m_uiDiploResponseMemoEpoch;
+	void QueryDiploResponseRows(const char* szLeader, const char* szResponse, DiploResponseRows& kRows);
+#endif
 
 	std::vector<CvString> m_aszDestroyedCities;
 	std::vector<CvString> m_aszGreatPeopleBorn;
@@ -853,6 +861,9 @@ protected:
 	void DoCacheMapScoreMod();
 
 	void doTurn();
+#if defined(LEKMOD_HEADLESS_DIAG_TURN_LOG)
+	void LogTurnChecksums();	// HYG-0010: per-turn checksum line in Logs\LekmodNG-turns.log (read only)
+#endif
 
 #ifdef AUI_GAME_BETTER_HYBRID_MODE
 	void constructTurnOrders();

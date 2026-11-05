@@ -1,0 +1,1637 @@
+{
+  "schema_version": 1,
+  "title": "Lekmod desync catalog",
+  "generated_by": "static audit (python -m civsim.detlab scan all --rev HEAD) plus manual triage; entries with status confirmed were reproduced dynamically (saveload round-trip, civhost perturbation axes: the investigation notes)",
+  "base_rev": "6faeb2f5",
+  "versions_audited": ["v34.15"],
+  "line_refs": "All file:line references are at git rev base_rev (6faeb2f5). The working tree carries uncommitted LEKMOD_HEADLESS_* edits from other agents, so working-tree line numbers drift; re-run the scanners with --rev HEAD to re-anchor.",
+  "path_aliases": {
+    "DLC": "<Civ5>/Assets/DLC/LEKMOD_v34.15 (installed runtime; its Lua matches LEKMOD/Lua at base_rev up to CRLF)"
+  },
+  "impact_scale": {
+    "1": "theoretical, or needs a rare combination (several copies of one civ, debug flags)",
+    "2": "needs AI majors, a specific diplomacy flow, or a hot-join/reload plus a later rare event",
+    "3": "plausible in ordinary MP: a common feature plus reconnects, turn timer, or automated units",
+    "4": "fires in ordinary MP lobbies whenever a common in-game event happens",
+    "5": "fires almost every game"
+  },
+  "fields": {
+    "class": "primary class C1..C9 (determinism-lab taxonomy); secondary_classes lists the others",
+    "status": "suspected | likely | confirmed | wontfix | fixed-in:<branch/commit>; likely = mechanism verified by reading code, not yet caught by a trap",
+    "impact.detection": "rng = exe OOS check fires (RNG or FAutoVariable delta of CvPlayer/CvCity/CvUnit); silent = state outside sync-check (CvDiplomacyAI, CvGame, plots, Lua) until it cascades",
+    "behavior_change": "none = continuous play unchanged by the fix; sim = AI/simulation outcome changes; balance = gameplay rule changes for players",
+    "trap.axis": "active_player | heap_fill | stack_fill | heap_shift | heap_jitter | fpu_pc | fpu_pc_global | heap_pattern | stack_pattern | addr_shift | warm-fresh | saveload | lockstep | lockstep-bots | clock_offset | net_faults (heap_pattern/stack_pattern/addr_shift are the spec names of heap_fill/stack_fill/heap_shift; lockstep-bots = lockstep peers whose human slots are played by seeded Lua bots, python -m civsim.lockstep bots, the investigation notes)",
+    "rank": "confidence x impact.score (used by catalog render)"
+  },
+  "entries": [
+    {
+      "id": "DS-0001",
+      "title": "CvUnit combat bonus vs different ideology is not serialized",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "likely",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.h:1611",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:192",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:19744",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:21850",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:22068"
+      ],
+      "mechanism": "m_iCombatBonusVsDifferentIdeologyModifier is accumulated by changeCombatBonusVsDifferentIdeologyModifier (promotion/policy effects) and read by GetCombatBonusVsDifferentIdeologyModifier in combat strength, but it is absent from CvUnit::read, CvUnit::write and CvUnit::reset. After any load the field is 0 on the machines that loaded, while machines that played continuously keep the accumulated value.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.h:1611", "quote": "int m_iCombatBonusVsDifferentIdeologyModifier;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:19749", "quote": "m_iCombatBonusVsDifferentIdeologyModifier += iChange;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:21850", "quote": "void CvUnit::read(FDataStream& kStream)  (field absent here, in write at 22068 and in reset at 961)"},
+        {"loc": "scanner", "quote": "[3] nonser.member CvUnit.h:1611 CvUnit::m_iCombatBonusVsDifferentIdeologyModifier not in Write (not in Read)"}
+      ],
+      "community": [],
+      "trigger": "A unit carries the ideology combat bonus and fights a unit of a different ideology after a hot-join or reconnect (only the joiner loads), or after any save/load compared with continuous play. A full resync heals it, because every peer, the host included, reloads.",
+      "symptom": "Combat damage differs; CvUnit HP (FAutoVariable) diverges and the exe raises OOS. In the lab: continue run differs in ext field m_iCombatBonusVsDifferentIdeologyModifier, then in CvUnit damage.",
+      "impact": {"score": 3, "detection": "rng", "note": "Mid/late game only (ideologies). Reconnects are common in Lekmod MP, so the joiner-side divergence is realistic."},
+      "proposed_fix": "Keep the save format: recompute the field in CvUnit::read from the unit's promotions (and the owner's policies, if a policy feeds it) after the promotion set is loaded; also zero it in reset.",
+      "behavior_change": "none",
+      "trap": {"id": "T1", "axis": ["saveload", "lockstep"], "idea": "continue run from a state with the bonus promotion and a pending combat; lockstep hot-join variant once lockstep-sim exists"},
+      "confidence": 0.85,
+      "fix_refs": ["FIX-0001"],
+      "scanner_rules": ["nonser.member"]
+    },
+    {
+      "id": "DS-0002",
+      "title": "CvPlayer::m_bCanChooseReformationBelief starts from garbage",
+      "class": "C2",
+      "secondary_classes": ["C8"],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.h:2045",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:16334",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:27925",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:28617",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp:469"
+      ],
+      "mechanism": "The bool is serialized but never set in the CvPlayer constructor, reset() or init(). In a new game it holds whatever the heap held (and, in a warm process, the previous game's value, since CvPlayer objects are reused). CvReligionClasses reads it to decide whether a player who founded a religion may add a reformation belief.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.h:2045", "quote": "bool m_bCanChooseReformationBelief;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp:469", "quote": "(kPlayer.GetPlayerPolicies()->HasPolicyGrantingReformationBelief() || kPlayer.CanChooseReformationBelief())"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:27925", "quote": "kStream >> m_bCanChooseReformationBelief;  (so a load overwrites the garbage)"},
+        {"loc": "scanner", "quote": "[3] uninit.member CvPlayer.h:2045 never set in ctor/reset/init; serialized, so garbage only until first load"},
+        {"loc": "investigation notes", "quote": "lekmod6, golden-hyg, 100 turns, civhost --heap-fill 0x00 vs 0xFF / 0x01 / 0xA5: player segments differ from turn 1 (CvPlayer::Write m_bCanChooseReformationBelief, offset 276 of every player segment, 0x00 -> 0xFF), game/map/team segments diverge from turn 83 in all three fills"},
+        {"loc": "investigation notes", "quote": "same runs on det-hyg-fix2 (golden-hyg + LEKMOD_HEADLESS_FIX_0002, the member initialised to false): no game/map/team divergence for 100 turns, only the player segments (other garbage fields, DS-0023..DS-0026) differ"}
+      ],
+      "community": [],
+      "trigger": "New game (not a load). A player with garbage true who founds a religion: an AI adds a reformation belief early on one machine only; a human gets a reformation notification on one machine. Warm process: carries over from the previous game. Reproduced: lekmod6 turn 83 under any non-zero heap fill; not reproduced in pangaea6 or continents8 within 100 turns (no religion founder with the flag set in those games).",
+      "symptom": "Religion beliefs and faith spending diverge (silent at first; AI belief choice uses the sync RNG, so OOS follows).",
+      "impact": {"score": 2, "detection": "rng", "note": "Needs a religion founder whose flag is garbage true; mostly AI. Healed by the first full resync."},
+      "proposed_fix": "Initialise to false in the constructor initialiser list and in reset().",
+      "behavior_change": "sim",
+      "trap": {"id": "T2", "axis": ["heap_fill", "warm-fresh"], "idea": "civhost --heap-fill 0x00 vs 0xFF on lekmod6 (100 turns): turn-1 divergence of the player segments at CvPlayer::Write m_bCanChooseReformationBelief, game/map/team divergence at turn 83; the FIX_0002 DLL removes the latter. Every DLL allocation is covered (the deterministic heap is installed before the DLL loads)."},
+      "confidence": 1.0,
+      "fix_refs": ["FIX-0002"],
+      "scanner_rules": ["uninit.member"]
+    },
+    {
+      "id": "DS-0003",
+      "title": "Italy UA (golden age on finishing a policy tree) applied only on Italy's own machine",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD/Lua/Civilizations/Lekmod_italy.lua:21",
+      "locations": ["LEKMOD/Lua/Civilizations/Lekmod_italy.lua:18", "LEKMOD/Lua/Civilizations/Lekmod_italy.lua:40"],
+      "mechanism": "The GameEvents.PlayerAdoptPolicy handler (synchronous, runs on every peer) returns early when Game.GetActivePlayer() ~= player_id, so ChangeGoldenAgeTurns / ChangeGoldenAgeProgressMeter run only on the machine whose local player is Italy. An AI Italy never gets the bonus.",
+      "evidence": [
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_italy.lua:21", "quote": "or Game.GetActivePlayer() ~= player_id then return end"},
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_italy.lua:28", "quote": "player:ChangeGoldenAgeTurns(golden_age_turns)"},
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_italy.lua:40", "quote": "GameEvents.PlayerAdoptPolicy.Add(lekmod_italy_ua_on_policy_adopt)"},
+        {"loc": "scanner", "quote": "[3] lua.activeplayer Lekmod_italy.lua:21 2 state mutation(s) behind GetActivePlayer (early-return guard) [sync handler]"},
+        {"loc": "investigation notes", "quote": "lockstep italy-t3-ghyg (headless/scenarios/lockstep/lekmod6-italy.json, golden-hyg, installed Lekmod Lua, 2 spectator peers, peer 0's active player = AI Italy): first cross-peer divergence at turn 135, only segment player00 (Italy), 2 bytes at offset 321 written by CvPlayer::Write (FAutoVariable<int>): 459 on peer 0 vs 147 on peer 1, difference 312 = golden_age_points (312.5 x GoldenAgePercent 100) -> m_iGoldenAgeProgressMeter; reproduced on the rerun with state dump; the single-process run (active player Italy) equals peer 0"},
+        {"loc": "investigation notes", "quote": "control italy-t3-ghyg-fixed (same session with --lua-overlay headless/out/lua-overlay/italy-fixed = the repo Lekmod_italy.lua, FIX-0003): 2 peers equal through turn 200, single-process run equal to peer 0"}
+      ],
+      "community": [],
+      "trigger": "A human Italy finishes any policy tree in MP (the lockstep spectator mode also triggers it with an AI Italy that is a peer's active player).",
+      "symptom": "player[Italy] golden-age turns or progress meter differ; golden-age yields follow; exe OOS.",
+      "impact": {"score": 4, "detection": "rng", "note": "Deterministic on every policy-tree completion by a human Italy."},
+      "proposed_fix": "Drop the GetActivePlayer test from the guard; keep only the popup (Events.GameplayAlertMessage) under the active-player check.",
+      "behavior_change": "balance",
+      "trap": {"id": "T3", "axis": ["active_player", "lockstep"], "idea": "python -m civsim.lockstep run headless/scenarios/lockstep/italy-t3-ghyg.json (divergence turn 135, player00 m_iGoldenAgeProgressMeter +312 on Italy's peer) vs italy-t3-ghyg-fixed.json (FIX-0003 overlay, equal through turn 200)"},
+      "confidence": 0.95,
+      "fix_refs": ["FIX-0003"],
+      "scanner_rules": ["lua.activeplayer"]
+    },
+    {
+      "id": "DS-0004",
+      "title": "static processPlayerAutoMoves in CvGame::updateMoves",
+      "class": "C1",
+      "secondary_classes": ["C8"],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9186",
+      "locations": ["LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9200", "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9251", "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9344"],
+      "mechanism": "A function-level static latches whether human auto-moves may run. It is not saved and survives between games in one process. It is reset to false whenever an AI (barbarians and city-states included) is processed, which happens every turn on every peer.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9186", "quote": "static bool processPlayerAutoMoves = false;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9344", "quote": "if(player.isAutoMoves() && (!player.isHuman() || processPlayerAutoMoves))"},
+        {"loc": "scanner", "quote": "[2] static.local CvGame.cpp:9186 function-level static persists across turns/games, not saved"}
+      ],
+      "community": [],
+      "trigger": "Hot-join or reload during the human auto-move phase of a turn (joiner starts with false while others are latched true), or a warm process that ended the previous game with the latch set.",
+      "symptom": "Human auto-moves (queued multi-turn moves, automated units) run in a different update slice on the joiner; ordering of unit moves within the turn can differ.",
+      "impact": {"score": 1, "detection": "rng", "note": "Window is one turn phase; the per-turn AI reset bounds it."},
+      "proposed_fix": "Make it a CvGame member, reset in CvGame::reset and on load (or derive it from synced player state each call).",
+      "behavior_change": "none",
+      "trap": {"id": "T4", "axis": ["lockstep", "warm-fresh"], "idea": "lockstep-sim hot-join at the start of the auto-move phase; warm vs fresh process"},
+      "confidence": 0.25,
+      "fix_refs": [],
+      "scanner_rules": ["static.local"]
+    },
+    {
+      "id": "DS-0005",
+      "title": "m_bReceivedFirstMission / m_bMPOrderedMoveOnTurnLoading are not serialized",
+      "class": "C1",
+      "secondary_classes": ["C5"],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.h:701",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.h:702",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:2901",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:2996",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:296"
+      ],
+      "mechanism": "GAME_ALLOW_ONLY_ONE_UNIT_MOVE_ON_TURN_LOADING flags. They are set on every peer by the net handlers (ResponsePushMission and friends) and reset at turn start (CvGame.cpp:8410) and in init (CvGame.cpp:426), both only when GAMEOPTION_FIRSTMOVE is set, and they are not saved. They gate only whether the local client may send further selection-list commands while the turn is loading.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.h:701", "quote": "bool m_bMPOrderedMoveOnTurnLoading; bool m_bReceivedFirstMission;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:2901", "quote": "if (bAllComplete == getHasReceivedFirstMission()) { if (isMPOrderedMoveOnTurnLoading()) {"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:296", "quote": "if (game.isGameMultiPlayer() && kPlayer.isHuman() && !game.getHasReceivedFirstMission())"}
+      ],
+      "community": [],
+      "trigger": "Hot-join or reload in the first seconds of a turn: the joiner may send (or block) one extra command.",
+      "symptom": "No direct simulation divergence (sender-side gate only); at worst a command that others accept arrives in a different order.",
+      "impact": {"score": 1, "detection": "silent", "note": "Gate on command sending, not on command execution."},
+      "proposed_fix": "Initialise both in CvGame::reset; treat them as UI state (no serialization needed).",
+      "behavior_change": "none",
+      "trap": {"id": "T5", "axis": ["lockstep"], "idea": "lockstep-sim hot-join while the turn is loading, with a scripted first-move command"},
+      "confidence": 0.2,
+      "fix_refs": [],
+      "scanner_rules": ["nonser.member"]
+    },
+    {
+      "id": "DS-0006",
+      "title": "Stop-converting / stop-digging promises recorded only on the asking human's machine",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17282",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17079",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17305",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17316",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17339",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:272",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp:6762",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp:6972"
+      ],
+      "mechanism": "DoFromUIDiploEvent runs on every peer (ResponseDiplomacyFromUI). For FROM_UI_DIPLO_EVENT_HUMAN_DISCUSSION_STOP_SPREADING_RELIGION and _STOP_DIGGING, SetPlayerAskedNotToConvert/Dig and SetPlayerAgreeNotToConvert/Dig are inside if (bActivePlayer), so only the asking human's machine records the request and the AI's answer. IsStopSpreadingReligionAcceptable / IsStopDiggingAcceptable themselves are deterministic (no RNG, no active-player use). The agreed-not-to-convert flag feeds AI missionary targeting (CvReligionClasses.cpp:6762, 6972; the prophet reader at 5631 is compiled out because its AUI define sits in a commented block of _Defines.h); the dig flags have no simulation reader in the DLL (only Lua UI), so the digging half diverges saved state only.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17079", "quote": "bool bActivePlayer = GC.getGame().getActivePlayer() == eFromPlayer;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17282", "quote": "if (bActivePlayer) { SetPlayerAskedNotToConvert(eFromPlayer, true); ..."},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17305", "quote": "SetPlayerAgreeNotToConvert(eFromPlayer, bIsYes);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp:6762", "quote": "if (m_pPlayer->GetDiplomacyAI()->IsPlayerAgreeNotToConvert(pCity->getOwner()))  (missionary city score; also 6972)"},
+        {"loc": "scanner", "quote": "[3] ap.gate CvDiplomacyAI.cpp:17282 / 17316 sim mutation(s) under active-player condition in DoFromUIDiploEvent"},
+        {"loc": "headless/out/sessions/bots-agentB-r3-lekmod6-p4h3-s12/divergence.md", "quote": "lockstep-bots, rel-r3 (r3 commit 8ca14642, no deal fixes), trading bots seed 12 lekmod6 4 peers / 3 humans: turn 37, peer 0 vs peers 1..3 in player05 (AI): CvDiplomacyAI::Write cvdiplomacyai.cpp:2138/2139 (asked / agreed not to dig/convert) 01 vs 00; same class seed 11 turn 39 (player04), seed 13 turn 80 (player02), seed 14 turn 33 (player03)"},
+        {"loc": "headless/out/sessions/bots-agentB-r3f28-lekmod6-p4h3-s12", "quote": "with FIX-0028 on the same build: seeds 12, 13, 14 equal 130 turns; seed 11 then diverged at turn 119 in CvTreasury (DS-0037 trade screen path, FIX-0030), not in CvDiplomacyAI"}
+      ],
+      "community": [
+        "https://github.com/LoneGazebo/Community-Patch-DLL/pull/4233 (VP: same class, synced state changed under an active-player branch of a UI diplomacy path)",
+        "https://github.com/LoneGazebo/Community-Patch-DLL/pull/4235 (VP: same class)"
+      ],
+      "trigger": "MP game with AI majors and neither GAMEOPTION_AI_TWEAKS nor GAMEOPTION_AI_GIMP_NO_RELIGION_SPREAD (with either option the AI skips human cities anyway); a human asks an AI to stop spreading religion.",
+      "symptom": "Silent at first (CvDiplomacyAI is not sync-checked); then AI missionary targeting and approach/opinion differ, and unit moves or RNG diverge.",
+      "impact": {"score": 2, "detection": "silent", "note": "Requires AI majors (co-op vs AI games)."},
+      "proposed_fix": "Move the Set*AskedNotTo* / Set*AgreeNotTo* calls (and the acceptability evaluation) out of the bActivePlayer block; keep only the leader text and animation under it.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["active_player", "lockstep-bots"], "idea": "python -m civsim.lockstep bots --trade 0.1 (the bot's askAI sends HUMAN_DISCUSSION_STOP_SPREADING_RELIGION / STOP_DIGGING): r3 diverges at turns 33..80 in an AI's CvDiplomacyAI; scenario with an AI major whose missionaries target a human; replay a recorded FROM_UI_DIPLO_EVENT stop-spreading command with active_player = asker vs another human; expect CvDiplomacyAI m_pabPlayerAgreeNotToConvert divergence"},
+      "confidence": 0.95,
+      "fix_refs": ["FIX-0028"],
+      "scanner_rules": ["ap.gate"]
+    },
+    {
+      "id": "DS-0007",
+      "title": "Local peace-deal cache feeds the synchronous DoAcceptedDeal",
+      "class": "C5",
+      "secondary_classes": ["C1"],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:208",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.h:132",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3946",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3982",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3995",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:254",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:17106"
+      ],
+      "mechanism": "m_iCachedValueOfPeaceWithHuman (\"NOT SERIALIZED\") is set only on the human's machine by DoTradeScreenOpened (UI path, also reached from DoFromUIDiploEvent under bActivePlayer). DoAcceptedDeal runs on every peer from the net message with identical iDealValueToMe, then subtracts the local cache. The asking human's machine and the others pass different values to ChangeRecentTradeValue / ChangeRecentAssistValue.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.h:132", "quote": "int m_iCachedValueOfPeaceWithHuman;\t\t// NOT SERIALIZED"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:208", "quote": "iDealValueToMe -= GetCachedValueOfPeaceWithHuman();"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3982", "quote": "SetCachedValueOfPeaceWithHuman(-iValueImOffering);  (in DoTradeScreenOpened, local UI)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:254", "quote": "GetPlayer()->GetDiplomacyAI()->ChangeRecentTradeValue(eFromPlayer, iDealValueToMe);"},
+        {"loc": "scanner", "quote": "[3] nonser.member CvDealAI.h:132; [3] ap.gate CvDiplomacyAI.cpp:17106 DoTradeScreenOpened under active player"},
+        {"loc": "investigation notes", "quote": "lockstep-bots campaign B: not exercised, DoTradeScreenOpened needs the trade screen's scratch deal and civhost's UserInterface::GetScratchDeal returns NULL; the bots make no deals or peace treaties with majors"},
+        {"loc": "headless/out/agentB-incident", "quote": "a player-reported multiplayer game (r3, report zip not published), resync at the end of turn 89: Spain (player 1) negotiated peace with Bulgaria (AI, player 6) through the leader screen in turn 88 (NetDealAccepted 1 -> 6). AutoSave_Post_0088 of the host and of Spain imported into civhost with --trace-writes: Bulgaria's CvDiplomacyAI m_paiTradeValue[Spain] 0 on the host vs 300 on Spain's machine (CvDiplomacyAI::Write); RandCalls.csv of both agree up to turn 89, then Bulgaria's approach ranking draws a tie-break only on the host"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3982", "quote": "SetCachedValueOfPeaceWithHuman(-iValueImOffering);  (Spain's machine only; DoAcceptedDeal then subtracted it there: 0 - (-300) = 300 recent trade value)"},
+        {"loc": "headless/out/sessions/bots-agentB-r3f2830b-lekmod6-p4h3-s12", "quote": "lockstep-bots campaign C (trading bots: --trade 0.1, --density 2.0, --fallback-end-turn 300, 130 turns; seeds 11 lekmod6 3x2, 12 lekmod6 4x3, 13 lekmod6 4x2, 14 pangaea6 3x2, 21 lekmod6 3x2, 22 pangaea6 4x3, 23 lekmod6 4x2): with the civhost scratch deal the bots negotiate peace with AI majors (trade-open-peace 189 times over the 7 seeds) but the AI's war state rarely allows surrender terms, so the build without FIX-0026/0027/0029 (rel + FIX-0028 + FIX-0030) stayed equal on all 7 seeds; the incident is the reproduction"},
+        {"loc": "investigation notes", "quote": "r4 gate replay: Spain's AutoSave_Post_0087 imported on 3 lockstep peers (same body, active player 0/1/2 in pregame.bin), Spain's peer replays the turn-88 negotiate peace, embassies, proposal and three luxury swaps (headless/out/r4gate/incident/replay_t88.lua): rel-r3 diverges at turn 89 on Spain's peer alone, Bulgaria's trade value toward Spain 0/297/0 and opinion 3/4/3 (the real Post_0089 values), first differing jon call Approach Weight (6; 1) on peers 0/2 vs (6; 2) on Spain's peer (the real RandCalls signature); r3 + FIX-0030 diverges the same way; r4-gate (FIX-0026) equal to turn 91, 297 / 4 on every peer"}
+      ],
+      "community": ["https://github.com/LoneGazebo/Community-Patch-DLL/pull/4233 (VP: same class, local diplomacy state used in synced deal processing)"],
+      "trigger": "A human makes peace with an AI major through the trade screen (surrender terms in either direction). The screen stays open while the deal is in transit, so the cache is still non-zero when DoAcceptedDeal runs locally.",
+      "symptom": "Silent: CvDiplomacyAI recent-trade/assist values differ; later approach, war and deal decisions diverge.",
+      "impact": {"score": 2, "detection": "silent", "note": "Requires AI majors and a peace treaty with value terms."},
+      "proposed_fix": "Fold the peace value into iDealValueToMe on the sender before sendNetDealAccepted (or drop the subtraction in DoAcceptedDeal) so that no local state is read in the synced path.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["active_player", "lockstep-bots"], "idea": "scripted peace deal with an AI; replay DoTradeScreenOpened only for the proposing human; compare CvDiplomacyAI trade values after DoAcceptedDeal"},
+      "confidence": 0.97,
+      "fix_refs": ["FIX-0026"],
+      "scanner_rules": ["nonser.member", "ap.gate"]
+    },
+    {
+      "id": "DS-0008",
+      "title": "Closing the trade screen mutates synced AI deal state locally",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "likely",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:4054",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:4030",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:4064",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:193"
+      ],
+      "mechanism": "CvDealAI::DoTradeScreenClosed is called from UI Lua (Player:DoTradeScreenClosed) on the human's machine only. It calls ClearDealToRenew (clears CvDeal::m_bConsideringForRenewal and the AI's deal-to-renew) and may DoCancelWantsResearchAgreementWithPlayer. Both are synced state: DoAcceptedDeal checks GetDealToRenew at line 193 and calls PrepareRenewDeal on the peers that still hold it.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:4054", "quote": "GetPlayer()->GetDiplomacyAI()->ClearDealToRenew();"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:4064", "quote": "GetPlayer()->GetDiplomacyAI()->DoCancelWantsResearchAgreementWithPlayer(eActivePlayer);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:193", "quote": "if(m_pPlayer->GetDiplomacyAI()->GetDealToRenew(&iDealType)) { ... CvGameDeals::PrepareRenewDeal(...)"},
+        {"loc": "scanner", "quote": "[3] ap.gate CvDealAI.cpp:4060/4062 DoTradeScreenClosed"},
+        {"loc": "investigation notes", "quote": "lockstep-bots campaign B, negative: a UI battery calling Player:DoTradeScreenClosed(true) on the bot's own peer (tradeclose_offer group, v-release, lekmod6) stayed equal for 160 and 200 turns; the trigger (a pending AI renewal or research-agreement offer to the human) was not reached, so this neither confirms nor clears the entry"},
+        {"loc": "headless/out/sessions/bots-agentB-fix3-pangaea6-p4h3-s22", "quote": "lockstep-bots campaign C (trading bots: --trade 0.1, --density 2.0, --fallback-end-turn 300, 130 turns; seeds 11 lekmod6 3x2, 12 lekmod6 4x3, 13 lekmod6 4x2, 14 pangaea6 3x2, 21 lekmod6 3x2, 22 pangaea6 4x3, 23 lekmod6 4x2): the bots close the trade screen 1267 times over the 7 seeds (Player:DoTradeScreenClosed); without FIX-0027 (rel + FIX-0028 + FIX-0030) all 7 seeds stayed equal 130 turns; with FIX-0027 (network games: a FromUIDiploEvent with code NUM_FROM_UI_DIPLO_EVENTS, diag trigger 27 = 1267 on peer 0) all 7 seeds equal"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:12139", "quote": "if(!CvPreGame::isNetworkMultiplayerGame())  (DoContactMajorCivs: the human contact loop, i.e. AI offers, renewals and peace offers to humans, is single player / hot-seat only)"}
+      ],
+      "community": [
+        "https://github.com/LoneGazebo/Community-Patch-DLL/pull/10279 (VP: same class, UI-only deal/renewal handling mutating synced state)",
+        "https://github.com/LoneGazebo/Community-Patch-DLL/pull/10919 (VP: same class)"
+      ],
+      "trigger": "An AI major offers a deal renewal (or a research agreement) to a human, and the human closes the screen without accepting; later any deal between that AI and a human is accepted.",
+      "symptom": "Deal processing differs (renewal path keeps resources on some peers); resource counts and happiness diverge, then RNG.",
+      "impact": {"score": 1, "detection": "rng", "note": "Not reachable in v34.15 network games: DoContactMajorCivs skips humans there, so no deal with a human is marked for renewal and no AI offer sets bAIWasMakingOffer; AI-AI renewals clear their mark in the same call. Single player / hot-seat run on one machine. FIX-0027 is a guard."},
+      "proposed_fix": "Route the side effects through a net message (e.g. a FROM_UI_DIPLO_EVENT code handled on all peers) and leave only UI flags in DoTradeScreenClosed.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["active_player", "lockstep-bots"], "idea": "AI renewal offer to a human, closed locally; then a scripted accepted deal; compare CvDeal renewal flags and resources"},
+      "confidence": 0.2,
+      "fix_refs": ["FIX-0027"],
+      "scanner_rules": ["ap.gate"]
+    },
+    {
+      "id": "DS-0009",
+      "title": "Half-timer air-patrol / paradrop rule reads the local wall clock in synced mission code",
+      "class": "C7",
+      "secondary_classes": ["C5"],
+      "status": "likely",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:4983",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:6931",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:5618",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitMission.cpp:1007",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitMission.cpp:1051",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitMission.cpp:1474",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:992"
+      ],
+      "mechanism": "CAN_SET_INTERCEPT_HALF_TIMER / CAN_PARADROP_HALF_TIMER make canAirPatrol / canParadropAt return false once getTimeElapsed()*2 > turn length. getTimeElapsed returns m_fTimeElapsed, which each machine fills from its own clock (hasTurnTimerExpired). The checks run inside synchronous mission validation and execution (CvUnitMission::CanStartMission / ContinueMission) on every peer, so near the half-time mark, after a reconnect (the joiner's timer restarts) or after a pause/unpause (StartWithOffset(getTimeElapsed()) uses each peer's local value), peers disagree whether the mission is legal.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:4985", "quote": "if (kGame.isOption(GAMEOPTION_END_TURN_TIMER_ENABLED) && (kGame.isOption(\"GAMEOPTION_FAST_HAND\")) && kGame.getElapsedGameTurns() > 0 &&"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:5618", "quote": "float CvGame::getTimeElapsed() { return m_fTimeElapsed; }"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitMission.cpp:1007", "quote": "if(hUnit->canAirPatrol(pPlot))  (synced mission validation)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:998", "quote": "GC.getGame().m_timeSinceGameTurnStart.StartWithOffset(GC.getGame().getTimeElapsed());"}
+      ],
+      "community": [],
+      "trigger": "Turn timer on, GAMEOPTION_FAST_HAND on, pitboss turn time 0 or GAMEOPTION_RELATIVE_TURN_TIMER (AUI_GAME_RELATIVE_TURN_TIMERS is on); a human orders air patrol or paradrop close to half the turn time, or any time after a reconnect or a timer pause.",
+      "symptom": "Unit activity/position diverges (FAutoVariable on CvUnit), exe OOS; AI callers (CvTacticalAI, CvMilitaryAI) run at turn start and are rarely affected.",
+      "impact": {"score": 3, "detection": "rng", "note": "Competitive Lekmod MP commonly uses turn timers; reconnect makes the window a whole half-turn."},
+      "proposed_fix": "Evaluate the time rule only on the sending client (UI/command validation) and skip it in synchronous execution, or send a synced 'half-time passed' event from the host and test that flag instead of the clock.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["clock_offset", "lockstep"], "idea": "turn-timer scenario with FAST_HAND; peers with clock_offset straddling half-time; scripted air-patrol command; expect CvUnit mission/activity divergence"},
+      "confidence": 0.65,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0010",
+      "title": "CvCityStrategyAI yield-delta arrays: uninitialised and not serialized, read by worker scoring",
+      "class": "C2",
+      "secondary_classes": ["C1"],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:241",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.h:248",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.h:249",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:1699",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp:190",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp:3001",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20919"
+      ],
+      "mechanism": "m_asBestYieldAverageTimes100 / m_asYieldDeltaTimes100 are value-initialised only under AUI_WARNING_FIXES (off in the golden defines), are not in Read/Write, and are refreshed only by UpdateBestYields, which is called from CvBuilderTaskingAI::Update in the owner's setTurnActive. ScorePlot multiplies by GetYieldDeltaTimes100 of the plot's working city. A city founded mid-turn, or every city after a load (hot-join, reload), holds heap garbage until the owner's next turn start.",
+      "evidence": [
+        {"loc": "investigation notes", "quote": "lekmod6 T=50 continuation: Tonga workers score resource (19,42) 18709653 vs 1064777 after load; city focus 2 vs 0 (best yields not serialized); identical 51..100 with FIX-0013+0014"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp:154", "quote": "m_iNumCities = -1; //Force everyone to do an CvBuilderTaskingAI::Update() after loading"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:250", "quote": "#ifdef AUI_WARNING_FIXES ... m_asBestYieldAverageTimes100(), m_asYieldDeltaTimes100(), #endif"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp:3001", "quote": "int iMultiplier = pCityStrategy->GetYieldDeltaTimes100((YieldTypes)ui);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp:190", "quote": "pCity->GetCityStrategyAI()->UpdateBestYields();  (only caller, from setTurnActive)"},
+        {"loc": "scanner", "quote": "[3] uninit.member + [3] nonser.member CvCityStrategyAI.h:248/249"}
+      ],
+      "community": [],
+      "trigger": "Worker scoring (AI workers, human automated workers, city-state workers) touches a plot of a city founded this turn, or of any city after a load before the owner's next setTurnActive (human automated workers run in the end-of-turn auto-moves, before that).",
+      "symptom": "Different build choices or worker moves per peer; unit state and RNG diverge.",
+      "impact": {"score": 3, "detection": "rng", "note": "Hot-join plus automated workers is the realistic path; mid-turn founding affects AI/automated workers the same turn."},
+      "proposed_fix": "Value-initialise both arrays in the constructor and Reset (as the AUI branch does) and call UpdateBestYields for every city after load and on city creation.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["heap_pattern", "saveload"], "idea": "heap_pattern 0x00 vs 0xFF with an AI that founds a city and works plots the same turn; continue run with automated workers"},
+      "confidence": 0.55,
+      "fix_refs": ["FIX-0013", "FIX-0014"],
+      "scanner_rules": ["uninit.member", "nonser.member"]
+    },
+    {
+      "id": "DS-0011",
+      "title": "Consulates catch-up handler removes itself (handler set differs after load)",
+      "class": "C1",
+      "secondary_classes": ["C5"],
+      "status": "likely",
+      "versions": ["v34.15"],
+      "location": "LEKMOD/Lua/Lekmod_policies.lua:78",
+      "locations": ["LEKMOD/Lua/Lekmod_policies.lua:96", "LEKMOD/Lua/Lekmod_policies.lua:64"],
+      "mechanism": "Lekmod_OnAdoptConsulates removes itself from GameEvents.PlayerAdoptPolicy after the first Consulates adoption. Peers that played continuously no longer have the handler; a peer that loads (hot-join, reconnect) re-registers it at context load. A later Consulates adopter in Industrial+ gets catch-up league votes only on the loaded peers.",
+      "evidence": [
+        {"loc": "LEKMOD/Lua/Lekmod_policies.lua:78", "quote": "GameEvents.PlayerAdoptPolicy.Remove(Lekmod_OnAdoptConsulates) -- This is a one-time event"},
+        {"loc": "LEKMOD/Lua/Lekmod_policies.lua:65", "quote": "if eraID >= GameInfoTypes[\"ERA_INDUSTRIAL\"] then   player:ChangeNumPolicyLeagueVotes(1) end"},
+        {"loc": "scanner", "quote": "[3] lua.selfremove Lekmod_policies.lua:78"}
+      ],
+      "community": [],
+      "trigger": "Someone adopts Consulates; then a hot-join/reconnect; then another player adopts Consulates in the Industrial era or later.",
+      "symptom": "League vote counts diverge; World Congress outcomes differ.",
+      "impact": {"score": 2, "detection": "silent", "note": "Also a deterministic balance bug in continuous play (second adopter gets nothing)."},
+      "proposed_fix": "Do not remove the handler; the policy-id test already filters other policies.",
+      "behavior_change": "balance",
+      "trap": {"id": null, "axis": ["saveload", "lockstep"], "idea": "continue run across a second Consulates adoption in Industrial era; compare league votes"},
+      "confidence": 0.7,
+      "fix_refs": ["FIX-0004"],
+      "scanner_rules": ["lua.selfremove"]
+    },
+    {
+      "id": "DS-0012",
+      "title": "Mexico UA reveal handler removes itself",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD/Lua/Civilizations/Lekmod_mexico.lua:38",
+      "locations": ["LEKMOD/Lua/Civilizations/Lekmod_mexico.lua:43", "LEKMOD/Lua/Civilizations/Lekmod_mexico.lua:24"],
+      "mechanism": "lekmod_mexico_ua (PlayerDoTurn) reveals city-state cities within 10 tiles of Mexico's start and then removes itself. After a load the handler is back on the loaded peers and runs again on Mexico's next turn there only. With one Mexico the re-run is usually a no-op (cities already revealed); with two Mexicos, or a city-state city that appeared later, the reveal state diverges.",
+      "evidence": [
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_mexico.lua:38", "quote": "GameEvents.PlayerDoTurn.Remove(lekmod_mexico_ua)"},
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_mexico.lua:24", "quote": "loop_plot:SetRevealed(player_team, true);"},
+        {"loc": "scanner", "quote": "[3] lua.selfremove Lekmod_mexico.lua:38"}
+      ],
+      "community": [],
+      "trigger": "Two Mexico players, or a new city-state city in range, plus a hot-join/reload.",
+      "symptom": "Plot revealed bits diverge (silent; AI decisions may follow).",
+      "impact": {"score": 1, "detection": "silent", "note": ""},
+      "proposed_fix": "Run the reveal once per Mexico player at game start from a synced event, without removing the handler (or keep a per-player done flag in saved data).",
+      "behavior_change": "balance",
+      "trap": {"id": null, "axis": ["saveload"], "idea": "continue run with two Mexico players"},
+      "confidence": 0.35,
+      "fix_refs": [],
+      "scanner_rules": ["lua.selfremove"]
+    },
+    {
+      "id": "DS-0013",
+      "title": "Venice Compass trade-route handler removes itself",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD/Lua/Civilizations/Lekmod_venice.lua:17",
+      "locations": ["LEKMOD/Lua/Civilizations/Lekmod_venice.lua:27"],
+      "mechanism": "After the first Venice gets the Compass trade route the TeamTechResearched handler removes itself. Loaded peers re-register it, so a second Venice (another team) researching Compass gets the route only on loaded peers.",
+      "evidence": [
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_venice.lua:15", "quote": "player:ChangeNumMiscTradeRoutes(1)"},
+        {"loc": "LEKMOD/Lua/Civilizations/Lekmod_venice.lua:17", "quote": "GameEvents.TeamTechResearched.Remove(lekmod_venice_route_compass)"}
+      ],
+      "community": [],
+      "trigger": "Two Venice players on different teams plus a hot-join/reload between their Compass techs.",
+      "symptom": "Trade-route count diverges; trade routes and yields follow.",
+      "impact": {"score": 1, "detection": "rng", "note": "Duplicate civs are rare."},
+      "proposed_fix": "Keep the handler; guard per player instead.",
+      "behavior_change": "balance",
+      "trap": {"id": null, "axis": ["saveload"], "idea": "continue run with two Venice players"},
+      "confidence": 0.3,
+      "fix_refs": [],
+      "scanner_rules": ["lua.selfremove"]
+    },
+    {
+      "id": "DS-0014",
+      "title": "Dummy policies granted from a local engine event (Events.SequenceGameInitComplete)",
+      "class": "C5",
+      "secondary_classes": ["C1"],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD/Lua/Lekmod_global_dummies.lua:104",
+      "locations": ["LEKMOD/Lua/Lekmod_global_dummies.lua:115", "LEKMOD/Lua/Lekmod_global_dummies.lua:125"],
+      "mechanism": "Events.SequenceGameInitComplete fires on each machine when its own load completes, including on a joiner only. The handler calls SetNumFreePolicies(1), SetNumFreePolicies(0) and SetHasPolicy for players lacking the dummy policy. It is guarded by HasPolicy, so it is idempotent except that SetNumFreePolicies(0) would zero pending free policies of a player who still lacks the dummy policy (for example player 0, skipped by ipairs).",
+      "evidence": [
+        {"loc": "LEKMOD/Lua/Lekmod_global_dummies.lua:114", "quote": "if not player:HasPolicy(GameInfoTypes[policy_type]) then player:SetNumFreePolicies(1) player:SetNumFreePolicies(0) ..."},
+        {"loc": "LEKMOD/Lua/Lekmod_global_dummies.lua:125", "quote": "Events.SequenceGameInitComplete.Add(lekmod_add_dummy_policies)"},
+        {"loc": "scanner", "quote": "[3] lua.events-mutator Lekmod_global_dummies.lua:104"}
+      ],
+      "community": [],
+      "trigger": "Hot-join/reload while some eligible player lacks the dummy policy and has pending free policies.",
+      "symptom": "Free-policy counts or policy set diverge on the joiner.",
+      "impact": {"score": 1, "detection": "rng", "note": ""},
+      "proposed_fix": "Grant dummy policies from a synced hook at game start (or in the DLL at player init), not from Events.*.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["saveload", "lockstep"], "idea": "continue run with a civ that has a dummy policy and a pending free policy at the save point"},
+      "confidence": 0.15,
+      "fix_refs": ["FIX-0007"],
+      "scanner_rules": ["lua.events-mutator"]
+    },
+    {
+      "id": "DS-0015",
+      "title": "CvPlayer::disconnected mutates simulation at network-event time",
+      "class": "C6",
+      "secondary_classes": ["C7"],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:30973",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31038",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31057",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31066"
+      ],
+      "mechanism": "disconnected() is called by the exe when the network layer reports a drop, not as an ordered game command. It switches the slot to SS_COMPUTER (AI takeover), and with GAMEOPTION_AI_GIMP_NO_DEALS cancels deals, closes embassies, cancels research agreements, evacuates diplomats and calls verifyUnitValidPlot. Each peer applies this at its own point in the command stream.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31038", "quote": "CvPreGame::setSlotStatus(GetID(), SS_COMPUTER);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31057", "quote": "GC.getGame().GetGameDeals()->DoCancelDealsBetweenTeams(GET_PLAYER(GetID()).getTeam(), (TeamTypes)iLoopTeam);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31066", "quote": "GC.getMap().verifyUnitValidPlot();"}
+      ],
+      "community": [],
+      "trigger": "A human disconnects while other peers are mid-turn or mid-command-stream (incident 04 class).",
+      "symptom": "Deals, embassies and unit positions differ for a window; AI takeover runs AI logic for the slot on some peers earlier than others.",
+      "impact": {"score": 3, "detection": "rng", "note": "Disconnects are common; whether the exe serialises the callback with the command stream is unknown (needs lockstep-sim)."},
+      "proposed_fix": "Have the host issue the takeover and the deal cancellation as an ordered net command, and do only UI work in disconnected().",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["net_faults", "lockstep"], "idea": "lockstep-sim with a scripted drop at different command offsets per peer; compare deals and unit plots"},
+      "confidence": 0.35,
+      "fix_refs": [],
+      "scanner_rules": ["ap.gate"]
+    },
+    {
+      "id": "DS-0016",
+      "title": "GAMESTATE_OVER set only on the eliminated active player's machine",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:1691",
+      "locations": ["LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:1693"],
+      "mechanism": "CvGame::update sets the game state to GAMESTATE_OVER when the local active player is dead and not an observer. Game state is synced data; the other peers keep GAMESTATE_ON.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:1691", "quote": "if(CvPreGame::slotStatus(getActivePlayer()) != SS_OBSERVER && !GET_PLAYER(getActivePlayer()).isAlive())"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:1693", "quote": "setGameState(GAMESTATE_OVER);"}
+      ],
+      "community": [],
+      "trigger": "A human is eliminated in MP and stays connected (worst case: the host).",
+      "symptom": "That peer stops normal turn processing; if it is the host, the next resync save carries GAMESTATE_OVER.",
+      "impact": {"score": 2, "detection": "silent", "note": ""},
+      "proposed_fix": "In network MP, switch the eliminated player to observer/defeat UI without changing the synced game state.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["active_player"], "idea": "scenario where a major is eliminated; active_player = that major vs another; compare CvGame game state"},
+      "confidence": 0.25,
+      "fix_refs": [],
+      "scanner_rules": ["ap.gate"]
+    },
+    {
+      "id": "DS-0017",
+      "title": "Gameplay Lua is loaded as UI contexts from InGame.lua",
+      "class": "C7",
+      "secondary_classes": ["C5"],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "DLC:Lua/UI/InGame.lua:1276",
+      "locations": ["DLC:Lua/UI/InGame.lua:1280", "DLC:Lua/UI/InGame.lua:1317"],
+      "mechanism": "All Lekmod gameplay scripts (GameEvents handlers that mutate synced state) are started by ContextPtr:LoadNewContext calls in the DLC's InGame.lua. A peer whose InGame.lua comes from another UI mod (EUI or an older install that overrides the file) never registers those handlers, and every handler-driven change diverges. Checked 2026-10-17 (the EUI-vs-UI profile comparison (civsim.detlab.euiui diff)): this does not happen from the EUI choice itself. ui_check.bat installs the same InGame.lua (tmp\\ui\\InGame.lua.ignore) for EUI and non-EUI players, EUI's own InGame.lua loses the skin lookup to Lekmod's (package priority 250 < 300), and the 37 gameplay contexts plus their includes (40 names) resolve to identical files in both profiles. The risk remains for an install where ui_check.bat did not run (Lekmod only shows reminders: the LegalScreen text and the chat line JoiningRoom sends, TXT_KEY_UI_CHECK_BAT) or a third mod that overrides the file.",
+      "evidence": [
+        {"loc": "DLC:Lua/UI/InGame.lua:1272", "quote": "-- Lekmod: Load LUA files"},
+        {"loc": "DLC:Lua/UI/InGame.lua:1284", "quote": "ContextPtr:LoadNewContext(\"Lekmod_policies\")"},
+        {"loc": "DLC:Lua/UI/InGame.lua:1310", "quote": "ContextPtr:LoadNewContext(\"Lekmod_italy\")"}
+      ],
+      "community": [],
+      "trigger": "Peers whose InGame.lua is not Lekmod's (ui_check.bat skipped, an old install, another mod overriding it); EUI vs the bundled UI alone is not enough.",
+      "symptom": "Immediate divergence on the first Lua-driven event (dummy buildings, policies, civ UAs).",
+      "impact": {"score": 3, "detection": "rng", "note": "Install-dependent; no code path in one install is wrong."},
+      "proposed_fix": "Load gameplay scripts as InGameUIAddin/gameplay entries independent of InGame.lua, or verify an install fingerprint (hash of InGame.lua and the gameplay Lua) in the lobby.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep"], "idea": "lockstep-sim peer with a data profile lacking the Lekmod contexts"},
+      "confidence": 0.15,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0018",
+      "title": "Delayed-policy penalty flag cleared through notification expiry",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:1632",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:1589",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5077",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5092",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:442"
+      ],
+      "mechanism": "PENALTY_FOR_DELAYING_POLICIES: doTurnPostDiplomacy adopts a random policy (getJonRandNum) while IsDelayedPolicy(). Besides the synced writers, the flag is cleared from IsNotificationExpired for NOTIFICATION_POLICY / NOTIFICATION_FREE_POLICY, which runs only while that notification exists and is not dismissed. Notification lists can differ per peer: notifications added only for the active player (chooseTech, disconnect), user dismissal when policy saving is on, ring-buffer eviction at 100 entries, and the EUI NotificationPanel's local CITY_TILE entry for every culture border growth of the EUI owner (DS-0033). If culture dips below cost mid-turn (founding a city raises the cost) and recovers by end of turn, peers disagree on the random adoption.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:1632", "quote": "GET_PLAYER(m_ePlayer).setIsDelayedPolicy(false);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5092", "quote": "int iNextPolicy = GC.getGame().getJonRandNum(adoptablePolicies.size(), \"Random Policy Pick\");"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:442", "quote": "RemoveOldestNotification();  (ring of MAX_NOTIFICATIONS 100)"}
+      ],
+      "community": [],
+      "trigger": "GAMEOPTION_NO_MP_POLICY_SAVING plus turn timer; a human with enough culture who neither picks a policy nor keeps culture above cost, and differing notification lists across peers.",
+      "symptom": "Random policy adoption plus a sync RNG call on some peers only; exe OOS.",
+      "impact": {"score": 2, "detection": "rng", "note": "Needs a notification-list difference; MayUserDismiss blocks dismissal of POLICY notifications unless policy saving is on."},
+      "proposed_fix": "Remove the setIsDelayedPolicy(false) calls from IsNotificationExpired (doTurnPostDiplomacy and ResponseUpdatePolicies already maintain the flag from synced data).",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["active_player", "lockstep"], "idea": "turn-timer scenario with the option on; drop the POLICY notification on one peer; city founded mid-turn"},
+      "confidence": 0.15,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0019",
+      "title": "CvEspionageAI arrays appended on load: saved espionage counters replaced by defaults",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:6073",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:6062",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:4615",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:28383",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:6130"
+      ],
+      "mechanism": "CvPlayer::Read -> reset() -> CvEspionageAI::Init/Reset pre-fills the seven per-civ vectors (out-of-tech turn, spies caught/killed/died, last-turn markers) with MAX_MAJOR_CIVS defaults; operator>> then push_backs the saved values. The game indexes [0..21], i.e. the defaults: every load resets the espionage AI's memory, and every save/load cycle grows each vector by 22 entries.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:6073", "quote": "writeTo.m_aiCivOutOfTechTurn.push_back(iValue);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:4615", "quote": "m_aiCivOutOfTechTurn.push_back(-1);"},
+        {"loc": "investigation notes", "quote": "round-trip lekmod6 T=50: player00..63 319874 -> 320490 bytes (+616) after one load; clean with FIX-0009"}
+      ],
+      "community": [],
+      "trigger": "Any load (hot-join, reconnect, resync on the loading peers, single-player reload) once a counter is non-default (a spy was caught/killed/died, or a civ ran out of techs to steal).",
+      "symptom": "Espionage AI decisions (spy placement, counter-spy, diplomacy reactions to caught spies) differ between a loaded and a continuous peer; the player segment grows by 616 bytes per load.",
+      "impact": {"score": 2, "detection": "silent", "note": "Mid/late game (espionage era). Also changes the game on every single-player reload."},
+      "proposed_fix": "Read over the pre-filled defaults (keep the first MAX_MAJOR_CIVS entries of a grown golden save). Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["saveload"], "idea": "civsim.enginehost.roundtrip on any checkpoint: player segment size grows by 616 bytes"},
+      "confidence": 1.0,
+      "fix_refs": ["FIX-0009"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0020",
+      "title": "CvGoodyHuts read order differs from write order (LEKMOD_NEW_ANCIENT_RUIN_REWARDS)",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:193",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:171",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:185",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:214",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:223"
+      ],
+      "mechanism": "Write emits all 22 recent-goody arrays (NUM_GOODIES_REMEMBERED ints each) and then all 22 x DB.Count(GoodyHuts) once-per-game flags; Read consumes them interleaved per player. Sizes match, so the load succeeds, but after it the recent goodies of players 1+ hold flag values (0 = goody type 0 'received lately') and the once-per-game flags hold goody ids.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:193", "quote": "kStream >> m_aiGoodyHutsOncePerGame[iI][iJ];  (inside the per-player loop)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:223", "quote": "kStream << m_aiGoodyHutsOncePerGame[iI][iJ];  (separate loop after all results)"},
+        {"loc": "investigation notes", "quote": "round-trip lekmod6 T=50: supporting segment, the golden read order reproduces the re-written bytes exactly"}
+      ],
+      "community": [],
+      "trigger": "Any load followed by a unit popping an ancient ruin.",
+      "symptom": "Different ruin reward (and RNG use) on loaded vs continuous peers.",
+      "impact": {"score": 2, "detection": "rng", "note": "Ancient era mostly; every reload of a game with ruins left."},
+      "proposed_fix": "Read in Write's order (all result arrays, then all flags). Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["saveload"], "idea": "civsim.enginehost.roundtrip: supporting segment differs after one load"},
+      "confidence": 1.0,
+      "fix_refs": ["FIX-0010"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0021",
+      "title": "Post-load RecalculateLandmasses renumbers every landmass and drops continent types",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMap.cpp:2368",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMap.cpp:2356",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMap.cpp:2396",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMap.cpp:60",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/FirePlace/include/FireWorks/FFreeListTrashArray.h:238",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:10944"
+      ],
+      "mechanism": "The exe calls ICvMap1::RecalculateLandmasses right after reading the players. recalculateLandmasses does RemoveAll + calculateLandmasses; FFreeListTrashArray::Add assigns ID = m_iCurrentID + slot and RemoveAll does not rewind m_iCurrentID, so every landmass and every plot's m_iLandmass gets a new generation (+31 on lekmod6), and CvLandmass::init zeroes the continent type stamped at map generation. All gameplay uses compare or look up IDs, so play is unchanged, but the loaded map state never equals the continuous one.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/FirePlace/include/FireWorks/FFreeListTrashArray.h:238", "quote": "m_pArray[iIndex].pData->SetID(m_iCurrentID + iIndex);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMap.cpp:2368", "quote": "m_landmasses.RemoveAll();"},
+        {"loc": "investigation notes", "quote": "round-trip lekmod6 T=50: every plot record bytes 35..38 (m_iLandmass) 0x0045a000 -> 0x00498000; landmass records lose continent types 1..4"}
+      ],
+      "community": [],
+      "trigger": "Every load.",
+      "symptom": "Map segment digest differs after any load (the 'per-plot flag word' of civhost finding 16); no gameplay difference found.",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only: masks real map divergences in save/load comparisons."},
+      "proposed_fix": "On the first recalculation after a map Read, rewind the ID counter to the oldest saved landmass generation and restore the saved continent types. Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["saveload"], "idea": "civsim.enginehost.roundtrip: map segment differs in every plot record"},
+      "confidence": 1.0,
+      "fix_refs": ["FIX-0011"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0022",
+      "title": "Post-load InitScoreCalculation recomputes m_iMaxPopulation from the loaded map",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:5483",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:5467",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10613",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10887"
+      ],
+      "mechanism": "The exe calls ICvGame1::InitScoreCalculation after a load (0x10ae10 tail). m_iMaxPopulation is derived from the current best nature food yields, so the game-start value is replaced by the loaded turn's (884 -> 880 on lekmod6 T=50). No DLL code reads it (getters only, Lua bindings commented out).",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:5483", "quote": "m_iMaxPopulation = getPopulationScore(iMaxFood / std::max(1, GC.getFOOD_CONSUMPTION_PER_POPULATION()));"},
+        {"loc": "investigation notes", "quote": "round-trip lekmod6 T=50: game segment offset 56 (m_iMaxPopulation) 0x374 -> 0x370 after the post-load tail"}
+      ],
+      "community": [],
+      "trigger": "Every load after map changes that alter best nature food yields (features removed, etc.).",
+      "symptom": "Game segment digest differs after a load; no gameplay difference.",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only."},
+      "proposed_fix": "Keep the saved score baseline on the first InitScoreCalculation after a game Read. Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["saveload"], "idea": "civsim.enginehost.roundtrip label after-postload: game segment offset 56"},
+      "confidence": 1.0,
+      "fix_refs": ["FIX-0012"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0023",
+      "title": "CvMilitaryAI::Reset clears the four per-player 'last turn' arrays only up to the number of AI strategies",
+      "class": "C2",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:342",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:291",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:411",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:2337",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:2396"
+      ],
+      "mechanism": "m_paeLastTurnWarState / MilitaryThreat / MilitaryStrength / TargetValue are int[MAX_CIV_PLAYERS] (63) allocated with FNEW (no zeroing), but Reset() fills them inside the loop over m_pAIStrategies->GetNumMilitaryAIStrategies() (25 on lekmod6). Entries 25..62 of each array keep heap garbage and are serialized by Write. The only readers (UpdateThreats, UpdateWarStates) loop over MAX_MAJOR_CIVS (22), so the garbage is never read today; it differs between machines (and between a fresh and a warm process) in every CvPlayer segment (all 64 slots, unused ones included).",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:291", "quote": "m_paeLastTurnWarState = FNEW(int[MAX_CIV_PLAYERS], c_eCiv5GameplayDLL, 0);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:342", "quote": "for(iI = 0; iI < m_pAIStrategies->GetNumMilitaryAIStrategies(); iI++)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:2337", "quote": "for(int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)"},
+        {"loc": "investigation notes", "quote": "civhost --heap-fill 0xFF --dump-state-at 1 --trace-writes on lekmod6: CvMilitaryAI::Write lines 411-414 differ in bytes 100..251 of each array in all 64 player segments"},
+        {"loc": "investigation notes", "quote": "heap_fill=0x00,0xFF,0xA5 with -FlagSet release: insensitive on lekmod6/pangaea6/continents8 (100 turns), early x6 (50), realistic x3 (100), starter x3 (20); the zero-heap digest of golden-hyg is unchanged (section 'DS-0023..DS-0026 and DS-0028: fixes')"}
+      ],
+      "community": [],
+      "trigger": "Any new game, from turn 1. Visible only in the serialized bytes (save files, checkpoints, digests); nothing reads the garbage entries.",
+      "symptom": "Save files of two machines differ although the simulation is identical; digest.bin player segments differ under --heap-fill from turn 1.",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only today. Becomes real if a future change reads entries >= the strategy count, and it makes byte-level save comparison useless without masking."},
+      "proposed_fix": "Fill the four arrays over MAX_CIV_PLAYERS (a second loop in Reset), not over the strategy count. Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["heap_fill", "warm-fresh"], "idea": "new game, heap_fill 0x00 vs 0xFF: player00..63 differ at turn 1 in CvMilitaryAI::Write offsets 25..62 of each array (use --trace-writes to name the lines)"},
+      "confidence": 1.0,
+      "fix_refs": ["HYG-0005"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0024",
+      "title": "CvMinorCivAI::Reset clears the bully-total arrays only for the 22 majors, the arrays have 63 entries",
+      "class": "C2",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1673",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1685",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1875",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.h:612",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31528"
+      ],
+      "mechanism": "m_aiBullyGoldAmountTotalByPlayer / m_aiBullyWorkersAmountTotalByPlayer (ENHANCED_GRAPHS statistics) are int[MAX_CIV_PLAYERS] members of every CvMinorCivAI, reset in a loop over MAX_MAJOR_CIVS. Entries 22..62 are never written and keep heap garbage, which Write serializes (164 bytes per array per player). The index is always a major (the bully), so no code reads them.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.h:612", "quote": "int m_aiBullyGoldAmountTotalByPlayer[MAX_CIV_PLAYERS];"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1673", "quote": "for(iI = 0; iI < MAX_MAJOR_CIVS; iI++)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1685", "quote": "m_aiBullyGoldAmountTotalByPlayer[iI] = 0;"},
+        {"loc": "investigation notes", "quote": "civhost --heap-fill 0xFF --dump-state-at 1 --trace-writes on lekmod6: CvMinorCivAI::Write lines 1875-1876 differ in all 64 player segments"},
+        {"loc": "investigation notes", "quote": "same runs as DS-0023: CvMinorCivAI::Write no longer differs under heap_fill; golden-hyg == hyg set (HYG-0001..0009) digest.bin, lekmod6 50 turns and starter x3"}
+      ],
+      "community": [],
+      "trigger": "Any new game, from turn 1; serialized garbage only.",
+      "symptom": "Same as DS-0023: player segments / save bytes differ between machines, simulation unaffected.",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only (graph statistics)."},
+      "proposed_fix": "Loop over MAX_CIV_PLAYERS for these two arrays in Reset. Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["heap_fill"], "idea": "heap_fill 0x00 vs 0xFF, player segments at turn 1: CvMinorCivAI::Write bully arrays"},
+      "confidence": 1.0,
+      "fix_refs": ["HYG-0006"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0025",
+      "title": "CvTraitEntry::m_eCombatBonusImprovement is never initialised (the AUI_WARNING_FIXES block is commented out)",
+      "class": "C2",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:226",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:1696",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:3234",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:5578",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.h:426",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:19220",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/_Defines.h:38"
+      ],
+      "mechanism": "The constructor initialiser m_eCombatBonusImprovement(NO_IMPROVEMENT) sits in an `#ifdef AUI_WARNING_FIXES` block, but `#define AUI_WARNING_FIXES` is inside the `/* ... */` comment that starts at _Defines.h:28, so the whole block (also m_iWorkerSpeedModifier and its neighbours) is compiled out. CacheResults assigns the member only when the trait row has CombatBonusImprovement text (Polynesia's MOAI); every other trait keeps heap garbage. InitPlayerTraits then copies the entry value into CvPlayerTraits for each trait of the leader, so the player starts with a garbage improvement type (0 on a zeroed heap = improvement type 0, -1 on a 0xFF heap) and Write serializes it. The only reader, CvUnit::GetNearbyImprovementModifier, is guarded by GetNearbyImprovementCombatBonus() != 0, which only the trait that sets MOAI has.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:226", "quote": "m_eCombatBonusImprovement(NO_IMPROVEMENT),"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/_Defines.h:38", "quote": "#define AUI_WARNING_FIXES  (inside the comment opened at _Defines.h:28 and closed at line 69)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:1696", "quote": "szTextVal = kResults.GetText(\"CombatBonusImprovement\");"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp:3234", "quote": "m_eCombatBonusImprovement = trait->GetCombatBonusImprovement();"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:19220", "quote": "if(pLoopPlot->getImprovementType() == kPlayer.GetPlayerTraits()->GetCombatBonusImprovementType())"},
+        {"loc": "investigation notes", "quote": "--heap-fill 0xFF on lekmod6: CvPlayerTraits::Write m_eCombatBonusImprovement 0 -> -1 in player00..05 (the majors)"},
+        {"loc": "investigation notes", "quote": "same runs as DS-0023: CvPlayerTraits::Write m_eCombatBonusImprovement no longer differs under heap_fill (zero-heap value 0 kept, digest unchanged)"}
+      ],
+      "community": [],
+      "trigger": "Every new game: the players that have a trait whose row lacks CombatBonusImprovement. In a leader with two traits, the one processed last wins, so a garbage entry could hide Polynesia's MOAI.",
+      "symptom": "Serialized per-player byte differs between machines; no simulation effect found (no leader in the corpus has both traits).",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only unless a leader gets a second trait processed after the MOAI one."},
+      "proposed_fix": "Initialise the member in the CvTraitEntry constructor outside the dead #ifdef (and consider re-enabling or removing the whole commented AUI block, which hides other initialisers).",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["heap_fill"], "idea": "heap_fill 0x00 vs 0xFF: player00..05 differ by 4 bytes at CvPlayerTraits::Write m_eCombatBonusImprovement"},
+      "confidence": 1.0,
+      "fix_refs": ["HYG-0007"],
+      "scanner_rules": ["uninit.member"]
+    },
+    {
+      "id": "DS-0026",
+      "title": "CvPlayerCulture public-opinion fields are set only by DoPublicOpinion, slots that never take a turn serialize garbage",
+      "class": "C2",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp:3495",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp:820",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp:4425"
+      ],
+      "mechanism": "m_eOpinion, m_ePreferredIdeology and m_eOpinionBiggestInfluence are assigned at the top of DoPublicOpinion (once per turn for players that take a turn) and nowhere in Init/Reset, but they are serialized. The 58 slots that never run DoPublicOpinion in a lekmod6 game (everything except the six civs: unused majors, minors, barbarian) therefore write heap garbage. For players that do take turns the fields are rewritten before any read (see rejected: CvPlayerCulture public-opinion fields).",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp:3495", "quote": "m_eOpinion = NO_PUBLIC_OPINION;  (first statement of DoPublicOpinion)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp:4425", "quote": "saveTo << readFrom.m_eOpinion;"},
+        {"loc": "investigation notes", "quote": "--heap-fill 0xFF on lekmod6: operator<< cvcultureclasses.cpp public-opinion fields differ in player06..63"},
+        {"loc": "investigation notes", "quote": "same runs as DS-0023: the public-opinion fields of player06..63 no longer differ under heap_fill (zero-heap value 0 kept, digest unchanged)"}
+      ],
+      "community": [],
+      "trigger": "Any new game; serialized garbage of slots that never take a turn.",
+      "symptom": "Player segments / save bytes of those slots differ between machines; no simulation effect.",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only."},
+      "proposed_fix": "Set the three fields in CvPlayerCulture::Init/Reset (same values as the first lines of DoPublicOpinion). Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["heap_fill"], "idea": "heap_fill 0x00 vs 0xFF at turn 1: player06..63 differ in the public-opinion fields"},
+      "confidence": 1.0,
+      "fix_refs": ["HYG-0008"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0027",
+      "title": "Tactical analysis map is global, not serialized, and built for the last-activated player",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5152",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayerAI.cpp:242",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAnalysisMap.cpp:219",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:8499",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllGame.cpp:315"
+      ],
+      "mechanism": "CvGame::m_kTacticalAnalysisMap is rebuilt only by RefreshDataForNextPlayer in doTurnPostDiplomacy (turn start of each player); the per-unit-update refresh in CvPlayerAI::AI_unitUpdate is commented out. With simultaneous AI turns all AIs are activated in a getJonRand-shuffled order, so during the whole turn every AI's tactical AI, homeland AI, operations and the tactical pathfinder read the map of the player activated last. The map is not serialized; after a load the exe re-initializes it empty (InitTacticalAnalysisMap), so the loading peer's AIs move on an empty map until the next turn.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayerAI.cpp:242", "quote": "//GC.getGame().GetTacticalAnalysisMap()->RefreshDataForNextPlayer(this);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:8499", "quote": "shuffleArray(aiShuffle, MAX_PLAYERS, getJonRand());"},
+        {"loc": "investigation notes", "quote": "lekmod6 load at 100: identical sync-RNG stream on turn 101, first state difference a Bolivian archer near (45,12); rebuilding the map for player 26 after load makes 101..102 identical"}
+      ],
+      "community": [],
+      "trigger": "Any load (hot-join, reconnect, resync on the loading peers) during a turn in which AI units move, in a game with simultaneous AI turns.",
+      "symptom": "AI unit moves differ on the loaded peer; unit positions, visibility and danger plots diverge, exe OOS (unit FAutoVariables).",
+      "impact": {"score": 4, "detection": "rng", "note": "Every resync in a game with AI units re-diverges on the next AI move: a direct resync-loop (H6) candidate."},
+      "proposed_fix": "Rebuild the map for the moving player at the start of each AI_unitUpdate (unconditionally, so the content is a function of the current state only). Save format unchanged.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["saveload", "lockstep"], "idea": "continue run from a turn-start checkpoint once units are fighting (lekmod6 T=100); lockstep hot-join"},
+      "confidence": 0.95,
+      "fix_refs": ["FIX-0015"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0028",
+      "title": "AI decisions depend on the x87 precision-control setting of the game-core thread (24-bit diverges from turn 42-44)",
+      "class": "C4",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:2104",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:2128",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:656",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:723"
+      ],
+      "mechanism": "The simulation is bit-exact for x87 precision control 53 and 64 bit but not for 24 bit. The first call where a 24-bit run differs from the 53-bit run (lekmod6, turn 43, CityDoTurn zone) is 'Choosing city build from Top Choices' (CvWeightedVector<CvCityBuildable>::ChooseFromTopChoices) with a different weight sum (623 vs 440), i.e. the city production weights already differ. That path does floating-point decisions that are truncated or rounded to integers: ReweightByTurnsLeft = int(double(weight) / pow(turnsLeft, factor)), IsYieldDeficient = round(double average * 100) compared with round(desired * 100). A 24-bit mantissa moves such values across an integer or .5 boundary. The exact flipping expression is not isolated (the diag RNG log names the first affected decision, not the arithmetic); the two listed are the candidates found in that path (the exp() maintenance factor at CvCityStrategyAI.cpp:1005 is compiled out under the golden defines).",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:2104", "quote": "double fWeightDivisor = pow((double) iTurnsLeft, fTotalCostFactor);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:2128", "quote": "return int(double(iOriginalWeight) / fWeightDivisor);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp:656", "quote": "int iYieldAverage = (int)citystrategyround(fYieldAverage * 100);"},
+        {"loc": "investigation notes", "quote": "civhost --fpu-pc 24 vs 53 (per Update slice), 100 turns: first divergent turn 44 lekmod6, 43 pangaea6, 42 continents8; --fpu-pc 64 identical to 53 in every run"},
+        {"loc": "investigation notes", "quote": "RNG log lekmod6 turn 43: first differing call is 'Choosing city build from Top Choices', range 623 (53-bit) vs 440 (24-bit)"},
+        {"loc": "investigation notes", "quote": "with FIX-0017 (FPU_PRECISION_GUARD) --fpu-pc 24 and --fpu-pc-global 24 are insensitive on lekmod6/pangaea6 (100 turns); without it --fpu-pc 24 diverges at turn 44 (game, map, player03) and --fpu-pc-global 24 at turn 1 (map)"}
+      ],
+      "community": [],
+      "trigger": "Two peers whose game-core threads run at different x87 precision control. Direct3D 9 without D3DCREATE_FPU_PRESERVE leaves the creating thread at 24 bit, Direct3D 11 does not touch it: a DX9 / DX11 mixed lobby is the candidate (fidelity risk D10). Not triggered when all peers use the same exe. Unknown whether the real game-core thread is ever affected.",
+      "symptom": "AI production and diplomacy decisions flip around turn 40 (earlier on bigger maps); game, map, teams and players diverge afterwards; exe OOS from the first different random call.",
+      "impact": {"score": 4, "detection": "rng", "note": "Every mixed lobby if the premise holds; zero otherwise. Mechanism confirmed by the fpu_pc axis; whether a real game-core thread is ever at 24 bit still needs a reverse-engineering check of which thread creates the D3D9 device and a probe of the x87 control word at a real CvGame::update entry. FIX-0017 pins 53 bit / nearest at every exe entry into the DLL, so peers running that build no longer depend on it."},
+      "proposed_fix": "Pin the precision in the DLL: _controlfp_s(&cw, _PC_53, _MCW_PC) at the entry of CvGame::update (or once per game-core thread start), and/or make the three expressions precision-independent (integer arithmetic for the deficiency test, explicit double rounding).",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["fpu_pc"], "idea": "civhost --fpu-pc 24 vs default on lekmod6 for 50 turns with a diag DLL: civsim.detlab perturb --axis fpu_pc=53,24 --bisect names turn 43 and the first differing random call"},
+      "confidence": 0.3,
+      "fix_refs": ["FIX-0017"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0029",
+      "title": "CvWorldInfo save/sync omits EstimatedNumCities: warmonger penalty 0 after a load",
+      "class": "C1",
+      "secondary_classes": [
+        "C8"
+      ],
+      "status": "confirmed",
+      "versions": [
+        "v34.15"
+      ],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvInfos.cpp:6306",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvInfos.cpp:6247",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvInfos.cpp:6211",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:26986",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:27049",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPreGame.cpp:1913",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPreGame.cpp:3332"
+      ],
+      "mechanism": "CvWorldInfo::writeTo/readFrom (version 2) serialize every Worlds column except EstimatedNumCities, which BNW added and only CvDiplomacyAIHelpers::GetWarmongerOffset reads (iWarmongerOffset = 1000 * Estimated / (cities on map * cities remaining)). CvPreGame::read restores s_worldInfo with operator>>, which keeps the member's previous value; worldInfo() re-caches from the database only when the world size ID differs, so it never repairs it. In a fresh process the value is 0: every conquest or liberation after the load adds 0 warmonger, while the continuous game adds the full amount. A peer that loads (resync, reconnect, MP reload) holds 0 or whatever its previous pregame cached, so its CvDiplomacyAI opinions, approaches and the sync RNG stream drift from the other peers at the next conquest. The MP lobby syncs s_worldInfo with the same operator, so clients can also start a new game with another value than the host.",
+      "evidence": [
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvInfos.cpp:6211",
+          "quote": "m_iEstimatedNumCities\t\t\t= kResults.GetInt(\"EstimatedNumCities\");"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp:26986",
+          "quote": "int iEstimatedCitiesOnMap = GC.getMap().getWorldInfo().GetEstimatedNumCities();"
+        },
+        {
+          "loc": "investigation notes",
+          "quote": "pangaea6 load at 100: player 5 conquers a city at turn 129, warmonger change +666 per observer in the continuous run, +0 after the load; first sync-RNG difference in turn 129 (player 4's approach order), digest difference at turn 130"
+        }
+      ],
+      "community": [],
+      "trigger": "Any load (resync, reconnect, MP reload, single-player reload in a fresh process) followed by a city conquest or liberation by a major civ; also a lobby sync to a client whose DLL cached another world size before.",
+      "symptom": "The loaded peer's AI opinions of the conqueror stay unchanged; approaches, diplomacy and later wars differ, sync RNG stream and player segments diverge (resync loop).",
+      "impact": {
+        "score": 3,
+        "detection": "silent",
+        "note": "CvDiplomacyAI state is outside the exe sync check until an AI decision consumes RNG differently. Also a single-player balance bug: a reloaded game forgives conquests."
+      },
+      "proposed_fix": "Re-read EstimatedNumCities from the Worlds row of the loaded world size ID in CvWorldInfo::readFrom (and readFromVersion0). Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {
+        "id": null,
+        "axis": [
+          "saveload"
+        ],
+        "idea": "continue from a checkpoint before a city conquest (pangaea6 network, load at 100, conquest at 129); warm lobby sync with a different cached world size"
+      },
+      "confidence": 1.0,
+      "fix_refs": [
+        "FIX-0016"
+      ],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0030",
+      "title": "CvEspionageSpy read forces m_bEvaluateReassignment: AI spies reshuffled after a load",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": [
+        "v34.15"
+      ],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:73",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:91",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:4855"
+      ],
+      "mechanism": "operator>>(FDataStream&, CvEspionageSpy&) reads the saved m_bEvaluateReassignment and overwrites it with true. CvEspionageAI::AttemptToPlaceSpies moves every flagged spy that is not in a current target city out of its city (MoveSpyTo(NULL)) and places it again, then clears the flag. In the uninterrupted game the flag is false for settled spies, so they stay. A loading peer therefore relocates its AI spies on the first pass after the load, and the change in spy positions, steal/rig/coup chances and the RNG calls made for them diverges from the other peers.",
+      "evidence": [
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp:73",
+          "quote": "writeTo.m_bEvaluateReassignment = true;"
+        },
+        {
+          "loc": "investigation notes",
+          "quote": "round trip pangaea6/lekmod6 T=200: after-read one byte per major civ (m_bEvaluateReassignment 00 -> 01); load at 200 diverges at turn 201 (map and player segments), identical 201..250 on pangaea6 with FIX-0018"
+        }
+      ],
+      "community": [],
+      "trigger": "Any load (resync, reconnect, MP reload) once AI players have spies (Renaissance era onwards).",
+      "symptom": "AI spies jump to other cities on the loaded peer only; espionage events and the sync RNG stream diverge (resync loop).",
+      "impact": {
+        "score": 3,
+        "detection": "rng",
+        "note": "Every resync in the espionage era re-diverges at the next espionage AI pass."
+      },
+      "proposed_fix": "Keep the saved flag in operator>> (drop the forced true). Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {
+        "id": null,
+        "axis": [
+          "saveload"
+        ],
+        "idea": "civsim.enginehost.roundtrip on a checkpoint with settled spies (pangaea6/lekmod6 T=200): after-read, one byte per major civ in the CvEspionageSpy block; continue from it"
+      },
+      "confidence": 1.0,
+      "fix_refs": [
+        "FIX-0018"
+      ],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0031",
+      "title": "CvAIOperation::m_bShouldReplaceLossesWithReinforcements is cleared only by the base Init, derived operations save heap garbage",
+      "class": "C2",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:1206",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:55",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:110",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:2117",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.h:288"
+      ],
+      "mechanism": "The flag is assigned in CvAIOperation::Init (inside #ifndef AUI_WARNING_FIXES) and in Reset() only under AUI_WARNING_FIXES, which is off in v34.15. The Init() overrides of the derived operation classes (city attack, enemy territory, escorted, found city, naval ...) call Reset() and copy the base Init body instead of calling it, so they never clear the flag and keep whatever the heap held. CvAIOperation::Write serializes it; nothing reads it (assignments, Read and Write are the only uses). Found by civhost --heap-fill with a per-turn digest: it appears with the first AI operation (turn 20 on lekmod6, players 00 and 01) and, because operations are transient, a single late state dump can miss it.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:1206", "quote": "kStream << m_bShouldReplaceLossesWithReinforcements;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:55", "quote": "m_bShouldReplaceLossesWithReinforcements = false;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAIOperation.cpp:2117", "quote": "void CvAIOperationBasicCityAttack::Init(int iID, PlayerTypes eOwner, PlayerTypes eEnemy, int /* iDefaultArea */, CvCity* pTarget, CvCity* pMuster)"},
+        {"loc": "investigation notes", "quote": "heap_fill 0xFF on the release set before HYG-0009: first divergent turn 20, player00 and player01, CvAIOperation::Write cvaioperation.cpp:1206 (1 byte)"}
+      ],
+      "community": [],
+      "trigger": "Any AI operation of a derived class, from the turn the first one exists; serialized garbage only.",
+      "symptom": "Player segments / save bytes differ between machines from the first operation; simulation unaffected (never read).",
+      "impact": {"score": 1, "detection": "silent", "note": "State-only; masks real divergences of the player segments in perturbation runs."},
+      "proposed_fix": "Clear the flag in Reset() outside the dead AUI_WARNING_FIXES block (Init() of the base class does the same). Save format unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["heap_fill"], "idea": "heap_fill 0x00 vs 0xFF with a per-turn digest on lekmod6 (50 turns): turn 20, player00/player01, CvAIOperation::Write line 1206"},
+      "confidence": 1.0,
+      "fix_refs": ["HYG-0009"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0032",
+      "title": "CvTacticalAI::m_Postures (last turn's zone postures) is not serialized: posture hysteresis lost on load",
+      "class": "C1",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": [
+        "v34.15"
+      ],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAI.h:1029",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAI.cpp:355",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAI.cpp:894",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAI.cpp:939",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAI.cpp:1029"
+      ],
+      "mechanism": "UpdatePostures picks each dominance zone's posture with SelectPosture(pZone, eLastPosture), where eLastPosture comes from m_Postures, the previous update's result. Several branches are sticky (STEAMROLL, SIT_AND_BOMBARD, EXPLOIT_FLANKS, ATTRIT_FROM_RANGE, COUNTERATTACK continue while a weaker condition holds), so a posture can persist for many turns. CvTacticalAI::Write stores only a phony int and m_TempZones; m_Postures is neither saved nor rebuilt, so after a load every zone starts from AI_TACTICAL_POSTURE_NONE and may pick another posture. The posture selects the tactical moves (and their order) of every AI and city-state.",
+      "evidence": [
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTacticalAI.cpp:355",
+          "quote": "kStream << m_TempZones;"
+        },
+        {
+          "loc": "investigation notes",
+          "quote": "lekmod6 load at 150 or 200: every zone's last posture is -1 after the load; Riga's land zone COUNTERATTACK (continuous) vs HEDGEHOG (loaded); at turn 204 a Riga unit captures a Bolivian worker only in the continuous game; first digest difference turn 205"
+        }
+      ],
+      "community": [],
+      "trigger": "Any load (resync, reconnect, MP reload) while an AI or city-state zone holds a sticky posture (wars, units near enemies).",
+      "symptom": "AI tactical moves differ on the loaded peer (different move order, captures, attacks); units, plots and later the sync RNG stream diverge (resync loop).",
+      "impact": {
+        "score": 3,
+        "detection": "rng",
+        "note": "Measured once in four long load tests (lekmod6 loads at 150/200 diverge at 205; loads at 50/100 and all pangaea6/stress loads stay identical). Unit moves are FAutoVariable-synced, so the exe OOS check fires once a move differs."
+      },
+      "proposed_fix": "Save the postures in an optional trailer after the supporting class data (the last bytes of the save body), announced by a marker in the phony int CvTacticalAI::Write already stores (every reader discards it). Old saves load (no marker, empty postures as before); new saves load in golden (the trailer is never read and the exe checks nothing after ReadSupportingClassData). Implemented as FIX-0019. Rejected: a CvTacticalAI version bump (new saves would not load in golden) and dropping the hysteresis (changes continuous AI play).",
+      "behavior_change": "none",
+      "trap": {
+        "id": null,
+        "axis": [
+          "saveload"
+        ],
+        "idea": "lekmod6 (network) continuous 0..250 vs load at 150 or 200: first difference turn 205 (game, map, team04, team25, player04, player25)"
+      },
+      "confidence": 1.0,
+      "fix_refs": [
+        "FIX-0019"
+      ],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0033",
+      "title": "EUI NotificationPanel adds a CITY_TILE notification only on the owner's machine (GameEvents.CityBoughtPlot handler)",
+      "class": "C7",
+      "secondary_classes": [
+        "C5"
+      ],
+      "status": "confirmed",
+      "versions": [
+        "v34.15"
+      ],
+      "location": "DLC:Lua/tmp/eui/NotificationPanel/NotificationPanel.lua.ignore:821",
+      "locations": [
+        "DLC:Lua/tmp/eui/NotificationPanel/NotificationPanel.lua.ignore:833",
+        "DLC:Lua/tmp/eui/CityView/CityView.lua.ignore:1127",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:9542",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:297",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:403"
+      ],
+      "mechanism": "The EUI variant of Lekmod's NotificationPanel (Lua\\tmp\\eui, copied to Lua\\UI by ui_check.bat for players with EUI) registers GameEvents.CityBoughtPlot inside Events.SequenceGameInitComplete. The DLL fires that hook on every peer from CvCity::DoJONSCultureLevelIncrease (border growth by culture), but only peers that have this file run the handler, and it acts only when playerID is the local active player: g_activePlayer:AddNotification(NOTIFICATION_CITY_TILE, ...). CvNotifications::Add records for human players only, so the EUI owner's machine appends an entry (text, turn, lookup index, ring end index; the 100-slot ring also evicts older entries sooner) that no other peer has. The list is serialized in the player segment (CvNotifications::Write) but is not an FAutoVariable, so the exe OOS check does not see it; simulation code reads it only through DS-0018 (IsNotificationExpired). The standard NotificationPanel has no such handler and the DLL adds no CITY_TILE notification itself. What decides is whether the OWNER has EUI: EUI on the other peers changes nothing (the handler is a no-op for other players and for AI players), so a lobby where everybody has EUI is affected exactly like a mixed one. The same kind of local-only entry is added by EUI's CityView when a production queue item is removed (NOTIFICATION_PRODUCTION, a click path).",
+      "evidence": [
+        {
+          "loc": "DLC:Lua/tmp/eui/NotificationPanel/NotificationPanel.lua.ignore:821",
+          "quote": "GameEvents.CityBoughtPlot.Add("
+        },
+        {
+          "loc": "DLC:Lua/tmp/eui/NotificationPanel/NotificationPanel.lua.ignore:833",
+          "quote": "g_activePlayer:AddNotification( NotificationTypes.NOTIFICATION_CITY_TILE,"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:9542",
+          "quote": "LuaSupport::CallHook(pkScriptSystem, \"CityBoughtPlot\", args.get(), bResult);"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:403",
+          "quote": "if(!GET_PLAYER(m_ePlayer).isHuman())"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:297",
+          "quote": "void CvNotifications::Write(FDataStream& kStream) const"
+        },
+        {
+          "loc": "investigation notes",
+          "quote": "lockstep, 3 peers, human slot 0, verbatim handler: control equal for 60 turns; EUI on the owner's peer (or on all peers): only the player00 segment diverges, from turn 5 (the border growth) to turn 60, written by CvNotifications::Write (cvnotifications.cpp:311), peers 1 and 2 identical to the control run"
+        }
+      ],
+      "community": [],
+      "trigger": "A human player with EUI whose city grows its border by culture (every few turns per city, in practically every game). Mixed EUI/non-EUI lobbies and all-EUI lobbies are equally affected; only a lobby with no EUI owner is clean.",
+      "symptom": "The owner's player segment (notification list) differs from every other peer's copy of that player from the first border growth on; no other segment differs, the exe OOS check is silent. It turns into a desync only through a sim read of the list (DS-0018).",
+      "impact": {
+        "score": 2,
+        "detection": "silent",
+        "note": "The difference exists in nearly every EUI game but nothing in the simulation reads the list except DS-0018's flag clear. A busy EUI owner fills the 100-slot ring faster (one entry per border growth), which widens DS-0018's window."
+      },
+      "proposed_fix": "Make every install produce the same list: remove the CityBoughtPlot handler from Lekmod's tmp\\eui NotificationPanel and add the CITY_TILE notification in the DLL (CvCity::DoJONSCultureLevelIncrease, for the human owner, on every peer), or keep the toast out of the serialized list. Independently remove the sim write from IsNotificationExpired (DS-0018). For multiplayer lobbies today: no action needed unless GAMEOPTION_NO_MP_POLICY_SAVING and a turn timer are on; then prefer lobbies where nobody uses EUI.",
+      "behavior_change": "none",
+      "trap": {
+        "id": null,
+        "axis": [
+          "active_player",
+          "lockstep"
+        ],
+        "idea": "python -m civsim.detlab.euiui mixed --turns 60 (scenarios/eui/lekmod6-human0.json, 3 lockstep peers, human slot 0, harness bot founds the capital and completes a culture level on turn 5): eui-control equal; eui-eui-owner and eui-all-eui divergent from turn 5, player00 only"
+      },
+      "confidence": 0.9,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0034",
+      "title": "UI getters recompute and store the lazy might cache: Player:GetMilitaryMight() from Lua writes FAutoVariables on the asking machine only",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": [
+        "v34.15"
+      ],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20188",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20189",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.h:2198",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:548",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:8526",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31473",
+        "DLC:Lua/UI/Demographics.lua:335",
+        "DLC:Lua/UI/Demographics.lua:522"
+      ],
+      "mechanism": "CvPlayer::GetMilitaryMight, GetEconomicMight and getPower are lazy caches: when m_iTurnMightRecomputed < elapsed game turns the first caller of the turn recomputes m_iMilitaryMight / m_iEconomicMight from the current units, gold and population and stores all three through a const_cast. The three are FAutoVariables (sync archive, serialized). Player:GetMilitaryMight() is exposed to Lua unchanged, so a UI script on one machine can be the first caller of the turn. Demographics.lua (stock screen, Lekmod's edited copy) calls it for players 0..MAX_MAJOR_CIVS in BuildTables(), at context load and every time the screen is shown. The AI refreshes the caches of the major civs every turn (CvDiplomacyAI, CvPlayer.cpp:31473 replay data), so for them a UI call finds a current cache and writes nothing. Unused player slots and most city-states are not asked by anyone, so the UI call writes them: lockstep with one peer asking at turn 10 diverges from turn 10 in the segments of player06..21 and of 10 of the 12 city-states, with the other two peers identical to the control run. The source comment at CvMinorCivAI.cpp:8526 (\"Don't recalculate within a turn, can cause inconsistency\") shows the lazy cache is known to be order dependent. Found while checking EUI vs the standard UI; identical in both profiles (only Demographics and the base game's WhosWinningPopup call these getters).",
+      "evidence": [
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20188",
+          "quote": "const_cast<CvPlayer*>(this)->m_iTurnMightRecomputed = GC.getGame().getElapsedGameTurns();"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.h:2198",
+          "quote": "FAutoVariable<int, CvPlayer> m_iTurnMightRecomputed;"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:548",
+          "quote": "Method(GetMilitaryMight);"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:8526",
+          "quote": "veMilitaryRankings.push_back(eMajorLoop, GET_PLAYER(eMajorLoop).GetMilitaryMight()); // Don't recalculate within a turn, can cause inconsistency"
+        },
+        {
+          "loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31473",
+          "quote": "setReplayDataValue(getReplayDataSetIndex(\"REPLAYDATASET_MILITARYMIGHT\"), iGameTurn, GetMilitaryMight());"
+        },
+        {
+          "loc": "DLC:Lua/UI/Demographics.lua:335",
+          "quote": "return math.sqrt( Players[iPlayer]:GetMilitaryMight() ) * 2000;"
+        },
+        {
+          "loc": "DLC:Lua/UI/Demographics.lua:522",
+          "quote": "BuildTables();"
+        },
+        {
+          "loc": "investigation notes",
+          "quote": "python -m civsim.detlab.euiui might: 3 lockstep peers, peer 0 alone asks every player for GetMilitaryMight at turn 10; peers 1 and 2 equal to the control run for 20 turns, peer 0 differs from turn 10 in player06..21 and player22, 23, 24, 26, 28..33"
+        },
+        {
+          "loc": "headless/out/sessions/bots-lekmod6-p2h1-s1-t40-ui1-d0-v-release/divergence.md",
+          "quote": "lockstep-bots, 2 peers, 1 bot human, v-release, UI queries on: divergent at turn 1 in player22..33 (the 12 city-states), offset 800, FAutoVariable written by CvPlayer::Write (cvplayer.cpp:28844/28845 in that build = m_iEconomicMight 15 vs 0, m_iTurnMightRecomputed 0 vs -1)"
+        },
+        {
+          "loc": "investigation notes",
+          "quote": "campaign B (UI query battery, one group per screen/API family): only the might group (GetMilitaryMight / getPower as Demographics calls them) diverges, turn 1, v-release (might-s11-rel, triage rerun bots-uiqB-triage-might) and v-golden-hyg (might-s12p3-ghyg); the diplo, leader, aigold, minor and other DS-0034 groups stay equal for 30 turns"
+        }
+      ],
+      "community": [],
+      "trigger": "A human opens a screen that asks players for their military might (Demographics, Who's Winning) in the part of the turn before anything else asked for the city-states, or an unused slot, or after units/gold changed since the AI's first call. Opening the screen on one machine is enough.",
+      "symptom": "FAutoVariable and serialized-state difference of city-state and unused-slot players on the machine that asked; visible in the lab digest (player segments). No consumer of those caches in simulation decisions was found (AI diplomacy asks majors; replay graphs read the cache at turn end), so a gameplay divergence needs a sim read of a city-state's might in the same turn.",
+      "impact": {
+        "score": 1,
+        "detection": "rng",
+        "note": "State difference reproduced, consumer not found; whether the exe compares the FAutoVariables of city-state and never-alive players was not established."
+      },
+      "proposed_fix": "Make the Lua getters non-caching: CvLuaPlayer::lGetMilitaryMight / lGetEconomicMight (and a Lua getPower) call calculateMilitaryMight() / calculateEconomicMight(), which are const and do not store, so only the AI paths write the cache. Lua-only change, simulation unchanged.",
+      "behavior_change": "none",
+      "trap": {
+        "id": null,
+        "axis": [
+          "active_player",
+          "lockstep",
+          "lockstep-bots"
+        ],
+        "idea": "python -m civsim.detlab.euiui might (3 lockstep peers; peer 0 alone has a context that calls Player:GetMilitaryMight() for players 0..33 at the first PlayerDoTurn of turn 10): peer 0 diverges from turn 10 in player06..21 and 10 city-states. Bots: python -m civsim.lockstep bots --peers 2 --humans 1 --seed 1 --turns 40 --ui-queries on (turn 1, the 12 city-states); campaign B: headless/out/uiqB-tools/L.ps1 -Groups might -Turns 5 -Seed 11 -Peers 2 -Humans 1 -Density 0.3 -Rate 0.1 -MaskFile common3.ps1"
+      },
+      "confidence": 0.7,
+      "fix_refs": ["FIX-0022"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0035",
+      "title": "A human's UI move order runs a path search on that machine only; the shared IgnoreUnits pathfinder then gives other danger values there (CvDangerPlots, CvCity::m_iThreatValue)",
+      "class": "C5",
+      "secondary_classes": ["C1"],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:2928",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:21766",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp:4382",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp:257",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp:305",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20901",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:737",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:743",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:273",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:845",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.h:1045",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:17998",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllUnit.cpp:214"
+      ],
+      "mechanism": "CvGame::selectionListGameNetMessage is the UI path of every human move or attack order (right-click in the exe, Game.SelectionListGameNetMessage in Lua) and runs only on the ordering player's machine, before the command is sent. For GAMEMESSAGE_PUSH_MISSION it calls CvUnit::CanSwapWithUnitHere to choose between sendSwapUnits and sendPushMission, and CanSwapWithUnitHere runs GC.getIgnoreUnitsPathFinder().DoesPathExist (GeneratePath with bReuse = true; the AUI turn-limited variant is compiled out, all AUI_ASTAR_* defines sit in the commented block of _Defines.h). That finder is a global shared with synced code: CvDangerPlots::AssignUnitDangerValue (UpdateDanger, inside the MP-cache-safe window of CvPlayer::setTurnActive) calls GeneratePath(..., bReuse = true) on it and divides the unit's strength by the turns-away of the last node. In network MP the UI search itself is not reused (discardCacheForMPGame) and SetMPCacheSafe(true) forces a reset when the window opens, yet the one extra local search changes later results on that machine: one unit's danger contribution doubles or halves (turns-away 1 vs 2; sums 400 vs 801, 650 vs 1051, 0x14 vs 0x29 per plot). Which finder member carries the state was not isolated; the non-AUI reset clears only the nodes on the open and closed lists (CvAStar.cpp:305-322), so node data outside both lists survives (hypothesis, not verified). CvDangerPlots is serialized but not sync-checked; UpdateDanger also stores GetCityDanger in CvCity::m_iThreatValue for every city of the player, an FAutoVariable, so for a player with cities the difference reaches the exe's City sync check. Values are recomputed every turn, so the state re-converges unless a decision consumed it first (keep-going rerun: equal again at turn 59). Stock Lekmod code: the UI-order fuzz reproduces it on v-golden-hyg.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:2928", "quote": "if(pPlot && pkSelectedUnit->CanSwapWithUnitHere(*pPlot) && eMission != CvTypes::getMISSION_ROUTE_TO())"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:21766", "quote": "if(GC.getIgnoreUnitsPathFinder().DoesPathExist(*(pUnit), plot(), &swapPlot))"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp:4382", "quote": "return GeneratePath(pStartPlot->getX(), pStartPlot->getY(), pEndPlot->getX(), pEndPlot->getY(), 0, true /*bReuse*/);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp:257", "quote": "bool discardCacheForMPGame = isMultiplayer && !m_bIsMPCacheSafe;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp:305", "quote": "while(m_pOpen) ... (the !bReuse reset walks only the open and closed lists)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20901", "quote": "bool bIgnoreUnitsPathFinderMPCaching = GC.getIgnoreUnitsPathFinder().SetMPCacheSafe(true);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:737", "quote": "if(!kPathFinder.GeneratePath(pUnit->getX(), pUnit->getY(), iPlotX, iPlotY, 0, true /*bReuse*/))"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:743", "quote": "int iTurnsAway = pNode->m_iData2;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp:273", "quote": "pLoopCity->SetThreatValue(iThreatValue);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.h:1045", "quote": "FAutoVariable<int, CvCity> m_iThreatValue;"},
+        {"loc": "headless/out/sessions/bots-campA-lek6s0-p4h2-b12-d0-rel-t120/divergence.md", "quote": "lockstep-bots, 4 peers / 2 bot humans, v-release, delay 0: turn 58 peer 1 vs peers 0, 2, 3, only player63 (barbarians), 27 bytes in 5 clusters written by CvDangerPlots::Write; RNG streams identical in all 59 phases"},
+        {"loc": "headless/out/sessions/bots-campA-lek6s0-p4h2-b12-d0-rel-t120/replay-peer1-triage-attack", "quote": "triage rerun: the replay of peer 1's inbox without its bot equals peer 0 on the masked digest for 58 turns (replay-peer1-triage-plain); the same replay plus ONE local PUSH_MISSION (unit 24576 (48,37) -> (46,35), tick 23 of turn 57, outbox discarded) equals peer 1 and differs from peer 0 at turn 58 in player63 only"},
+        {"loc": "headless/out/sessions/bots-uiqB-bis76-control-s72p3/divergence.md", "quote": "lockstep-bots, 3 peers / 2 bot humans, v-release, UI queries off: turn 76 peer 1 vs peers 0, 2 in player02 (an AI): CvDangerPlots 0x29 vs 0x14 and CvCity m_iThreatValue (FAutoVariable) in 3 of its cities; RNG unchanged"},
+        {"loc": "headless/out/sessions/bots-campA-pan6s0-p2h1-b21-d0-ghyg-t120/replay-peer0-triage-dump51-fuzz", "quote": "v-golden-hyg (stock): replay of peer 0 plus local PUSH_MISSIONs only (probe_fuzz from tick 8, outbox discarded) differs from peer 0 at turn 51 in player33 (city-state): CvDangerPlots and CvCity m_iThreatValue 6408 vs 3601; the plain replay equals peer 0 for 120 turns"},
+        {"loc": "investigation notes", "quote": "natural incidence at delay 0: 3 of 8 completed multi-human v-release sessions diverged within 120 turns (turns 33, 58, 95, barbarian danger map), 0 of 4 on v-golden-hyg (other trajectories); campaign B one more v-release case at turn 76 with AI city threat values"}
+      ],
+      "community": [],
+      "trigger": "A human gives a move or attack order through the UI (one PUSH_MISSION is enough) in an MP game; the divergence shows when the extra search changes a danger result of a later synced UpdateDanger on that machine, typically near barbarians, city-states or enemies. The DLL also exports CanSwapWithUnitHere to the exe (CvDllUnit.cpp:214); whether the exe calls it on hover was not checked.",
+      "symptom": "CvDangerPlots of some player differs on the ordering human's machine (silent); for a player with cities CvCity::m_iThreatValue differs too: exe 'City out of sync' and a resync. AI tactical and homeland decisions that read danger can diverge before the next recompute.",
+      "impact": {"score": 4, "detection": "rng", "note": "Every human move order is a trigger; seen without any deliberate probe in 3 of 8 multi-human v-release sessions in 120 turns plus one campaign B session. Self-healing per turn, so most cases are one resync; a consumed difference (an AI move) persists."},
+      "proposed_fix": "Keep UI-side path queries off the global finders that synced code uses: give the UI call of CanSwapWithUnitHere in selectionListGameNetMessage (and other UI path helpers such as Player:GetRecommendedFoundCityPlots) its own CvIgnoreUnitsPathFinder instance, or save and restore the finder state around them. Alternatively make every synced search independent of history (clear all nodes on a non-reused search, as the AUI_ASTAR_MINOR_OPTIMIZATION reset does); that changes AI play as well.",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["lockstep-bots", "lockstep"], "idea": "python -m civsim.lockstep bots --peers 4 --humans 2 --seed 12 --scenario headless/out/campA/scenarios/lek6s0.json --turns 120 --dll v-release --fallback-end-turn 300 --density 2.0 (turn 58, player63); minimal: headless/out/campA/replay_peer.py bots-campA-lek6s0-p4h2-b12-d0-rel-t120 1 --probe=headless/out/campA/probe_swap.lua with one push order reproduces peer 1, the plain replay equals peer 0"},
+      "confidence": 0.85,
+      "fix_refs": [
+        "FIX-0020"
+      ],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0036",
+      "title": "Commands execute in arrival order: under network delay each machine runs its own command before remote ones, so RNG use and synced state interleave differently per machine",
+      "class": "C6",
+      "secondary_classes": [],
+      "status": "suspected",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:94",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:1179",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:9952",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:9987",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1881",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:1898",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:28580",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEconomicAI.cpp:462",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:11008",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:11011",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10495"
+      ],
+      "mechanism": "Every Response* handler executes its command when the engine delivers it; nothing in the DLL orders the commands of different players, or a command relative to the AI's turn processing. In the lockstep harness a sender gets its own message one frame after sending and, with --remote-delay D, the other machines get it D frames later (the exe also runs a sender's own command through the network loopback). Two humans' RNG-using commands, or one human command and the AI turn processing (both draw from the jon stream), then run in a different order on different machines. Seen: lek6s2 turn 37 jon call 213 is CvMinorCivAI::DoTeamDeclaredWarOnMe (a human declared war on a city-state: the 'Become Wary Of aggressor roll') on peer 0 but CvUnit::getCombatDamage (the other human's attack) on peer 1; lrg10s1 turn 23 call 202, the wary rolls interleave with the diplomacy AI. Downstream writers: CvPlayer::Write (unit damage dealt/taken counters, FAutoVariables), CvMinorCivAI friendship and wary arrays, CvEconomicAI m_aiExplorationPlots, CvPlot visibility count and revealed owner. Three of the delay sessions diverged with identical RNG streams (plot visibility, exploration plots on the human's own peer); those are order effects on non-RNG state or another local cache, not separated. Real only if the exe executes commands in arrival order without a global per-slice order (NetTurnSlice gating is not modelled in civhost); if the exe orders commands per slice, this is an artifact of the delay model. The replay-log order (mask candidate) is the benign form of the same mechanism.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:94", "quote": "void CvDllNetMessageHandler::ResponseChangeWar(PlayerTypes ePlayer, TeamTypes eRivalTeam, bool bWar)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp:9987", "quote": "iRand = GC.getGame().getJonRandNum(100, \"MINOR CIV AI: Become Wary Of aggressor roll.\");"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10495", "quote": "m_listReplayMessages.push_back(message);"},
+        {"loc": "headless/out/sessions/bots-campA-lek6s2-p4h2-b16-d2-rel-t120/divergence.md", "quote": "lockstep-bots, 4 peers / 2 bot humans, v-release, --remote-delay 2: turn 38 peer 0 vs peers 1-3 in player01 and player28 (CvPlayer::Write, cvplayer.cpp:28650/28651 in that build = m_iUnitsDamageDealt / m_iUnitsDamageTaken); first differing RNG phase turn 37, jon stream, call index 213"},
+        {"loc": "headless/out/sessions/bots-campA-lrg10s1-p4h2-b32-d2-rel-t120/divergence.md", "quote": "stress-large10, 4 peers / 2 bot humans, --remote-delay 2: turn 24, city-states player22..36, CvMinorCivAI::Write friendship and wary arrays (cvminorcivai.cpp:1892/1909 in that build); first differing RNG phase turn 23, call index 202"},
+        {"loc": "headless/out/sessions/bots-campA-lek6s2-p4h2-b16-d2-ghyg-t120/divergence.md", "quote": "v-golden-hyg, same seed and delay: turn 33, map segment only (CvPlot::write revealed owner), RNG streams identical"},
+        {"loc": "investigation notes", "quote": "after the replay-order and frame-stamp masks, 5 of the --remote-delay 2 sessions diverged (4 v-release, 1 v-golden-hyg, turns 14-38); no delay-0 session showed this class"}
+      ],
+      "community": [],
+      "trigger": "Simultaneous turns with two or more humans whose RNG-using commands (combat, war on a city-state, buy plot, automate explore) arrive within a few frames of each other, or arrive while the AI turn is being processed, and real network latency between the machines.",
+      "symptom": "jon RNG stream differs (exe OOS at the next loop barrier), then unit damage counters, city-state friendship and wary flags, plot visibility and AI exploration targets.",
+      "impact": {"score": 4, "detection": "rng", "note": "If real, every war with two active humans can hit it. Unknown until the exe's command ordering is reverse engineered; the confidence reflects that."},
+      "proposed_fix": "Not a DLL fix. First establish the exe's execution order (Ghidra: NetTurnSlice, FNetMessageQueue_InsertOrdered, whether a peer runs its own command before earlier remote ones; then model it in civhost). If arrival order is real, only the net layer can cure it (execute commands in a globally agreed slice order); the DLL can at most avoid RNG in command handlers.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep-bots", "net_faults"], "idea": "python -m civsim.lockstep bots --peers 4 --humans 2 --seed 16 --scenario headless/out/campA/scenarios/lek6s2.json --remote-delay 2 --dll v-release --fallback-end-turn 300 --density 2.0 --diag-dll campA-rel-diag with the delay masks (cvreplaymessage.cpp, cvgame.cpp:11030|, cvplayer.cpp:28907|, cvunit.cpp:22158|): turn 38, first RNG difference turn 37"},
+      "confidence": 0.35,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0037",
+      "title": "Player:CalculateGoldRate / CalculateInflatedCosts from Lua refresh the serialized CvTreasury unit-maintenance cache on the calling machine only",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:706",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:707",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.h:117",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.h:118",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:1079",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:1080",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:766",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:11720",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:1880",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:1904",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEconomicAI.cpp:2222",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp:3424",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvVotingClasses.cpp:10177",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5163",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5264",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllDealAI.cpp:96",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllDealAI.cpp:109",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllDealAI.cpp:122",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:7848",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:10937",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaDeal.h:114",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaDeal.h:194",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealClasses.cpp:1846"
+      ],
+      "mechanism": "CvTreasury::CalculatePreInflatedCosts stores m_iExpensePerTurnUnitMaintenance and m_iExpensePerTurnUnitSupply (plain ints, serialized by CvTreasury::Write) as a side effect of computing the costs. It runs from CalculateInflatedCosts and from CvPlayer::calculateGoldRateTimes100 -> CalculateBaseNetGoldTimes100; both are exposed to Lua (Player:CalculateGoldRate, Player:CalculateInflatedCosts) and called by TopPanel, EUI tooltips, TradeLogic and DiploRelationships on one machine. DoGold recomputes the fields every turn, so the difference is transient (keep-going run: turns 1, 2 and 25 of 30). Readers: CvEconomicAI::DisbandExtraWorkers, CvMilitaryAI::DisbandObsoleteUnits and the World Congress vote logic run in doTurnPostDiplomacy (CvPlayer.cpp:5163) before DoGold (5264), so an AI player whose cache one machine refreshed through the UI (a tooltip, the trade screen with that AI) after its unit count changed could take a different disband decision there. That path was not reproduced.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:706", "quote": "m_iExpensePerTurnUnitMaintenance = CalculateUnitCost(iFreeUnits, iPaidUnits, iBaseUnitCost, iExtraCost);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.h:117", "quote": "int m_iExpensePerTurnUnitMaintenance;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTreasury.cpp:1079", "quote": "kStream << m_iExpensePerTurnUnitMaintenance;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp:1904", "quote": "const int iResult = pkPlayer->GetTreasury()->CalculateInflatedCosts();"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvEconomicAI.cpp:2222", "quote": "int iGoldSpentOnUnits = m_pPlayer->GetTreasury()->GetExpensePerTurnUnitMaintenance();"},
+        {"loc": "headless/out/sessions/bots-uiqB-inflcost-p3h2-s22-rel/divergence.md", "quote": "lockstep-bots campaign B, 3 peers / 2 bot humans, v-release, econ battery only CalculateInflatedCosts: turn 1, player00 on peer 0 only, 1 byte written by CvTreasury::Write (cvtreasury.cpp:1079), RNG identical (v-opt-diag log); triage rerun bots-uiqB-triage-inflcost gives the same two digests"},
+        {"loc": "investigation notes", "quote": "also reproduced with CalculateGoldRate and on v-golden-hyg (inflcost-s22p3-ghyg turn 1, goldrate-s21p2-ghyg turn 7); aigold battery (UI calls on AI players) equal for 150-200 turns"},
+        {"loc": "headless/out/agentB-incident", "quote": "a player-reported r3 game: AutoSave_Post_0088 of the host vs Spain's machine, Bulgaria (AI, player 6) CvTreasury m_iExpensePerTurnUnitMaintenance 29 vs 35 after Spain's trade screen with Bulgaria (FIX-0023 build: the Lua getters were already scoped)"},
+        {"loc": "headless/out/sessions/bots-agentB-fix-lekmod6-p4h2-s13/divergence.md", "quote": "lockstep-bots campaign C (trading bots: --trade 0.1, --density 2.0, --fallback-end-turn 300, 130 turns; seeds 11 lekmod6 3x2, 12 lekmod6 4x3, 13 lekmod6 4x2, 14 pangaea6 3x2, 21 lekmod6 3x2, 22 pangaea6 4x3, 23 lekmod6 4x2), FIX-0023 build with the deal fixes but not FIX-0030: divergent on CvTreasury::Write (cvtreasury.cpp:1102, a human's own unit maintenance on its machine) seed 11 turn 76, seed 13 turn 74, seed 14 turn 42; with the six deal entries scoped but not Deal:AddGoldPerTurnTrade seeds 13/14 at turns 74/61 and seed 23 turn 89; with FIX-0030 complete all 7 seeds equal 130 turns"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealClasses.cpp:1846", "quote": "if(IsPossibleToTradeItem(eFrom, GetOtherPlayer(eFrom), TRADE_ITEM_GOLD_PER_TURN, iNewAmount, iDuration))"},
+        {"loc": "headless/out/sessions/bots-r4y-r4-pre-pangaea6-p3h2-s14/divergence.md", "quote": "CvDeal::ChangeGoldPerTurnTrade -> IsPossibleToTradeItem(GPT) -> calculateGoldRate; TradeLogic ChangeGoldPerTurnAmount (UI and EUI) calls g_Deal:ChangeGoldPerTurnTrade when the human types a gold-per-turn amount; outside FIX-0030 until the r4 gate added it (r4-pre, the r4 set without this scope: CvTreasury::Write cvtreasury.cpp:1102 of the trading human on its own machine, bots --trade 0.2 --trade-edit 0.9 pangaea6 3x2 seed 14 turn 123, probe bot seeds 14 / 13 turns 33 / 56; r4-gate equal on the same sessions)"}
+      ],
+      "community": [],
+      "trigger": "Any UI refresh that calls CalculateGoldRate or CalculateInflatedCosts (the top panel for the local player on every refresh; tooltips and the trade screen for AI players) after that player's unit count changed since its last DoGold; also every trade screen action with an AI major (UI.DoProposeDeal, UI.DoDemand, the equalize buttons, Player:DoTradeScreenOpened, negotiate peace, Player:GetDealValue/GetDealMyValue/GetDealTheyreValue, Deal:AddGoldPerTurnTrade): deal valuation calls calculateGoldRate for the AI and for the human.",
+      "symptom": "CvTreasury bytes of that player differ on the calling machine (silent, RNG identical) until the next DoGold.",
+      "impact": {"score": 2, "detection": "silent", "note": "State difference reproduced on v-release and v-golden-hyg; it becomes a desync only if an AI reader before DoGold reads a UI-refreshed value (needs AI majors and a UI call on them), not reproduced. Trade screen path (FIX-0030): reproduced as a lockstep-bots divergence (state only, RNG identical) and present in the friends' incident save."},
+      "proposed_fix": "Make the Lua and UI getters side-effect free: compute the costs into locals (a const variant of CalculatePreInflatedCosts that does not store) for CalculateGoldRate/CalculateInflatedCosts called from Lua; keep the stores in DoGold. Simulation unchanged.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep-bots", "lockstep"], "idea": "headless/out/uiqB-tools/L.ps1 -Tag inflcost -Groups econ -Only CalculateInflatedCosts -Turns 6 -Seed 22 -Peers 3 -Humans 2 -MaskFile common.ps1 (turn 1, player00, CvTreasury::Write)"},
+      "confidence": 0.3,
+      "fix_refs": ["FIX-0023", "FIX-0030"],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0038",
+      "title": "City:GetNextBuyablePlot / City:CanBuyPlot() from Lua draw from the synced game RNG on the calling machine",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:13764",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:1903",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:1874",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:1875"
+      ],
+      "mechanism": "CvCity::GetNextBuyablePlot picks one of the cheapest buyable plots with getJonRandNum(iListLength, \"GetNextBuyablePlot picker\"), the synced game RNG. Lua exposes it as City:GetNextBuyablePlot() and through City:CanBuyPlot() with no arguments (lCanBuyPlot calls GetNextBuyablePlot and then dereferences the plot without a NULL check, a crash when nothing is buyable). A UI script calling either on one machine advances the jon stream there only: the diag RNG log shows the extra call (range 1) on the calling peer, every later jon call shifts, and AI decisions diverge (CvGrandStrategyAI rolls, areas, plots). No installed Lekmod or EUI UI file calls them (the UI uses GetBuyablePlotList and CanBuyPlotAt), so only a mod or an edited UI file triggers it.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:13764", "quote": "int iPickedIndex = GC.getGame().getJonRandNum(iListLength, \"GetNextBuyablePlot picker\");"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:1903", "quote": "CvPlot* pkPlot = pkCity->GetNextBuyablePlot();"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:1874", "quote": "CvPlot* pPlot = pkCity->GetNextBuyablePlot();"},
+        {"loc": "headless/out/sessions/bots-uiqB-nextbuy-s11p2-optdiag/divergence.md", "quote": "lockstep-bots campaign B, 2 peers, v-opt-diag, cityx battery only GetNextBuyablePlot: jon calls 93-94 on peer 0 only, then game (CvRandom::write), players 01-05 (CvGrandStrategyAI::Write) and the map differ"},
+        {"loc": "headless/out/sessions/bots-uiqB-triage-nextbuy/divergence.md", "quote": "triage rerun on v-release: turn 3, game RNG seed (cvrandom.cpp:514), map (CvArea::write), players 00-05 CvGrandStrategyAI"},
+        {"loc": "investigation notes", "quote": "also reproduced on v-golden-hyg (nextbuy-s11p2-ghyg turn 2), with 3 peers (nextbuy-s12p3-rel) and through City:CanBuyPlot() (canbuy-s11p2-rel turn 2)"}
+      ],
+      "community": [],
+      "trigger": "A UI or mod script calls City:GetNextBuyablePlot() or City:CanBuyPlot() without arguments during an MP game.",
+      "symptom": "jon RNG diverges on the calling machine: exe OOS at the next loop barrier, then AI decisions differ.",
+      "impact": {"score": 1, "detection": "rng", "note": "Latent: no installed UI file calls it. Same class as DS-0034 but RNG-visible."},
+      "proposed_fix": "Lua getters must not consume the synced RNG: give lGetNextBuyablePlot / lCanBuyPlot a deterministic pick (the first cheapest plot) or a local RNG, and add the NULL check in lCanBuyPlot. Synced callers keep getJonRandNum.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep-bots", "lockstep"], "idea": "headless/out/uiqB-tools/L.ps1 -Tag nextbuy -Groups cityx -Only GetNextBuyablePlot -Turns 20 -Seed 11 -Peers 2 -Humans 1 -Density 0.3 -Rate 0.1 -MaskFile common.ps1 (turn 2-3, game RNG seed)"},
+      "confidence": 0.9,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0039",
+      "title": "WhosWinningPopup (base game Expansion2 UI) calls the synced Game.Rand when it opens; the DLL raises it only outside MP",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaGame.cpp:1565",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:8575",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:8586"
+      ],
+      "mechanism": "Game.Rand is CvLuaGame::lRand -> getJonRand().get(), the synced game RNG. The base game's WhosWinningPopup.lua (Expansion2 UI, not part of Lekmod) calls Game.Rand twice when it opens (lines 74 and 94: 'Rolling to determine Progress Screen dude.' / '... list type.'). On one machine that advances the jon stream; RNG, then resources, techs and the map differ. In real play the popup is guarded: CvGame raises BUTTONPOPUP_WHOS_WINNING only when !isGameMultiPlayer() (commented 'This popup his the sync rand, so beware'), and no Lekmod or EUI UI file opens it. The lab reached it by firing SerialEventGameMessagePopup directly, which bypasses the guard.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaGame.cpp:1565", "quote": "const int rand_val = GetInstance()->getJonRand().get(max_num, strLog);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:8575", "quote": "if(!isGameMultiPlayer())"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:8585", "quote": "// This popup his the sync rand, so beware"},
+        {"loc": "<Civ5>/Assets/DLC/Expansion2/UI/InGame/Popups/WhosWinningPopup.lua, lines 74 and 94", "quote": "local iRand = Game.Rand(#g_tListOfDudes, \"Rolling to determine Progress Screen dude.\");"},
+        {"loc": "headless/out/sessions/bots-uiqB-uipop-whos-s71-optdiag/divergence.md", "quote": "lockstep-bots campaign B, full Lekmod UI contexts, popup fired on peer 0 only: the first jon call on one peer only is CvLuaGame::lRand 'Rolling to determine Progress Screen dude.'; game, map, teams and many players differ"},
+        {"loc": "headless/out/sessions/bots-uiqB-triage-whos/divergence.md", "quote": "triage rerun on v-release: turn 1, game RNG seed (cvrandom.cpp:514), map resource counts (CvMap::Write), CvTeamTechs, 22 segments"}
+      ],
+      "community": [],
+      "trigger": "Only if a mod or an edited UI file opens the Who's Winning popup during an MP game.",
+      "symptom": "jon RNG diverges on the machine that shows the popup: exe OOS.",
+      "impact": {"score": 1, "detection": "rng", "note": "Guarded in MP by the DLL; Lekmod as shipped cannot reach it."},
+      "proposed_fix": "Nothing needed for Lekmod as shipped. If the popup is ever allowed in MP, use math.random (local) instead of Game.Rand in that UI file.",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep-bots", "lockstep"], "idea": "headless/out/uiqB-tools/L.ps1 -Tag whos -Groups uipopups -Only 'SerialEventGameMessagePopup,BUTTONPOPUP_WHOS_WINNING' -Turns 3 -Seed 71 -Peers 2 -Humans 1 -Dlc headless/out/uiqB-stage/stage/full-ui/LEKMOD_v34.15 (turn 1)"},
+      "confidence": 0.5,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0040",
+      "title": "Plot:GetFoundValue from Lua fills the serialized m_aiFoundValue cache on the calling machine only",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:8750",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:8748",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.h:863",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:11002",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaPlot.cpp:1439",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayerAI.cpp:93",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:30195"
+      ],
+      "mechanism": "CvPlot::getFoundValue fills m_aiFoundValue[eIndex] (plain int array, serialized by CvPlot::write) when it holds -1; Lua exposes it unchanged (Plot:GetFoundValue). AI players refresh their entries every turn (AI_updateFoundValues); for humans AI_doTurnPre returns early, so a value a UI call filled stays different on that machine for the rest of the game. The only simulation reader is CvPlayer::GetBestSettlePlot (AI players, their own entries) and the value is a deterministic function of the plot, so the difference is value-consistent: the serialized state differs, decisions do not. No installed UI file calls GetFoundValue.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:8750", "quote": "m_aiFoundValue[eIndex] = GET_PLAYER(eIndex).AI_foundValue(getX(), getY(), -1, true);"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:11002", "quote": "kStream << m_aiFoundValue[i];"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayerAI.cpp:93", "quote": "if(isHuman())"},
+        {"loc": "headless/out/sessions/bots-uiqB-foundval-s11-rel/divergence.md", "quote": "lockstep-bots campaign B, 2 peers, v-release, plot battery only GetFoundValue: turn 1, map segment only, CvPlot::write (cvplot.cpp:11168 in that build) computed value vs ff ff ff ff; triage rerun bots-uiqB-triage-foundval identical"},
+        {"loc": "investigation notes", "quote": "also reproduced with 3 peers (foundval-s12p3-rel) and on v-golden-hyg (foundval-s11p2-ghyg)"}
+      ],
+      "community": [],
+      "trigger": "A UI or mod script calls Plot:GetFoundValue(player) for a human player's entry (or an AI entry between two refreshes).",
+      "symptom": "Map segment (found-value cache) differs on the calling machine; silent, RNG identical; persists for human players.",
+      "impact": {"score": 1, "detection": "silent", "note": "Latent and value-consistent; only state and save comparisons see it."},
+      "proposed_fix": "Make the Lua getter non-caching: return AI_foundValue without storing (or only read an existing cache entry).",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep-bots", "lockstep"], "idea": "headless/out/uiqB-tools/L.ps1 -Tag foundval -Groups plot -Only GetFoundValue -Turns 20 -Seed 11 -Peers 2 -Humans 1 -Density 0.3 -Rate 0.1 -MaskFile common.ps1 (turn 1, map)"},
+      "confidence": 0.2,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0041",
+      "title": "City:FindPopulationRank from Lua writes the serialized population-rank cache on the calling machine only",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "confirmed",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:2608",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:2607",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.h:1164",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.h:1165",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:18139",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:18140",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:688",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:18148",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:20304"
+      ],
+      "mechanism": "CvCity::findPopulationRank stores m_iPopulationRank and m_bPopulationRankValid (mutable plain members, serialized by CvCity::write). Population changes invalidate the cache and the simulation readers (CvPlayer.cpp:18148 great person spawn city, 20304) recompute it when it is invalid, so results agree; only the serialized state differs. Lua City:FindPopulationRank() calls it on one machine. No installed UI file calls it.",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:2607", "quote": "m_bPopulationRankValid = true;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.h:1164", "quote": "mutable int m_iPopulationRank;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:18139", "quote": "kStream << m_iPopulationRank;"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:688", "quote": "const int iResult = pkCity->findPopulationRank();"},
+        {"loc": "headless/out/sessions/bots-uiqB-poprank-s11-rel/divergence.md", "quote": "lockstep-bots campaign B, 2 peers, v-release, cityx battery only FindPopulationRank: turn 3, player00 city record, CvCity::write (cvcity.cpp:18155 in that build) 01 00 00 00 01 vs ff ff ff ff 00; triage rerun bots-uiqB-triage-poprank identical digests"},
+        {"loc": "investigation notes", "quote": "also reproduced on v-golden-hyg (poprank-s11p2-ghyg) and with 3 peers (poprank-s12p3-rel), turn 2"}
+      ],
+      "community": [],
+      "trigger": "A UI or mod script calls City:FindPopulationRank().",
+      "symptom": "City record differs on the calling machine until the next population change; silent, RNG identical.",
+      "impact": {"score": 1, "detection": "silent", "note": "Latent and value-consistent."},
+      "proposed_fix": "Make the Lua getter compute the rank without storing it (or only read a valid cache).",
+      "behavior_change": "none",
+      "trap": {"id": null, "axis": ["lockstep-bots", "lockstep"], "idea": "headless/out/uiqB-tools/L.ps1 -Tag poprank -Groups cityx -Only FindPopulationRank -Turns 20 -Seed 11 -Peers 2 -Humans 1 -Density 0.3 -Rate 0.1 -MaskFile common.ps1 (turn 2-3, city record)"},
+      "confidence": 0.15,
+      "fix_refs": [],
+      "scanner_rules": []
+    },
+    {
+      "id": "DS-0042",
+      "title": "AI deal offers to a human check the deal against each machine's local player instead of the human it is for",
+      "class": "C5",
+      "secondary_classes": [],
+      "status": "likely",
+      "versions": ["v34.15"],
+      "location": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:612",
+      "locations": [
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:675",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:529",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3809",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3855",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3901",
+        "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3939"
+      ],
+      "mechanism": "CvDealAI::DoEqualizeDealWithHuman(pDeal, eOtherPlayer, ...) passes GC.getGame().getActivePlayer() to IsDealWithHumanAcceptable instead of eOtherPlayer (both calls). It is reached from the trade screen (local, the active player is the deal's human) and from the AI's own turn on every peer: IsMakeOfferForLuxuryResource / OpenBorders / ResearchAgreement / Embassy towards a human. There, IsDealWithHumanAcceptable's 'no gold in the deal and within one GPT' shortcut reads pDeal->GetGoldTrade(local player): on the target human's machine the human's gold items, elsewhere another player's (none), so the offer decision and the statement logged in the AI's diplomacy log can differ per machine. The peace-treaty branch also tests IsPeaceTreatyTrade(local player).",
+      "evidence": [
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:612", "quote": "bMakeOffer = IsDealWithHumanAcceptable(pDeal, GC.getGame().getActivePlayer(), ..."},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:529", "quote": "if (pDeal->GetGoldTrade(eOtherPlayer) == 0 && pDeal->GetGoldTrade(m_pPlayer->GetID()) == 0)"},
+        {"loc": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDealAI.cpp:3809", "quote": "bDealAcceptable = DoEqualizeDealWithHuman(pDeal, eOtherPlayer, ...  (AI luxury offer to a human, AI turn, every peer)"},
+        {"loc": "scanner", "quote": "audit of getActivePlayer uses in synced CvDealAI code (agentB, 2026-10-17)"}
+      ],
+      "community": [],
+      "trigger": "An AI major prepares a deal offer to a human (luxury swap, open borders, research agreement, embassy) on its turn and the equalized deal contains gold from the human with a value gap under 25.",
+      "symptom": "Silent: the AI's diplomacy log / offer counters differ on the target human's machine; later statements and approach choices diverge.",
+      "impact": {"score": 1, "detection": "silent", "note": "Not reachable in v34.15 network games: the AI's offers to humans run only when !isNetworkMultiplayerGame (DoContactMajorCivs), and the trade screen path has active player == eOtherPlayer; diag trigger 29 = 0 on all 7 campaign seeds. Changes hot-seat behaviour only, so FIX-0029 is not in the release set."},
+      "proposed_fix": "Pass eOtherPlayer to IsDealWithHumanAcceptable (FIX-0029).",
+      "behavior_change": "sim",
+      "trap": {"id": null, "axis": ["active_player", "lockstep-bots"], "idea": "lockstep-bots --trade with AI offers to humans; compare the AI's diplomacy statement log on the target's machine and the others"},
+      "confidence": 0.2,
+      "fix_refs": ["FIX-0029"],
+      "scanner_rules": ["ap.gate"]
+    }
+  ],
+  "rejected": [
+    {"what": "CvPlayer free-building arrays (m_paiNumCitiesFreeChosenBuilding and friends)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.h", "why": "dead code: never set to a positive value"},
+    {"what": "CvUnit::m_iCultureBombTimer", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.h", "why": "no unit has CultureBombRadius > 0 (only IMPROVEMENT_CITADEL bombs)"},
+    {"what": "m_aiYieldSettleUnitCityOrder", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2", "why": "rebuilt on every use"},
+    {"what": "CvUnit m_kLastPath path cache", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitMission.cpp:394", "why": "ContinueMission clears it before use"},
+    {"what": "m_iLastGameTurnAtFullHealth, m_bombardCheckTurn", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:18488", "why": "achievement-only or write-only"},
+    {"what": "CvPlot::m_pCenterUnit", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:673", "why": "UI (unit flag shown on the plot)"},
+    {"what": "CvPlayerCulture public-opinion fields", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp", "why": "rewritten by DoPublicOpinion each turn before any simulation read"},
+    {"what": "CvGameTrade::m_aaiTechDifference", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTradeClasses.cpp", "why": "rewritten by DoTurn before routes are evaluated"},
+    {"what": "CvMilitaryAI attack counters", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp", "why": "ResetCounters at every doTurn"},
+    {"what": "CvCityManager::ms_kCityMap (std::map<CvCity*,...>, ties by pointer order)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCityManager.cpp:13", "why": "only consumer CvPlayerTrade::CanCreateTradeRoute (CvTradeClasses.cpp:3340) returns an order-independent bool"},
+    {"what": "FSerialization *ToCheck registries (std::set of pointers)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp:60", "why": "affect only the order of sync-check reports (same for units and players)"},
+    {"what": "CvTypes unordered_map lookup tables iterated", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTypes.cpp:122", "why": "the iteration only logs types missing from the database; ids are filled by name lookup"},
+    {"what": "ResponseResearch chooseTech under the active player", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:1332", "why": "NumFreeTechs is overwritten on all peers right after; only a notification differs (mask)"},
+    {"what": "CvTeam::setHasTech active-team block", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvTeam.cpp:5724", "why": "layout and notifications only; the VP #11012 count bug is absent in Lekmod"},
+    {"what": "prophetreplace.lua Game.Rand in GetRandom", "where": "DLC:Lua/UI/prophetreplace.lua:51", "why": "only caller PlaceExtraJuiceResource is never called (call commented out at line 133); rest of the file is inside --[[ ]]"},
+    {"what": "Tonga Events.SequenceGameInitComplete reveal", "where": "LEKMOD/Lua/Civilizations/Lekmod_tonga.lua:99", "why": "SetRevealed only, idempotent on re-run"},
+    {"what": "CvCity::CreateProject sendLaunch", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvCity.cpp", "why": "end-game launch, idempotent net command"},
+    {"what": "DoMinor* and other gDLL->send* calls from UI paths", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2", "why": "UI by design: the net message carries the change to all peers"},
+    {"what": "async RNG uses", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2", "why": "UI and diplomacy text only"},
+    {"what": "CvAStar active-team fallback", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp", "why": "assert path only"},
+    {"what": "getVisualOwner(NO_TEAM)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp", "why": "no simulation callers"},
+    {"what": "CvAStar open-list ties (VP #13361 class)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvAStar.cpp", "why": "sorted linked list with insertion-order ties, not a heap; deterministic. MP path cache is discarded unless SetMPCacheSafe. Correction (lockstep-bots): discarding the cache does not make a later synced search independent of an earlier local one; a UI-only search on one machine changes the IgnoreUnits finder's later danger results there (DS-0035)"},
+    {"what": "CvWeightedVector::SortItems std::sort instability", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGameCoreDLLUtil/include/CvWeightedVector.h", "why": "unstable but deterministic for equal input on every peer"},
+    {"what": "pairs(Players) in Lua", "where": "LEKMOD/Lua", "why": "array part of an integer-keyed table; deterministic order"},
+    {"what": "Bolivia Lek_Properties cache", "where": "LEKMOD/Lua/Civilizations/Lekmod_bolivia.lua:11", "why": "backed by Modding.OpenSaveData; rebuilt from save data"},
+    {"what": "MC_NabateaAddin.lua OnClick mutators", "where": "LEKMOD/Lua/Civilizations/MC_NabateaAddin.lua:192", "why": "context not loaded (commented out at DLC:Lua/UI/InGame.lua:1292)"},
+    {"what": "InGame.lua KeyUp debug reveal, WorldView Plop/Deplop", "where": "DLC:Lua/UI/InGame.lua:73", "why": "debug flag and single-player only"},
+    {"what": "s_unitMoveTurnSlice", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:2092", "why": "local auto-end-turn timing only"},
+    {"what": "updateMoves setEndTurn(false) under isLocalPlayer, CancelActivePlayerEndTurn", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:9370", "why": "vanilla: goes through gDLL->sendTurnUnready"},
+    {"what": "CvDiplomacyRequests queue popped on the active player's machine", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyRequests.cpp:144", "why": "drives UI only; HasActiveDiploRequestWithHuman is read only when !isGameMultiPlayer (CvPlayer.cpp:5047). Listed as a mask candidate"},
+    {"what": "PENALTY_FOR_DELAYING_POLICIES main path", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:5076", "why": "flag serialized and maintained by synced code on all peers; the residual notification path is DS-0018"},
+    {"what": "CvReplayMessage m_iExtraData1/2 uninitialised by the 3-argument constructor (stack residue saved in the game segment)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReplayMessage.cpp:36", "why": "C2 rejected: read only by Lua Game.GetReplayMessage(s) (replay viewer). Digest noise across builds (golden vs diag vs optimized); fixed for the lab by HYG-0002. the investigation notes"},
+    {"what": "CvNotifications empty slots: m_iExtraGameData/m_ePlayerID copied from an uninitialised resize() temporary (all majors, AI too)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:247", "why": "C2 rejected: every reader walks the [begin, end) ring and Add() overwrites a whole slot. Digest noise across builds in player00..21; fixed for the lab by HYG-0003"},
+    {"what": "CvReligion holy-city coordinates uninitialised for pantheons (pHolyCity == NULL)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp:114", "why": "C2 rejected: sim readers go through GetReligionCreatedByPlayer (excludes pantheons) or eReligion > RELIGION_PANTHEON; IsEligibleForFounderBenefits returns false for pantheons before using the plot. Left: Lua Game.GetHolyCityForReligion(PANTHEON) (no caller) and achievement XP1_20. Digest noise across builds AND across runs of one DLL (system-DLL addresses on the stack); fixed for the lab by HYG-0004"},
+    {"what": "EUI (UI_bc1) gameplay data: <Gameplay> entries, SQL, GameData XML, DB rows", "where": "Assets/DLC/UI_bc1 (EUI_0/1/2.Civ5Pkg)", "why": "its three packages declare only <UISkin>; 0 SQL files, 0 GameData XML; EUI_text_en_us.xml adds Language_en_US rows only (text DB, not the gameplay DB); see the EUI-vs-UI profile comparison (civsim.detlab.euiui diff)"},
+    {"what": "EUI CityBannerManager sends Network.SendUpdateCityCitizens when the mouse enters the player's own city banner (standard UI: only when the city screen opens)", "where": "DLC:Lua/tmp/eui/CityBanners/CityBannerManager_2.lua.ignore:797", "why": "synced command (ResponseUpdateCityCitizens runs DoVerifyWorkingPlots + DoReallocateCitizens on every peer), so it changes what is simulated for that player, not whether peers agree; human input only, never in AI-only games"},
+    {"what": "the other 31 Lua files that differ between the EUI and the standard profile (tooltips, panels, popups, stubs)", "where": "the EUI-vs-UI profile comparison (civsim.detlab.euiui diff)", "why": "no GameEvents handler, no state-mutating API outside click handlers, no Game.Rand, no automatic Network.Send; the gameplay closure of InGame.lua is identical"},
+    {"what": "CheckPlayerTurnDeactivate ends an AI's turn only when !HasActiveDiplomacyRequests() (CvDiplomacyRequests::m_bRequestActive is set on the target human's machine only)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:1738", "why": "unreachable in network games: AIs never send requests to humans there (DoContactMajorCivs skips humans when isNetworkMultiplayerGame, greetings are queued only when !isNetworkMultiPlayer), so no AI request is ever active on a human's machine; single player / hot-seat run on one machine (agentB audit 2026-10-17)"}
+  ],
+  "mask_candidates": [
+    {"what": "notifications added under active-player branches (chooseTech, setHasTech, disconnected, reconnected)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:30985", "why": "serialized per player; differ by design between peers. Lockstep-bots: with a human slot the peers differ in the human's notification list from turn 1, so every bot session masks cvnotifications.cpp (this hides DS-0018 / DS-0033 differences too)"},
+    {"what": "CvDiplomacyRequests m_aRequests / m_bRequestActive", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDiplomacyRequests.cpp:131", "why": "queue popped only on the target's machine; serialized. Lockstep-bots: needed (cvdiplomacyrequests.cpp) as soon as a human slot exists"},
+    {"what": "REPLAY_MESSAGE_EXTENDED wall-clock timestamps", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvReplayMessage.cpp:38", "why": "local time in replay messages (also 45, 251, 260)"},
+    {"what": "SP load replay message TXT_KEY_MISC_RELOAD and m_iNumSessions", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10788", "why": "differs between continuous play and after load (continue test)"},
+    {"what": "CvGame m_fTimeElapsed and turn-timer fields", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:5618", "why": "local clock"},
+    {"what": "CvPlayer m_bIsDisconnected", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:31010", "why": "network state"},
+    {"what": "CvGame::m_bCombatWarned and similar UI latches", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.h", "why": "UI state"},
+    {"what": "Notification::m_bNeedsBroadcast", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:337", "why": "set per machine by the active-player broadcast logic"},
+    {"what": "CvPlayer::m_UnitCycle (CvUnitCycler unit-id list) filled only for the active player", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:28985", "why": "UI unit cycling (filled at CvUnit.cpp:850, CvPlayer.cpp:20957, CvGame.cpp:1005; read only by CvGame::cycleSelectionGroups); serialized in the player segment, not an FAutoVariable. Measured: perturb active_player=0,1 differs in player00/player01 only by this list (one 4-byte unit id + count) at turn 1. Lockstep (the lockstep and audit notes): every pair of spectator peers differs by it from turn 1; civhost masks it (mask pattern cvunitcycler.cpp)"},
+    {"what": "CvPlot m_eWorldAnchor / m_cWorldAnchorData set only when the active team discovers a natural wonder", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlot.cpp:9304", "why": "graphics anchor (gDLL->GameplayWorldAnchor); read only by CvDllPlot::GetWorldAnchor for the exe; serialized in the map segment (CvPlot.cpp:10981). Measured: perturb active_player=0,1 on pangaea-std differs in the map segment at turn 18 by these 2 bytes only. Lockstep: lekmod6 spectator peers differ by these 2 bytes from turn 1 (RNG streams identical); masked by line (golden-hyg cvplot.cpp:10981/10982, gfix-rel 11121/11122)"},
+    {"what": "CvGame::m_bTutorialEverAttacked set when the active player's unit attacks", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnitCombat.cpp:3233", "why": "tutorial latch, read only by Lua Game.IsEverAttackedTutorial (tutorial UI); serialized in the game segment (CvGame.cpp:11069, CvGame::Write). Measured: perturb active_player=0,3 on pangaea-std differs in the game segment from turn 38 by this byte only. Lockstep (the lockstep and audit notes): the only cross-peer difference at pangaea6 turn 171 and lekmod6 turn 123 (4 spectator peers, release DLL) and lekmod6 turn 138 (golden-hyg), always peer 0 (its active player attacked) vs the rest, 1 byte, RNG streams identical; masked by line (golden-hyg build ls-ghyg cvgame.cpp:10944, gfix-rel 11069)"},
+    {"what": "CvNotifications list of a human player whose machine has the EUI NotificationPanel (CITY_TILE entry per culture border growth)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvNotifications.cpp:297", "why": "serialized in the player segment, differs by design between the EUI owner and every other peer (DS-0033)"},
+    {"what": "CvGame::m_listReplayMessages order when two humans' commands of the same turn add replay messages (city founded) and the machines execute them in different orders", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10495", "why": "addReplayMessage push_backs in execution order and every peer runs its own command first under network delay (DS-0036 mechanism); read only by the replay viewer, not an FAutoVariable. Lockstep-bots: game segment differs at turn 1 with --remote-delay 1 or 2 (bots-lekmod6-p3h2-s2-t30-ui0-d1-v-release, bots-campA-lek6s2-p4h2-b16-d2-rel-t20-rmon, CvReplayMessage::write); delay runs mask cvreplaymessage.cpp"},
+    {"what": "local frame-counter stamps CvGame::m_iTurnSlice, CvPlayer::m_iLastSliceMoved, CvUnit::m_iLastMoveTurn", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGame.cpp:10881", "why": "plain ints holding the local update-slice counter (written at CvPlayer.cpp:28837, CvUnit.cpp:22084), read only as relative frame gates (UI double-move timer, AI move pacing while humans play, CvGame.cpp:9322); differ between real machines whenever the turn changes on different frames. Lockstep-bots with --remote-delay 2: game/player/unit segments differ from turn 1 by these bytes only (bots-campA-pan6s2-p2h1-b24-d2-rel-t120); masked by line in delay runs"}
+  ],
+  "related_bugs": [
+    {"what": "ipairs(Players) skips player 0 (dummy buildings and dummy policies never reach slot 0)", "where": "LEKMOD/Lua/Lekmod_global_dummies.lua:24", "fix_refs": ["FIX-0005"], "note": "also line 112; deterministic, not a desync"},
+    {"what": "player object compared with a number (player == player_or_team_id is always false)", "where": "LEKMOD/Lua/Lekmod_global_dummies.lua:27", "fix_refs": ["FIX-0006"], "note": "deterministic"},
+    {"what": "loop_player == player_id and IsPlayerCityRadius(loop_player) pass a player object where an id is expected", "where": "LEKMOD/Lua/Civilizations/Lekmod_newzealand.lua:114", "fix_refs": [], "note": "deterministic; also line 116"},
+    {"what": "TeamSetEra handler treats the team id as a player id", "where": "LEKMOD/Lua/Lekmod_policies.lua:81", "fix_refs": [], "note": "deterministic; wrong player in team games"},
+    {"what": "CvGoodyHuts::DoPlayerReceivedGoody shifts the recent-goody array forward (slot 0 copied into every slot)", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp:31", "fix_refs": [], "note": "deterministic, not a desync: only two distinct recent goodies are remembered"},
+    {"what": "CvBuilderTaskingAI::m_aiNonTerritoryPlots is a static shared by all players", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp:23", "fix_refs": [], "note": "deterministic: a player's workers evaluate the road plots of whichever player ran Update last; each player serializes the shared list (FIX-0013 keeps it as saved after a load)"},
+    {"what": "CvPlayer::InitPlots sizes m_aiPlots as gridHeight*gridHeight (non-AUI); CvPlayer::Read resizes it to numPlots", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:29495", "fix_refs": [], "note": "not serialized beyond the last valid entry, so save/load only changes the vector size (3600 -> 3960 on a 66x60 map); AddAPlot can write past the end in a continuous game once a player owns more than H*H plots"},
+    {"what": "CvPlayer::TestMidTurnPopGrowth never ends for a city with forced Avoid Growth: setFood(growthThreshold()) keeps getFood() >= growthThreshold() true", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvPlayer.cpp:13681", "fix_refs": ["FIX-0021"], "note": "deterministic infinite loop, not a desync: every machine freezes in the same frame (MP game hangs for everyone). Reached when a human's Avoid Growth city gets mid-turn food at or above its threshold: food ancient ruin (receiveGoody, CvPlayer.cpp:7541), yield bonus from a kill (13346), great person expended (17651). Lockstep-bots campaign A: 5 hung sessions, both v-release and v-golden-hyg, 2-6 peers, turns 21-109; sampled stack doGoody -> receiveGoody -> TestMidTurnPopGrowth 100% (headless/out/perf/campA-hang-pan6s1-rep/hotspots.md). Fix direction: break out of the loop after the setFood in the forced Avoid Growth branch"},
+    {"what": "ResponseResearch passes an unchecked tech id to CvPlayerTechs::CanEverResearch; GC.getTechInfo indexes the vector without a range check (CvGlobals.cpp:4635), so an out-of-range id dereferences garbage", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp:1393", "fix_refs": ["FIX-0111"], "note": "crash on every machine (access violation in CanEverResearch, CvTechClasses.cpp:1170) from one bad sendResearch(id >= tech count, iDiscover 0); stock UI never sends one, a buggy or modded client does. The release FIX_VAL_RESEARCH range-checks only the espionage-steal branch. Repro: python -m civsim.lockstep run headless/out/campA/crash-research-oob.json --no-single --no-localize (also re-run in triage, session triage-crash-research-oob)"},
+    {"what": "CvUnit::setExperience dereferences GC.getMap().plot(head MOVE_TO target) without a NULL check in its popup-text branch for the active player's units", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/CvUnit.cpp:17464", "fix_refs": ["FIX-0112"], "note": "crash of the unit owner's machine only (active-player branch, CvUnit.cpp:17438): an off-map MOVE_TO accepted by ResponsePushMission stays at the head of the queue and the unit gains melee XP. Only reachable with an illegal command (the stock UI cannot target an off-map plot). Lockstep-bots: bots-campA-pan6s0-p4h2-b22-d0-rel-t120 turn 109, the replay as peer 0 crashes (re-run in triage), as peer 1 it finishes"},
+    {"what": "Lua Game.GetFounder(religion, player) dereferences a NULL CvReligion when the religion is not founded", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaGame.cpp:2672", "fix_refs": ["FIX-0113"], "note": "Lua API robustness hole, any Lua caller crashes the game; found by the lockstep bot (harness guarded since)"},
+    {"what": "Lua City:CanBuyPlot() without arguments dereferences the result of GetNextBuyablePlot without a NULL check", "where": "LEKMOD_DLL/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp:1875", "fix_refs": [], "note": "crash when the city has no buyable plot; the same call also consumes the synced RNG (DS-0038)"}
+  ]
+}

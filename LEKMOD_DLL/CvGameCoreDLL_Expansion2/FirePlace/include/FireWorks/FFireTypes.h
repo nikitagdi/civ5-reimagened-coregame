@@ -19,7 +19,11 @@
 typedef unsigned char		byte;
 typedef unsigned short		word;
 typedef unsigned int		uint;
+#if defined(LEKMOD_PORTABLE)
+typedef unsigned int		dword;	// 32 bit like Win32 DWORD (unsigned long is 64 bit on LP64)
+#else
 typedef unsigned long		dword;
+#endif
 #if		defined(_PS3)
 // In SDK 2.0, qword is defined as vector unsigned char
 //typedef uint64_t			qword;
@@ -192,7 +196,7 @@ typedef DWORD		threadid_t;
 
 typedef unsigned short port_t;
 
-#ifdef		_PS3
+#if defined(_PS3) || defined(LEKMOD_PORTABLE)
 typedef unsigned int socklen_t;
 #else	//	_PS3
 typedef int socklen_t;

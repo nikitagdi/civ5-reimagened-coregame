@@ -1969,7 +1969,14 @@ int CvLuaGame::lSetCombatWarned(lua_State* L)
 int CvLuaGame::lGetAdvisorCounsel(lua_State* L)
 {
 	const PlayerTypes ePlayer = GC.getGame().getActivePlayer();
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	{
+		HEADLESS_UI_TREASURY_SCOPE();	// FIX-0023 / DS-0037: the counsel reads GetScience / calculateGoldRate (treasury costs)
+		GC.getGame().GetAdvisorCounsel()->BuildCounselList(ePlayer);
+	}
+#else
 	GC.getGame().GetAdvisorCounsel()->BuildCounselList(ePlayer);
+#endif
 	lua_createtable(L, 0, 0);
 	int iTopLevelLua = lua_gettop(L);
 
@@ -2669,7 +2676,13 @@ int CvLuaGame::lGetFounder(lua_State* L)
 
 	const CvReligion* pReligion = GC.getGame().GetGameReligions()->GetReligion(eReligion, ePlayer);
 
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LUA_FOUNDER)
+	// FIX-0113: GetReligion returns NULL for a religion nobody has founded (or an id out of range); golden dereferenced it and
+	// crashed the calling machine. NO_PLAYER is what the founder of a founded-but-unowned religion would read as.
+	lua_pushinteger(L, (pReligion != NULL) ? (int)pReligion->m_eFounder : (int)NO_PLAYER);
+#else
 	lua_pushinteger(L, (int)pReligion->m_eFounder);
+#endif
 	return 1;
 }
 //------------------------------------------------------------------------------

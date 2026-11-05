@@ -7,6 +7,7 @@
 	------------------------------------------------------------------------------------------------------- */
 
 #include "CvGameCoreDLLPCH.h"
+#include "HeadlessMsgGuard.h"	// HYG-0013
 #include "CvUnit.h"
 #include "CvArea.h" 
 #include "CvPlot.h"
@@ -859,7 +860,7 @@ void CvUnit::initWithNameOffset(int iID, UnitTypes eUnit, int iNameOffset, UnitA
 	{
 		for(iI = 0; iI < MAX_PLAYERS; iI++)
 		{
-			if(GET_PLAYER((PlayerTypes)iI).isAlive() && GC.getGame().getActivePlayer())
+			if(GET_PLAYER((PlayerTypes)iI).isAlive() && HEADLESS_ACTIVE_SET())
 			{
 				if(GET_TEAM(getTeam()).isHasMet(GET_PLAYER((PlayerTypes)iI).getTeam()))
 				{
@@ -1082,6 +1083,10 @@ void CvUnit::reset(int iID, UnitTypes eUnit, PlayerTypes eOwner, bool bConstruct
 	m_iCanHeavyCharge = 0;
 #ifdef NQ_HEAVY_CHARGE_DOWNHILL
 	m_iHeavyChargeDownhill = 0;
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0001) && defined(LEKMOD_DIFFERENT_IDEO_COMBAT_BONUS)
+	// FIX-0001 / DS-0001: the modifier is not in read/write/reset; reset it here, CvUnit::read recomputes it from promotions
+	m_iCombatBonusVsDifferentIdeologyModifier = 0;
 #endif
 	m_iNumExoticGoods = 0;
 	m_iTacticalAIPlotX = INVALID_PLOT_COORD;
@@ -2086,6 +2091,9 @@ bool CvUnit::getCaptureDefinition(CvUnitCaptureDefinition* pkCaptureDef, PlayerT
 //	----------------------------------------------------------------------------
 void CvUnit::doTurn()
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_UNIT_DOTURN);
+#endif
 	VALIDATE_OBJECT
 	CvAssertMsg(!IsDead(), "isDead did not return false as expected");
 
@@ -4526,7 +4534,7 @@ void CvUnit::gift(bool bTestTransport)
 		pGiftUnit->GetReligionData()->SetSpreadsLeft(GetReligionData()->GetSpreadsLeft());
 #endif
 
-		if(pGiftUnit->getOwner() == GC.getGame().getActivePlayer())
+		if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), pGiftUnit->getOwner()))
 		{
 			strBuffer = GetLocalizedText("TXT_KEY_MISC_GIFTED_UNIT_TO_YOU", GET_PLAYER(eOwner).getNameKey(), pGiftUnit->getNameKey());
 			DLLUI->AddUnitMessage(0, pGiftUnit->GetIDInfo(), pGiftUnit->getOwner(), false, GC.getEVENT_MESSAGE_TIME(), strBuffer/*, "AS2D_UNITGIFTED", MESSAGE_TYPE_INFO, pGiftUnit->getUnitInfo().GetButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_WHITE"), pGiftUnit->getX(), pGiftUnit->getY(), true, true*/);
@@ -8178,13 +8186,13 @@ bool CvUnit::pillage()
 				{
 					GET_PLAYER(getOwner()).GetTreasury()->ChangeGold(iPillageGold);
 
-					if(getOwner() == GC.getGame().getActivePlayer())
+					if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 					{
 						strBuffer = GetLocalizedText("TXT_KEY_MISC_PLUNDERED_GOLD_FROM_IMP", iPillageGold, pkImprovement->GetTextKey());
 						DLLUI->AddUnitMessage(0, GetIDInfo(), getOwner(), true, GC.getEVENT_MESSAGE_TIME(), strBuffer/*, "AS2D_PILLAGE", MESSAGE_TYPE_INFO, m_pUnitInfo->GetButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_GREEN"), pPlot->getX(), pPlot->getY()*/);
 					}
 
-					if(pPlot->isOwned() && pPlot->getOwner() == GC.getGame().getActivePlayer())
+					if(pPlot->isOwned() && HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), pPlot->getOwner()))
 					{
 						strBuffer = GetLocalizedText("TXT_KEY_MISC_IMP_DESTROYED", pkImprovement->GetTextKey(), getNameKey(), getVisualCivAdjective(pPlot->getTeam()));
 						DLLUI->AddPlotMessage(0, pPlot->GetPlotIndex(), pPlot->getOwner(), false, GC.getEVENT_MESSAGE_TIME(), strBuffer/*, "AS2D_PILLAGED", MESSAGE_TYPE_INFO, m_pUnitInfo->GetButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_RED"), pPlot->getX(), pPlot->getY(), true, true*/);
@@ -9596,7 +9604,7 @@ bool CvUnit::trade()
 	int iFriendship = getTradeInfluence(pPlot);
 	GET_PLAYER(eMinor).GetMinorCivAI()->ChangeFriendshipWithMajor(getOwner(), iFriendship);
 
-	if(getOwner() == GC.getGame().getActivePlayer())
+	if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 	{
 		DLLUI->AddUnitMessage(0, GetIDInfo(), getOwner(), true, GC.getEVENT_MESSAGE_TIME(), GetLocalizedText("TXT_KEY_MERCHANT_RESULT", iTradeGold, iFriendship));
 	}
@@ -9750,7 +9758,7 @@ bool CvUnit::buyCityState()
 		}
 	}
 
-	if (getOwner() == GC.getGame().getActivePlayer())
+	if (HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 	{
 		DLLUI->AddUnitMessage(0, GetIDInfo(), getOwner(), true, GC.getEVENT_MESSAGE_TIME(), GetLocalizedText("TXT_KEY_VENETIAN_MERCHANT_BOUGHT_CITY_STATE"));
 	}
@@ -11741,6 +11749,7 @@ UnitCombatTypes CvUnit::getUnitCombatType() const
 }
 
 //	---------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 DomainTypes CvUnit::getDomainType() const
 {
 	VALIDATE_OBJECT
@@ -11765,6 +11774,7 @@ DomainTypes CvUnit::getDomainType() const
 	
 	return eDomain;
 }
+#endif
 
 //	---------------------------------------------------------------------------
 int CvUnit::flavorValue(FlavorTypes eFlavor) const
@@ -15936,6 +15946,12 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 {
 	VALIDATE_OBJECT
 #ifdef UPDATE_MINOR_BG_ICON_ON_UNIT_MOVE_OR_SET_DAMAGE
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+	// OPT-0011: same table as the golden loop below (CanMajorBullyGold per alive major x minor slot, false for dead
+	// majors), one local power scan per minor and one military ranking per table; stack array instead of vector<bool>.
+	bool oldCanBully[MAX_MAJOR_CIVS * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS)];
+	CvMinorCivAI::FillBullyGoldIconTable(oldCanBully);
+#else
 	std::vector<bool> oldCanBully(MAX_MAJOR_CIVS * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS));
 	for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
 	{
@@ -15951,6 +15967,7 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 			}
 		}
 	}
+#endif
 #endif
 	IDInfo* pUnitNode = 0;
 	CvCity* pOldCity = 0;
@@ -16562,7 +16579,7 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 						iNumGold /= 100;
 
 						// Normal way to handle it
-						if(getOwner() == GC.getGame().getActivePlayer())
+						if(HEADLESS_MSG_TO(GC.getGame().getActivePlayer(), getOwner()))
 						{
 							DLLUI->AddUnitMessage(0, GetIDInfo(), getOwner(), true, GC.getEVENT_MESSAGE_TIME(), GetLocalizedText("TXT_KEY_MISC_DESTROYED_BARBARIAN_CAMP", iNumGold));
 						}
@@ -16775,13 +16792,23 @@ void CvUnit::setXY(int iX, int iY, bool bGroup, bool bUpdate, bool bShow, bool b
 	}
 
 #ifdef UPDATE_MINOR_BG_ICON_ON_UNIT_MOVE_OR_SET_DAMAGE
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+	// OPT-0011: the new values as one table (pure: no state write except the GetMilitaryMight refresh, which the table
+	// triggers under the same condition as golden's first call); the loop below compares them in golden order.
+	bool newCanBully[MAX_MAJOR_CIVS * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS)];
+	CvMinorCivAI::FillBullyGoldIconTable(newCanBully);
+#endif
 	for (int jJ = MAX_MAJOR_CIVS; jJ < MAX_MINOR_CIVS; jJ++)
 	{
 		for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
 		{
 			if (GET_PLAYER((PlayerTypes)iI).isAlive())
 			{
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+				if (oldCanBully[iI * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + jJ - MAX_MAJOR_CIVS] != newCanBully[iI * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + jJ - MAX_MAJOR_CIVS])
+#else
 				if (oldCanBully[iI * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + jJ - MAX_MAJOR_CIVS] != GET_PLAYER((PlayerTypes)jJ).GetMinorCivAI()->CanMajorBullyGold((PlayerTypes)iI))
+#endif
 				{
 					PlayerTypes eLoopMinor = (PlayerTypes)jJ;
 					if (GET_PLAYER(eLoopMinor).isAlive())
@@ -16819,11 +16846,13 @@ bool CvUnit::atPlot(const CvPlot& checkPlot) const
 
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 CvPlot* CvUnit::plot() const
 {
 	VALIDATE_OBJECT
 	return GC.getMap().plotCheckInvalid(getX(), getY());
 }
+#endif
 
 
 //	--------------------------------------------------------------------------------
@@ -17026,6 +17055,12 @@ int CvUnit::setDamage(int iNewValue, PlayerTypes ePlayer, float fAdditionalTextD
 {
 	VALIDATE_OBJECT
 #ifdef UPDATE_MINOR_BG_ICON_ON_UNIT_MOVE_OR_SET_DAMAGE
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+	// OPT-0011: same table as the golden loop below (CanMajorBullyGold per alive major x minor slot, false for dead
+	// majors), one local power scan per minor and one military ranking per table; stack array instead of vector<bool>.
+	bool oldCanBully[MAX_MAJOR_CIVS * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS)];
+	CvMinorCivAI::FillBullyGoldIconTable(oldCanBully);
+#else
 	std::vector<bool> oldCanBully(MAX_MAJOR_CIVS * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS));
 	for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
 	{
@@ -17041,6 +17076,7 @@ int CvUnit::setDamage(int iNewValue, PlayerTypes ePlayer, float fAdditionalTextD
 			}
 		}
 	}
+#endif
 #endif
 
 	int iOldValue;
@@ -17133,13 +17169,23 @@ int CvUnit::setDamage(int iNewValue, PlayerTypes ePlayer, float fAdditionalTextD
 	}
 
 #ifdef UPDATE_MINOR_BG_ICON_ON_UNIT_MOVE_OR_SET_DAMAGE
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+	// OPT-0011: the new values as one table (pure: no state write except the GetMilitaryMight refresh, which the table
+	// triggers under the same condition as golden's first call); the loop below compares them in golden order.
+	bool newCanBully[MAX_MAJOR_CIVS * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS)];
+	CvMinorCivAI::FillBullyGoldIconTable(newCanBully);
+#endif
 	for (int jJ = MAX_MAJOR_CIVS; jJ < MAX_MINOR_CIVS; jJ++)
 	{
 		for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
 		{
 			if (GET_PLAYER((PlayerTypes)iI).isAlive())
 			{
+#if defined(LEKMOD_HEADLESS_OPT_BULLY_ICON_BATCH)
+				if (oldCanBully[iI * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + jJ - MAX_MAJOR_CIVS] != newCanBully[iI * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + jJ - MAX_MAJOR_CIVS])
+#else
 				if (oldCanBully[iI * (MAX_MINOR_CIVS - MAX_MAJOR_CIVS) + jJ - MAX_MAJOR_CIVS] != GET_PLAYER((PlayerTypes)jJ).GetMinorCivAI()->CanMajorBullyGold((PlayerTypes)iI))
+#endif
 				{
 					PlayerTypes eLoopMinor = (PlayerTypes)jJ;
 					if (GET_PLAYER(eLoopMinor).isAlive())
@@ -20325,11 +20371,13 @@ PlayerTypes CvUnit::getCombatOwner(TeamTypes eForTeam, const CvPlot& whosePlot) 
 }
 
 //	--------------------------------------------------------------------------------
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 TeamTypes CvUnit::getTeam() const
 {
 	VALIDATE_OBJECT
 	return CvPlayer::getTeam( getOwner() );
 }
+#endif
 
 //	--------------------------------------------------------------------------------
 PlayerTypes CvUnit::GetOriginalOwner() const
@@ -20849,6 +20897,10 @@ bool CvUnit::IsKillYieldEraValid(EraTypes eEra) const
 	VALIDATE_OBJECT
 	CvAssertMsg(eEra >= 0, "eEra is expected to be non-negative (invalid Era)");
 	CvAssertMsg(eEra < GC.getNumEraInfos(), "eEra is expected to be within maximum bounds (invalid Era)");
+#if defined(LEKMOD_PORTABLE)	// CvPlayer::DoYieldBonusFromKill passes NO_ERA for a killed unit without a tech prerequisite; vector<bool>[-1] is a wild address on LP64/wasm
+	if (eEra < 0 || eEra >= (EraTypes)m_bKillYieldEraValid.size())
+		return false;
+#endif
 	return m_bKillYieldEraValid[eEra];
 }
 void CvUnit::SetKillYieldEraValid(EraTypes eEra, bool bValid)
@@ -21761,6 +21813,14 @@ bool CvUnit::CanSwapWithUnitHere(CvPlot& swapPlot) const
 #endif
 			{
 				CvPlot* pEndTurnPlot = kPathfinder.GetPathEndTurnPlot();
+#elif defined(LEKMOD_HEADLESS_FIX_0020)
+			// FIX-0020 / DS-0035: this check runs only for the local UI (human move/attack orders, the exe's swap cursor), so it
+			// searches on a private finder: the global IgnoreUnits finder's tree, reused by synced code, stays the same on all machines
+			CvUnit* pUnit = (CvUnit*)this;
+			CvIgnoreUnitsPathFinder& kHeadlessUiFinder = HeadlessUiIgnoreUnitsPathFinder();
+			if(kHeadlessUiFinder.DoesPathExist(*(pUnit), plot(), &swapPlot))
+			{
+				CvPlot* pEndTurnPlot = kHeadlessUiFinder.GetPathEndTurnPlot();
 #else
 			CvUnit* pUnit = (CvUnit*)this;
 			if(GC.getIgnoreUnitsPathFinder().DoesPathExist(*(pUnit), plot(), &swapPlot))
@@ -21814,6 +21874,10 @@ bool CvUnit::CanSwapWithUnitHere(CvPlot& swapPlot) const
 #endif
 										{
 											CvPlot* pPathEndTurnPlot = kPathfinder.GetPathEndTurnPlot();
+#elif defined(LEKMOD_HEADLESS_FIX_0020)
+										if(pLoopUnit->ReadyToMove() && kHeadlessUiFinder.DoesPathExist(*(pLoopUnit), &swapPlot, plot()))
+										{
+											CvPlot* pPathEndTurnPlot = kHeadlessUiFinder.GetPathEndTurnPlot();	// FIX-0020
 #else
 										if(pLoopUnit->ReadyToMove() && GC.getIgnoreUnitsPathFinder().DoesPathExist(*(pLoopUnit), &swapPlot, plot()))
 										{
@@ -22061,6 +22125,33 @@ void CvUnit::read(FDataStream& kStream)
 	{
 		GC.getMap().plotManager().AddUnit(GetIDInfo(), m_iX, m_iY, m_iMapLayer);
 	}
+
+#if defined(LEKMOD_HEADLESS_FIX_0001) && defined(LEKMOD_DIFFERENT_IDEO_COMBAT_BONUS)
+	// FIX-0001 / DS-0001: m_iCombatBonusVsDifferentIdeologyModifier is not serialized, so after a load/resync it was 0
+	// for every unit. Recompute it from the (serialized) promotions: same per-promotion value setHasPromotion adds.
+	// Save format is unchanged.
+	{
+		int iIdeologyModifier = 0;
+		const int iNumPromotionInfos = GC.getNumPromotionInfos();
+		for(int iPromo = 0; iPromo < iNumPromotionInfos; iPromo++)
+		{
+			const PromotionTypes ePromo = (PromotionTypes)iPromo;
+			if(m_Promotions.HasPromotion(ePromo))
+			{
+				CvPromotionEntry* pkPromotionInfo = GC.getPromotionInfo(ePromo);
+				if(pkPromotionInfo)
+				{
+					iIdeologyModifier += pkPromotionInfo->GetCombatDifferentIdeology();
+				}
+			}
+		}
+		if(iIdeologyModifier != 0)
+		{
+			HEADLESS_FIX_TRIGGER(1);
+		}
+		m_iCombatBonusVsDifferentIdeologyModifier = iIdeologyModifier;
+	}
+#endif
 }
 
 

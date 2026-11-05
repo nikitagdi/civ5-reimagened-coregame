@@ -276,6 +276,11 @@ public:
 
 	const InfosMap& GetInfoTypes() const;
 	int getInfoTypeForString(const char* szType, bool hideAssert = false) const;			// returns the infos index, use this when searching for an info type string
+#if defined(LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO)
+	// OPT-0019: golden lookup behind the memo of getInfoTypeForString; drop the memo
+	int getInfoTypeForStringUncached(const char* szType, bool hideAssert) const;
+	static void InvalidateInfoTypeMemo();
+#endif
 	int getInfoTypeForHash(uint uiHash, bool hideAssert = false) const;			// returns the infos index, use this when searching for an info type string
 	void setInfoTypeFromString(const char* szType, int idx);
 	void infoTypeFromStringReset();

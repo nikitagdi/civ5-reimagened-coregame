@@ -97,6 +97,9 @@ CvPlayerAI* CvDllPlayer::GetInstance()
 //------------------------------------------------------------------------------
 void CvDllPlayer::Init(PlayerTypes eID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pPlayer->init(eID);
 }
 //------------------------------------------------------------------------------
@@ -107,6 +110,9 @@ void CvDllPlayer::SetupGraphical()
 //------------------------------------------------------------------------------
 void CvDllPlayer::LaterInit()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pPlayer->gameStartInit();
 }
 //------------------------------------------------------------------------------
@@ -206,6 +212,9 @@ bool CvDllPlayer::IsTurnActive() const
 //------------------------------------------------------------------------------
 void CvDllPlayer::SetTurnActive(bool bNewValue, bool bDoTurn)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pPlayer->setTurnActive(bNewValue, bDoTurn);
 }
 //------------------------------------------------------------------------------
@@ -324,11 +333,17 @@ int CvDllPlayer::GetCityDistanceHighwaterMark() const
 //------------------------------------------------------------------------------
 void CvDllPlayer::Disconnected()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pPlayer->disconnected();
 }
 //------------------------------------------------------------------------------
 void CvDllPlayer::Reconnected()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pPlayer->reconnected();
 }
 //------------------------------------------------------------------------------
@@ -349,6 +364,9 @@ int CvDllPlayer::GetNumPolicyBranchesFinished() const
 //------------------------------------------------------------------------------
 void CvDllPlayer::Read(FDataStream& kStream)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	m_pPlayer->Read(kStream);
 }
 //------------------------------------------------------------------------------

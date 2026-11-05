@@ -690,6 +690,9 @@ bool CvDllGameContext::GetHexDebugLayerString(ICvPlot1* pPlot, const char* szLay
 //------------------------------------------------------------------------------
 void CvDllGameContext::Init()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GC.init();
 }
 //------------------------------------------------------------------------------

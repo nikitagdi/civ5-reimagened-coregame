@@ -32,6 +32,15 @@
 
 #include <CvLocalization.h>
 #include <CvGameDatabase.h>
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+#include "CvPreGame.h"	// OPT-0010: InvalidateGameOptionCache
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+extern unsigned int g_uiHeadlessGameDatabaseEpoch;	// OPT-0016, CvGlobals.cpp
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+extern unsigned int g_uiHeadlessDbStaticEpoch;	// OPT-0041, CvGlobals.cpp
+#endif
 // include this after all other headers
 #include "LintFree.h"
 
@@ -119,6 +128,15 @@ void* CvDllDatabaseUtility::operator new(size_t bytes)
 //------------------------------------------------------------------------------
 bool CvDllDatabaseUtility::CacheGameDatabaseData()
 {
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	CvPreGame::InvalidateGameOptionCache();	// OPT-0010: the game database may have been (re)loaded
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	++g_uiHeadlessGameDatabaseEpoch;	// OPT-0016
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	++g_uiHeadlessDbStaticEpoch;	// OPT-0041
+#endif
 	//Do not cache everything if we don't need to.
 	if(m_bGameDatabaseNeedsCaching == false)
 		return true;
@@ -189,11 +207,33 @@ bool CvDllDatabaseUtility::CacheGameDatabaseData()
 	if(bSuccess)
 		m_bGameDatabaseNeedsCaching = false;
 
+#if defined(LEKMOD_HEADLESS_OPT_INFOTYPE_STRING_MEMO)
+	CvGlobals::InvalidateInfoTypeMemo();	// OPT-0019: start the in-game memo empty (prefetch filled it with load-time names)
+#endif
+
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	CvPreGame::InvalidateGameOptionCache();	// OPT-0010: post-DLC loading above may have written the database
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	++g_uiHeadlessGameDatabaseEpoch;	// OPT-0016
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	++g_uiHeadlessDbStaticEpoch;	// OPT-0041
+#endif
 	return bSuccess;
 }
 //------------------------------------------------------------------------------
 bool CvDllDatabaseUtility::FlushGameDatabaseData()
 {
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	CvPreGame::InvalidateGameOptionCache();	// OPT-0010
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	++g_uiHeadlessGameDatabaseEpoch;	// OPT-0016
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	++g_uiHeadlessDbStaticEpoch;	// OPT-0041
+#endif
 	m_bGameDatabaseNeedsCaching = true;
 	
 #ifdef LEKMOD_POST_DLC_DATA_LOADING
@@ -282,6 +322,15 @@ bool CvDllDatabaseUtility::PerformDatabasePostProcessing()
 
 	db->EndTransaction();
 
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+	CvPreGame::InvalidateGameOptionCache();	// OPT-0010: the database was just written
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DIPLO_RESPONSE_MEMO)
+	++g_uiHeadlessGameDatabaseEpoch;	// OPT-0016
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_DB_SPARSE_LISTS)
+	++g_uiHeadlessDbStaticEpoch;	// OPT-0041
+#endif
 	return true;
 }
 //------------------------------------------------------------------------------

@@ -176,6 +176,28 @@ void CvGoodyHuts::Read(FDataStream& kStream, uint uiParentVersion)
 	uint uiVersion;
 	kStream >> uiVersion;
 
+#if defined(LEKMOD_HEADLESS_FIX_0010) && defined(LEKMOD_NEW_ANCIENT_RUIN_REWARDS)
+	// FIX-0010 / DS-0020: Write stores every player's recent-goody array first, then every player's once-per-game flags;
+	// golden Read interleaved them per player, so after any load both tables were scrambled (recent goodies of players
+	// 1+ replaced by flag values, once-per-game flags by goody ids). Read in the order Write uses. Save format unchanged
+	// (version 0 saves have no once-per-game block, as before).
+	for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+	{
+		ArrayWrapper<int> kWrapper(NUM_GOODIES_REMEMBERED, m_aaiPlayerGoodyHutResults[iI]);
+		kStream >> kWrapper;
+	}
+	if (uiVersion >= 1)
+	{
+		HEADLESS_FIX_TRIGGER(10);
+		for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+		{
+			for (int iJ = 0; iJ < DB.Count("GoodyHuts"); iJ++)
+			{
+				kStream >> m_aiGoodyHutsOncePerGame[iI][iJ];
+			}
+		}
+	}
+#else
 	for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
 	{
 #ifdef AUI_WARNING_FIXES
@@ -194,8 +216,9 @@ void CvGoodyHuts::Read(FDataStream& kStream, uint uiParentVersion)
 			}
 		}
 #endif
-	
+
 	}
+#endif
 }
 
 //	---------------------------------------------------------------------------

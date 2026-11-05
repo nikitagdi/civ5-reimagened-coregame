@@ -271,6 +271,14 @@ public:
 	{
 		m_iNumberOfTimesOpsBuildSkippedOver = 0;
 	}
+#if defined(LEKMOD_PORTABLE)
+	// B4 replay determinism (2026-10-31): the counts DoTurn recomputes ("no need to serialize") are read across players
+	// during the turn change before their owner's DoTurn of the turn (IsTestStrategy_NeedAntiAirUnits reads every other
+	// major's HasAirforce). A loaded game read 0 where the running one had last turn's count, so its AI decided otherwise.
+	// CvPlayer's record (version 18) carries them at its end.
+	void WriteTurnCounts(FDataStream& kStream) const;
+	void ReadTurnCounts(FDataStream& kStream);
+#endif
 
 	// Public logging functions
 	void LogDeclarationOfWar(PlayerTypes eOpponent);

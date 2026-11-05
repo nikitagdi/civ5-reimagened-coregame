@@ -111,10 +111,14 @@ protected:
 	{
 		return BasicLuaMethod(L, &CvDeal::AddGoldTrade);
 	};
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	static int lAddGoldPerTurnTrade(lua_State* L);	// FIX-0030 / DS-0037: defined in the .cpp (CvHeadlessUiTreasuryScope)
+#else
 	static int lAddGoldPerTurnTrade(lua_State* L)
 	{
 		return BasicLuaMethod(L, &CvDeal::AddGoldPerTurnTrade);
 	};
+#endif
 	static int lAddMapTrade(lua_State* L)
 	{
 		return BasicLuaMethod(L, &CvDeal::AddMapTrade);
@@ -191,10 +195,14 @@ protected:
 	{
 		return BasicLuaMethod(L, &CvDeal::ChangeGoldTrade);
 	};
+#if defined(LEKMOD_HEADLESS_FIX_0030)
+	static int lChangeGoldPerTurnTrade(lua_State* L);	// FIX-0030 / DS-0037: defined in the .cpp (CvHeadlessUiTreasuryScope)
+#else
 	static int lChangeGoldPerTurnTrade(lua_State* L)
 	{
 		return BasicLuaMethod(L, &CvDeal::ChangeGoldPerTurnTrade);
 	};
+#endif
 	static int lChangeResourceTrade(lua_State* L)
 	{
 		return BasicLuaMethod(L, &CvDeal::ChangeResourceTrade);

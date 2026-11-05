@@ -4245,7 +4245,15 @@ int CvLuaCity::lGetPlotValue(lua_State* L)
 	CvCity* pkCity = GetInstance(L);
 	CvPlot* pPlot = CvLuaPlot::GetInstance(L, 2);
 	const bool bUseAllowGrowthFlag = lua_toboolean(L, 3);
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+	int iValue;
+	{
+		HEADLESS_UI_TREASURY_SCOPE();	// FIX-0023 / DS-0037: the plot value reads calculateGoldRateTimes100 (treasury costs)
+		iValue = pkCity->GetCityCitizens()->GetPlotValue(pPlot, bUseAllowGrowthFlag);
+	}
+#else
 	const int iValue = pkCity->GetCityCitizens()->GetPlotValue(pPlot, bUseAllowGrowthFlag);
+#endif
 	lua_pushinteger(L, iValue);
 	return 1;
 }

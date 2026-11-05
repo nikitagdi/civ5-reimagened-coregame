@@ -2294,10 +2294,12 @@ CvPromotionXMLEntries::~CvPromotionXMLEntries(void)
 }
 
 /// Returns vector of promotion entries
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 std::vector<CvPromotionEntry*>& CvPromotionXMLEntries::GetPromotionEntries()
 {
 	return m_paPromotionEntries;
 }
+#endif
 
 /// Number of defined projects
 #ifdef AUI_WARNING_FIXES
@@ -2636,7 +2638,11 @@ void PromotionArrayHelpers::ReadV3(FDataStream& kStream, CvBitfield& kPromotions
 #ifdef AUI_WARNING_FIXES
 				szError.Format("LOAD ERROR:  Promotion Type not found: %s", sTemp.GetCString());
 #else
+#if defined(LEKMOD_PORTABLE)	// a non-POD FString cannot go through "..." outside MSVC
+				szError.Format("LOAD ERROR: Promotion Type not found: %s", sTemp.GetCString());
+#else
 				szError.Format("LOAD ERROR: Promotion Type not found: %s", sTemp);
+#endif
 #endif
 				GC.LogMessage(szError.GetCString());
 				CvAssertMsg(false, szError);

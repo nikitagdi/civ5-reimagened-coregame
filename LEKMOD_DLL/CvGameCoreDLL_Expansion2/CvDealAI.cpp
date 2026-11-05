@@ -129,7 +129,19 @@ DealOfferResponseTypes CvDealAI::DoHumanOfferDealToThisAI(CvDeal* pDeal)
 		{
 			GC.GetEngineUserInterface()->SetDealInTransit(true);
 			auto_ptr<ICvDeal1> pDllDeal = GC.WrapDealPointer(&kDeal);
+#if defined(LEKMOD_HEADLESS_FIX_0026)
+			// FIX-0026 / DS-0007: the peace-value correction DoAcceptedDeal subtracted on every peer read
+			// m_iCachedValueOfPeaceWithHuman, which the trade screen sets on this (the proposing human's) machine only.
+			// Fold it in here, on the machine whose cache the acceptance test above used, and send the corrected value.
+			const int iPeaceCorrection = GetCachedValueOfPeaceWithHuman();
+			if(iPeaceCorrection != 0)
+			{
+				HEADLESS_FIX_TRIGGER(26);
+			}
+			gDLL->sendNetDealAccepted(eFromPlayer, GetPlayer()->GetID(), pDllDeal.get(), iDealValueToMe - iPeaceCorrection, iValueImOffering, iValueTheyreOffering);
+#else
 			gDLL->sendNetDealAccepted(eFromPlayer, GetPlayer()->GetID(), pDllDeal.get(), iDealValueToMe, iValueImOffering, iValueTheyreOffering);
+#endif
 		}
 		// Deal between AI players, we can process it immediately
 		else
@@ -205,7 +217,11 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 
 	if(GET_PLAYER(eFromPlayer).isHuman())
 	{
+#if !defined(LEKMOD_HEADLESS_FIX_0026)
 		iDealValueToMe -= GetCachedValueOfPeaceWithHuman();
+#endif
+		// FIX-0026 / DS-0007: with the fix the sender already subtracted its cache (DoHumanOfferDealToThisAI); this path
+		// runs on every peer and must not read the per-machine cache. The reset below stays: it only clears local UI state.
 
 		// Reset cached values
 		SetCachedValueOfPeaceWithHuman(0);
@@ -609,7 +625,17 @@ bool CvDealAI::DoEqualizeDealWithHuman(CvDeal* pDeal, PlayerTypes eOtherPlayer, 
 	else
 	{
 		int iTotalValueToMe, iValueImOffering, iValueTheyreOffering, iAmountOverWeWillRequest, iAmountUnderWeWillOffer;
+#if defined(LEKMOD_HEADLESS_FIX_0029)
+		// FIX-0029: the AI also equalizes its own offers to a human in synced turn code (IsMakeOfferFor*); the active player
+		// differs per machine, so test against the human the deal is with (the same player on the asking human's own machine)
+		if(eOtherPlayer != GC.getGame().getActivePlayer())
+		{
+			HEADLESS_FIX_TRIGGER(29);
+		}
+		bMakeOffer = IsDealWithHumanAcceptable(pDeal, eOtherPlayer, /*Passed by reference*/ iTotalValueToMe, iValueImOffering, iValueTheyreOffering, iAmountOverWeWillRequest, iAmountUnderWeWillOffer, bCantMatchOffer);
+#else
 		bMakeOffer = IsDealWithHumanAcceptable(pDeal, GC.getGame().getActivePlayer(), /*Passed by reference*/ iTotalValueToMe, iValueImOffering, iValueTheyreOffering, iAmountOverWeWillRequest, iAmountUnderWeWillOffer, bCantMatchOffer);
+#endif
 
 		if (iTotalValueToMe < 0 && bDontChangeTheirExistingItems)
 		{
@@ -672,7 +698,11 @@ bool CvDealAI::DoEqualizeDealWithHuman(CvDeal* pDeal, PlayerTypes eOtherPlayer, 
 			// Make sure we haven't removed everything from the deal!
 			if(pDeal->m_TradedItems.size() > 0)
 			{
+#if defined(LEKMOD_HEADLESS_FIX_0029)
+				bMakeOffer = IsDealWithHumanAcceptable(pDeal, eOtherPlayer, /*Passed by reference*/ iTotalValueToMe, iValueImOffering, iValueTheyreOffering, iAmountOverWeWillRequest, iAmountUnderWeWillOffer, /*passed by reference*/bCantMatchOffer);
+#else
 				bMakeOffer = IsDealWithHumanAcceptable(pDeal, GC.getGame().getActivePlayer(), /*Passed by reference*/ iTotalValueToMe, iValueImOffering, iValueTheyreOffering, iAmountOverWeWillRequest, iAmountUnderWeWillOffer, /*passed by reference*/bCantMatchOffer);
+#endif
 			}
 		}
 	}
@@ -4037,6 +4067,36 @@ void CvDealAI::DoTradeScreenClosed(bool bAIWasMakingOffer)
 	GC.GetEngineUserInterface()->SetAIRequestingConcessions(false);
 	GC.GetEngineUserInterface()->SetHumanMakingDemand(false);
 
+#if defined(LEKMOD_HEADLESS_FIX_0027)
+	// FIX-0027 / DS-0008: this is called from the trade screen (Lua Player:DoTradeScreenClosed) on the closing human's
+	// machine only, but ClearDealToRenew (CvDeal::m_bConsideringForRenewal, read by DoAcceptedDeal / DoRenewExpiredDeal)
+	// and the research-agreement cancel are synced, serialized state. In a network game send them through the existing
+	// FromUIDiploEvent net message; CvDiplomacyAI::DoFromUIDiploEvent applies them on every peer (the closer included) in
+	// command order. Single player and hot-seat run on one machine: the original local calls, unchanged.
+	if(GC.getGame().isNetworkMultiPlayer())
+	{
+		if(eActivePlayer != NO_PLAYER && GET_PLAYER(eActivePlayer).isHuman() && eActivePlayer != GetPlayer()->GetID())
+		{
+			gDLL->sendFromUIDiploEvent(GetPlayer()->GetID(), HEADLESS_FROM_UI_DIPLO_EVENT_TRADE_SCREEN_CLOSED, bAIWasMakingOffer ? 1 : 0, 0);
+		}
+	}
+	else
+	{
+		GetPlayer()->GetDiplomacyAI()->ClearDealToRenew();
+
+		if(bAIWasMakingOffer)
+		{
+			// If AI was planning on a mutual Research Agreement, cancel it because the human left (golden code, see #else)
+			if(GetPlayer()->GetDiplomacyAI()->IsWantsResearchAgreementWithPlayer(eActivePlayer))
+			{
+				if(GetPlayer()->GetDiplomacyAI()->IsCanMakeResearchAgreementRightNow(eActivePlayer))
+				{
+					GetPlayer()->GetDiplomacyAI()->DoCancelWantsResearchAgreementWithPlayer(eActivePlayer);
+				}
+			}
+		}
+	}
+#else
 #ifdef AUI_WARNING_FIXES
 	CvDiplomacyAI* pDiplomacyAI = GetPlayer()->GetDiplomacyAI();
 	pDiplomacyAI->ClearDealToRenew();
@@ -4066,4 +4126,5 @@ void CvDealAI::DoTradeScreenClosed(bool bAIWasMakingOffer)
 			}
 		}
 	}
+#endif // LEKMOD_HEADLESS_FIX_0027
 }

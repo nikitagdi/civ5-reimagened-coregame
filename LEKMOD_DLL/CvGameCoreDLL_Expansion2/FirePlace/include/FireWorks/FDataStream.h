@@ -123,6 +123,11 @@ protected:
 	// On DS, UINT32 is a define for u32 which is a define for "unsigned long"
 	void Write(const unsigned long &);
 #endif	//	_NDS
+#if defined(LEKMOD_PORTABLE)
+	// MSVC long is 32 bit; outside Win32 these keep the stream format at 4 bytes.
+	void Write(const long &);
+	void Write(int, const long values[]);
+#endif
 	void Write(const INT16 &);
 	void Write(const UINT16 &);
 	void Write(const WCHAR &);
@@ -182,6 +187,10 @@ protected:
 	// On DS, UINT32 is a define for u32 which is a define for "unsigned long"
 	void Read(unsigned long &);
 #endif	//	_NDS
+#if defined(LEKMOD_PORTABLE)
+	void Read(long &);
+	void Read(int, long values[]);
+#endif
 	void Read(INT16 &);
 	void Read(UINT16 &);
 	void Read(WCHAR &);
@@ -522,6 +531,15 @@ FDataStream & operator>>(FDataStream & loadFrom, ArrayWrapper<ValueType> & v)
 	}
 	return loadFrom;
 }
+
+#if defined(LEKMOD_PORTABLE)
+// MSVC binds temporaries (kStream >> ArrayWrapper<T>(n, p)) to the non-const reference above.
+template<typename ValueType>
+FDataStream & operator>>(FDataStream & loadFrom, const ArrayWrapper<ValueType> & v)
+{
+	return loadFrom >> const_cast<ArrayWrapper<ValueType> &>(v);
+}
+#endif
 
 template<typename ValueType>
 FDataStream & operator<<(FDataStream & saveTo, const ArrayWrapperConst<ValueType> & v)

@@ -109,6 +109,11 @@ void CvAIOperation::Reset()
 #ifdef AUI_WARNING_FIXES
 	m_bShouldReplaceLossesWithReinforcements = false;
 #endif
+#if defined(LEKMOD_HEADLESS_HYG_AIOP_REPLACE_LOSSES_INIT) && !defined(AUI_WARNING_FIXES)
+	// HYG-0009: only the base Init() cleared this flag (outside AUI_WARNING_FIXES), and the derived Init() overrides do not
+	// call it, so every operation of those types saved heap garbage. Nothing ever reads the flag (Read/Write only).
+	m_bShouldReplaceLossesWithReinforcements = false;
+#endif
 	m_iLastTurnMoved = -1;
 	m_viArmyIDs.clear();
 }

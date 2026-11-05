@@ -12,6 +12,10 @@
 
 #include "LintFree.h"
 
+#if defined(LEKMOD_HEADLESS_FIX_0023) || defined(LEKMOD_HEADLESS_FIX_0030)
+int CvHeadlessUiTreasuryScope::s_iDepth = 0;	// FIX-0023: Lua (UI) getter calls in progress; not game state, never saved
+#endif
+
 //=====================================
 // CvTreasury
 //=====================================
@@ -703,6 +707,24 @@ int CvTreasury::CalculatePreInflatedCosts()
 	int iExtraCost;
 	int iBaseSupplyCost;
 
+#if defined(LEKMOD_HEADLESS_FIX_0023) || defined(LEKMOD_HEADLESS_FIX_0030)
+	if(CvHeadlessUiTreasuryScope::IsActive())
+	{
+		// FIX-0023 / DS-0037: a Lua (UI) getter on one machine: the same calls in the same order and the same integer sum,
+		// into locals; the saved fields keep what the simulation last stored
+		const int iUnitMaintenance = CalculateUnitCost(iFreeUnits, iPaidUnits, iBaseUnitCost, iExtraCost);
+		const int iUnitSupply = CalculateUnitSupply(iPaidUnits, iBaseSupplyCost);
+
+		int iUiTotalCosts = 0;
+
+		iUiTotalCosts += iUnitMaintenance;
+		iUiTotalCosts += iUnitSupply;
+		iUiTotalCosts += GetBuildingGoldMaintenance();
+		iUiTotalCosts += GetImprovementGoldMaintenance();
+
+		return iUiTotalCosts;
+	}
+#endif
 	m_iExpensePerTurnUnitMaintenance = CalculateUnitCost(iFreeUnits, iPaidUnits, iBaseUnitCost, iExtraCost);
 	m_iExpensePerTurnUnitSupply = CalculateUnitSupply(iPaidUnits, iBaseSupplyCost);
 
@@ -770,6 +792,7 @@ int CvTreasury::CalculateInflatedCosts()
 
 	return iCosts;
 }
+
 
 /// What are our gold maintenance costs because of Buildings?
 int CvTreasury::GetBuildingGoldMaintenance() const

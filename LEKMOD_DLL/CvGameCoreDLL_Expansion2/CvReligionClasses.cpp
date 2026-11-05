@@ -114,6 +114,11 @@ CvReligion::CvReligion()
 CvReligion::CvReligion(ReligionTypes eReligion, PlayerTypes eFounder, CvCity* pHolyCity, bool bPantheon)
 	: m_eReligion(eReligion)
 	, m_eFounder(eFounder)
+#if defined(LEKMOD_HEADLESS_HYG_PANTHEON_HOLYCITY_INIT)
+	// HYG-0004: pantheons pass pHolyCity == NULL and kept stack residue in the holy-city coordinates (saved, never read for them).
+	, m_iHolyCityX(-1)
+	, m_iHolyCityY(-1)
+#endif
 	, m_bPantheon(bPantheon)
 	, m_bEnhanced(false)
 {
@@ -6220,6 +6225,14 @@ int CvReligionAI::ScoreBeliefAtPlot(CvBeliefEntry* pEntry, CvPlot* pPlot)
 {
 	int iRtnValue = 0;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_PLOT_HOIST)
+	// OPT-0020: pPlot->canHaveImprovement(jJ, team) does not depend on the yield iI (const, no RNG, no Lua hook, no
+	// state write), so it is evaluated once per improvement (first yield that needs it, same jJ order) and reused.
+	const int iNumImprovementsForHoist = GC.getNumImprovementInfos();
+	const bool bHoistCanHave = (iNumImprovementsForHoist <= 256);
+	bool abCanHaveImprovement[256];
+	bool bCanHaveKnown = false;
+#endif
 	for(int iI = 0; iI < NUM_YIELD_TYPES; iI++)
 	{
 		// Terrain
@@ -6249,6 +6262,26 @@ int CvReligionAI::ScoreBeliefAtPlot(CvBeliefEntry* pEntry, CvPlot* pPlot)
 			iRtnValue += pEntry->GetResourceYieldChange(eResource, iI);
 
 			// Improvement
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_PLOT_HOIST)
+			if(bHoistCanHave)
+			{
+				if(!bCanHaveKnown)
+				{
+					for(int jJ = 0; jJ < iNumImprovementsForHoist; jJ++)
+						abCanHaveImprovement[jJ] = pPlot->canHaveImprovement((ImprovementTypes)jJ, m_pPlayer->getTeam());
+					bCanHaveKnown = true;
+				}
+				for(int jJ = 0; jJ < iNumImprovementsForHoist; jJ++)
+				{
+					if(abCanHaveImprovement[jJ])
+					{
+						iRtnValue += (pEntry->GetImprovementYieldChange((ImprovementTypes)jJ, (YieldTypes)iI) * 2);
+					}
+				}
+			}
+			else
+#endif
+			{
 #ifdef AUI_WARNING_FIXES
 			for (uint jJ = 0; jJ < GC.getNumImprovementInfos(); jJ++)
 #else
@@ -6260,6 +6293,7 @@ int CvReligionAI::ScoreBeliefAtPlot(CvBeliefEntry* pEntry, CvPlot* pPlot)
 				{
 					iRtnValue += (pEntry->GetImprovementYieldChange((ImprovementTypes)jJ, (YieldTypes)iI) * 2);
 				}
+			}
 			}
 		}
 	}

@@ -557,6 +557,13 @@ public:
 	void Read(FDataStream& kStream);
 	void Write(FDataStream& kStream) const;
 
+#if defined(LEKMOD_HEADLESS_OPT_BELIEF_OWNED_LOOP)
+	// OPT-0040: the ids i in [0, iNumBeliefs) for which HasBelief(i) holds, ascending and unique, i.e. exactly the ids golden's
+	// "for(i = 0; i < GetNumBeliefs(); i++) if(HasBelief(i))" loops visit, in their order. Returns the count, or -1 if more
+	// than iMax ids qualify (the caller then runs the golden loop).
+	int HeadlessOwnedBeliefsAscending(int* aiOut, int iMax, int iNumBeliefs) const;
+#endif
+
 private:
 	// Cached data about this religion's beliefs
 	int m_iFaithFromDyingUnits;

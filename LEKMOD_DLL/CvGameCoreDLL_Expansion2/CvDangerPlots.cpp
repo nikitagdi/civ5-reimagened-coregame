@@ -93,6 +93,9 @@ void CvDangerPlots::Uninit()
 /// Updates the danger plots values to reflect threats across the map
 void CvDangerPlots::UpdateDanger(bool bPretendWarWithAllCivs, bool bIgnoreVisibility)
 {
+#if defined(LEKMOD_HEADLESS_DIAG)
+	HEADLESS_ZONE(HEADLESS_ZONE_AI_DANGER);
+#endif
 	// danger plots have not been initialized yet, so no need to update
 #ifdef AUI_DANGER_PLOTS_FIX_USE_ARRAY_NOT_FFASTVECTOR
 	if (!m_DangerPlots)

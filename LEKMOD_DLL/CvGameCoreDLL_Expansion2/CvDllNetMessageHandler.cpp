@@ -13,6 +13,32 @@
 #include "CvTypes.h"
 #include "CvGameCoreUtils.h"
 
+#if defined(LEKMOD_HEADLESS_BUILD)
+// ----------------------------------------------------------------------------------------------------------------
+// FIX-VALIDATION helpers (class FIX-VALIDATION; records FIX-01xx).
+// Everything here is PURE: range checks and const state queries only (no RNG, no Lua, no gDLL->send*, no state
+// writes), so every peer takes the same accept/reject decision. A rejected command leaves the game exactly as if it
+// had never arrived. These helpers are only called from blocks fenced by LEKMOD_HEADLESS_FIX_VAL_*.
+static inline bool HeadlessIsPlayerId(int iPlayer) { return iPlayer >= 0 && iPlayer < MAX_PLAYERS; }
+static inline bool HeadlessIsMajorId(int iPlayer) { return iPlayer >= 0 && iPlayer < MAX_MAJOR_CIVS; }
+static inline bool HeadlessIsMinorId(int iPlayer) { return iPlayer >= MAX_MAJOR_CIVS && iPlayer < MAX_CIV_PLAYERS; }
+static inline bool HeadlessIsTeamId(int iTeam) { return iTeam >= 0 && iTeam < MAX_TEAMS; }
+
+// Diag builds report the rejection to the host (OnFixTrigger); real builds also write it to net_message_debug.log
+// (the host does not provide the exe's log manager, so the log call is not compiled into diag builds).
+static void HeadlessRejectResponse(int iFixId, const char* szHandler, int iPlayer)
+{
+	HEADLESS_FIX_TRIGGER(iFixId);
+#if !defined(LEKMOD_HEADLESS_DIAG)
+	FILogFile* logFile = LOGFILEMGR.GetLog("net_message_debug.log", 0);
+	if(logFile)
+	{
+		logFile->DebugMsg("FIX-%04i: rejected invalid %s (player %i)", iFixId, szHandler, iPlayer);
+	}
+#endif
+}
+#endif
+
 CvDllNetMessageHandler::CvDllNetMessageHandler()
 {
 }
@@ -52,11 +78,17 @@ void* CvDllNetMessageHandler::operator new(size_t bytes)
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseAdvancedStartAction(PlayerTypes ePlayer, AdvancedStartActionTypes eAction, int iX, int iY, int iData, bool bAdd)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GET_PLAYER(ePlayer).doAdvancedStartAction(eAction, iX, iY, iData, bAdd);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseAutoMission(PlayerTypes ePlayer, int iUnitID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvUnit* pkUnit = kPlayer.getUnit(iUnitID);
 	if(pkUnit)
@@ -67,6 +99,9 @@ void CvDllNetMessageHandler::ResponseAutoMission(PlayerTypes ePlayer, int iUnitI
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseBarbarianRansom(PlayerTypes ePlayer, int iOptionChosen, int iUnitID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 
 	// Pay ransom
@@ -93,6 +128,19 @@ void CvDllNetMessageHandler::ResponseBarbarianRansom(PlayerTypes ePlayer, int iO
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseChangeWar(PlayerTypes ePlayer, TeamTypes eRivalTeam, bool bWar)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_CHANGE_WAR)
+	// FIX-0102 / FIX-VALIDATION: team id out of range indexed GET_TEAM() out of bounds, a war with / peace to one's own
+	// team was only a FAssert. canDeclareWar/canChangeWarPeace are NOT used: canDeclareWar calls the Lua hook CanDeclareWar
+	// (impure) and the city-state popup sends ChangeWar without gating on either of them.
+	if(!HeadlessIsPlayerId(ePlayer) || !HeadlessIsTeamId(eRivalTeam) || GET_PLAYER(ePlayer).getTeam() == eRivalTeam)
+	{
+		HeadlessRejectResponse(102, "ResponseChangeWar", ePlayer);
+		return;
+	}
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 #ifdef AUI_WARNING_FIXES
 	const TeamTypes eTeam = kPlayer.getTeam();
@@ -116,6 +164,9 @@ void CvDllNetMessageHandler::ResponseChangeWar(PlayerTypes ePlayer, TeamTypes eR
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseIgnoreWarning(PlayerTypes ePlayer, TeamTypes eRivalTeam)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 #ifdef AUI_WARNING_FIXES
 	const TeamTypes eTeam = kPlayer.getTeam();
@@ -131,6 +182,9 @@ void CvDllNetMessageHandler::ResponseIgnoreWarning(PlayerTypes ePlayer, TeamType
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCityBuyPlot(PlayerTypes ePlayer, int iCityID, int iX, int iY)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 	if(pkCity != NULL)
@@ -163,6 +217,9 @@ void CvDllNetMessageHandler::ResponseCityBuyPlot(PlayerTypes ePlayer, int iCityI
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCityDoTask(PlayerTypes ePlayer, int iCityID, TaskTypes eTask, int iData1, int iData2, bool bOption, bool bAlt, bool bShift, bool bCtrl)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 
@@ -190,6 +247,9 @@ void CvDllNetMessageHandler::ResponseCityDoTask(PlayerTypes ePlayer, int iCityID
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCityPopOrder(PlayerTypes ePlayer, int iCityID, int iNum)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 	if(pkCity != NULL)
@@ -200,11 +260,17 @@ void CvDllNetMessageHandler::ResponseCityPopOrder(PlayerTypes ePlayer, int iCity
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCityPurchase(PlayerTypes ePlayer, int iCityID, UnitTypes eUnitType, BuildingTypes eBuildingType, ProjectTypes eProjectType)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	ResponseCityPurchase(ePlayer, iCityID, eUnitType, eBuildingType, eProjectType, NO_YIELD);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCityPurchase(PlayerTypes ePlayer, int iCityID, UnitTypes eUnitType, BuildingTypes eBuildingType, ProjectTypes eProjectType, int ePurchaseYield)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 	if(pkCity && ePurchaseYield >= -1 && ePurchaseYield < NUM_YIELD_TYPES)
@@ -215,6 +281,9 @@ void CvDllNetMessageHandler::ResponseCityPurchase(PlayerTypes ePlayer, int iCity
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCityPushOrder(PlayerTypes ePlayer, int iCityID, OrderTypes eOrder, int iData, bool bAlt, bool bShift, bool bCtrl)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 	if(pkCity != NULL)
@@ -225,6 +294,9 @@ void CvDllNetMessageHandler::ResponseCityPushOrder(PlayerTypes ePlayer, int iCit
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseCitySwapOrder(PlayerTypes ePlayer, int iCityID, int iNum)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 	if(pkCity != NULL)
@@ -239,11 +311,17 @@ void CvDllNetMessageHandler::ResponseChooseElection(PlayerTypes, int, int)
 void CvDllNetMessageHandler::ResponseChooseElection(PlayerTypes ePlayer, int iSelection, int iVoteId)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	// Unused
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseDestroyUnit(PlayerTypes ePlayer, int iUnitID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvUnit* pkUnit = kPlayer.getUnit(iUnitID);
 #ifdef GAME_ALLOW_ONLY_ONE_UNIT_MOVE_ON_TURN_LOADING
@@ -271,11 +349,25 @@ void CvDllNetMessageHandler::ResponseDestroyUnit(PlayerTypes ePlayer, int iUnitI
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseDiplomacyFromUI(PlayerTypes ePlayer, PlayerTypes eOtherPlayer, FromUIDiploEventTypes eEvent, int iArg1, int iArg2)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_DIPLOMACY_FROM_UI)
+	// FIX-0106 / FIX-VALIDATION: GET_PLAYER(eOtherPlayer) without a range check
+	if(!HeadlessIsPlayerId(ePlayer) || !HeadlessIsPlayerId(eOtherPlayer))
+	{
+		HeadlessRejectResponse(106, "ResponseDiplomacyFromUI", ePlayer);
+		return;
+	}
+#endif
 	GET_PLAYER(eOtherPlayer).GetDiplomacyAI()->DoFromUIDiploEvent(ePlayer, eEvent, iArg1, iArg2);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseDiploVote(PlayerTypes ePlayer, PlayerTypes eVotePlayer)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	TeamTypes eVotingTeam = GET_PLAYER(ePlayer).getTeam();
 	TeamTypes eVote = GET_PLAYER(eVotePlayer).getTeam();
 
@@ -284,6 +376,9 @@ void CvDllNetMessageHandler::ResponseDiploVote(PlayerTypes ePlayer, PlayerTypes 
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseDoCommand(PlayerTypes ePlayer, int iUnitID, CommandTypes eCommand, int iData1, int iData2, bool bAlt)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvUnit* pkUnit = kPlayer.getUnit(iUnitID);
 
@@ -334,11 +429,17 @@ void CvDllNetMessageHandler::ResponseDoCommand(PlayerTypes ePlayer, int iUnitID,
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseExtendedGame(PlayerTypes ePlayer)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GET_PLAYER(ePlayer).makeExtendedGame();
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseFoundPantheon(PlayerTypes ePlayer, BeliefTypes eBelief)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvGame& kGame(GC.getGame());
 	CvGameReligions* pkGameReligions(kGame.GetGameReligions());
 	CvBeliefXMLEntries* pkBeliefs = GC.GetGameBeliefs();
@@ -393,8 +494,35 @@ void CvDllNetMessageHandler::ResponseFoundPantheon(PlayerTypes ePlayer, BeliefTy
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseFoundReligion(PlayerTypes ePlayer, ReligionTypes eReligion, const char* szCustomName, BeliefTypes eBelief1, BeliefTypes eBelief2, BeliefTypes eBelief3, BeliefTypes eBelief4, int iCityX, int iCityY)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvGame& kGame(GC.getGame());
 	CvGameReligions* pkGameReligions(kGame.GetGameReligions());
+
+#if defined(LEKMOD_HEADLESS_FIX_VAL_FOUND_RELIGION)
+	// FIX-0104 / FIX-VALIDATION: plot(iCityX, iCityY) is NULL for coordinates off the map (NULL dereference below), the
+	// holy city was not required to belong to the founder, an out-of-range player id indexed GET_PLAYER() out of bounds.
+	// NO_PLAYER and "no city on the plot" stay what they were (silent no-op below).
+	{
+		CvPlot* pkValidatePlot = GC.getMap().plot(iCityX, iCityY);
+		bool bInvalid = (pkValidatePlot == NULL);
+		if(!bInvalid && ePlayer != NO_PLAYER)
+		{
+			bInvalid = !HeadlessIsPlayerId(ePlayer);
+			if(!bInvalid)
+			{
+				CvCity* pkValidateCity = pkValidatePlot->getPlotCity();
+				bInvalid = (pkValidateCity != NULL && pkValidateCity->getOwner() != ePlayer);
+			}
+		}
+		if(bInvalid)
+		{
+			HeadlessRejectResponse(104, "ResponseFoundReligion", ePlayer);
+			return;
+		}
+	}
+#endif
 
 	CvCity* pkCity = GC.getMap().plot(iCityX, iCityY)->getPlotCity();
 	if(pkCity && ePlayer != NO_PLAYER)
@@ -443,6 +571,9 @@ void CvDllNetMessageHandler::ResponseEnhanceReligion(PlayerTypes ePlayer, Religi
 void CvDllNetMessageHandler::ResponseEnhanceReligion(PlayerTypes ePlayer, ReligionTypes eReligion, const char* szCustomName, BeliefTypes eBelief1, BeliefTypes eBelief2, int iCityX, int iCityY)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvGame& kGame(GC.getGame());
 #ifdef REPLAY_MESSAGE_EXTENDED
 	// -1 -- adds chat message to replay
@@ -460,6 +591,17 @@ void CvDllNetMessageHandler::ResponseEnhanceReligion(PlayerTypes ePlayer, Religi
 #endif
 		CvGameReligions* pkGameReligions(kGame.GetGameReligions());
 
+#if defined(LEKMOD_HEADLESS_FIX_VAL_ENHANCE_RELIGION)
+		// FIX-0105 / FIX-VALIDATION: an out-of-range player id indexed GET_PLAYER() out of bounds (the eReligion == -1
+		// chat multiplexer above is untouched). The coordinates are NOT validated up front: the honest UI may send the
+		// city of the notification (or -1/-1) and only the failure branch below looks at them.
+		if(!HeadlessIsPlayerId(ePlayer))
+		{
+			HeadlessRejectResponse(105, "ResponseEnhanceReligion", ePlayer);
+			return;
+		}
+#endif
+
 		CvGameReligions::FOUNDING_RESULT eResult = pkGameReligions->CanEnhanceReligion(ePlayer, eReligion, eBelief1, eBelief2);
 		if (eResult == CvGameReligions::FOUNDING_OK)
 			pkGameReligions->EnhanceReligion(ePlayer, eReligion, eBelief1, eBelief2);
@@ -467,7 +609,17 @@ void CvDllNetMessageHandler::ResponseEnhanceReligion(PlayerTypes ePlayer, Religi
 		{
 			CvGameReligions::NotifyPlayer(ePlayer, eResult);
 			// We don't want them to lose the opportunity to enhance the religion, and the Great Prophet is already gone so just repost the notification
+#if defined(LEKMOD_HEADLESS_FIX_VAL_ENHANCE_RELIGION)
+			// FIX-0105: plot(iCityX, iCityY) is NULL off the map; golden dereferenced it here (crash)
+			CvPlot* pkEnhancePlot = GC.getMap().plot(iCityX, iCityY);
+			if(pkEnhancePlot == NULL)
+			{
+				HEADLESS_FIX_TRIGGER(105);
+			}
+			CvCity* pkCity = (pkEnhancePlot != NULL) ? pkEnhancePlot->getPlotCity() : NULL;
+#else
 			CvCity* pkCity = GC.getMap().plot(iCityX, iCityY)->getPlotCity();
+#endif
 			CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 #ifdef AUI_DLLNETMESSAGEHANDLER_FIX_RESPAWN_PROPHET_IF_BEATEN_TO_LAST_RELIGION
 			if (kPlayer.isHuman() && pkCity && eResult != CvGameReligions::FOUNDING_NO_BELIEFS_AVAILABLE)
@@ -502,6 +654,9 @@ void CvDllNetMessageHandler::ResponseEnhanceReligion(PlayerTypes ePlayer, Religi
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMoveSpy(PlayerTypes ePlayer, int iSpyIndex, int iTargetPlayer, int iTargetCity, bool bAsDiplomat)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvPlayerEspionage* pPlayerEspionage = kPlayer.GetEspionage();
 
@@ -532,6 +687,9 @@ void CvDllNetMessageHandler::ResponseMoveSpy(PlayerTypes ePlayer, int iSpyIndex,
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseStageCoup(PlayerTypes eSpyPlayer, int iSpyIndex)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eSpyPlayer != NO_PLAYER, "eSpyPlayer invalid");
 	CvAssertMsg(iSpyIndex >= 0, "iSpyIndex invalid");
 
@@ -551,6 +709,9 @@ void CvDllNetMessageHandler::ResponseStageCoup(PlayerTypes eSpyPlayer, int iSpyI
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseFaithPurchase(PlayerTypes ePlayer, FaithPurchaseTypes eFaithPurchaseType, int iFaithPurchaseIndex)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(ePlayer != NO_PLAYER, "ePlayer invalid");
 	CvAssertMsg(eFaithPurchaseType > -1, "Faith Purchase Type invalid");
 	CvAssertMsg(iFaithPurchaseIndex > -1, "Faith Purchase Index invalid");
@@ -563,6 +724,9 @@ void CvDllNetMessageHandler::ResponseFaithPurchase(PlayerTypes ePlayer, FaithPur
 #ifdef AUI_LEAGUES_FIX_POSSIBLE_DEALLOCATION_CRASH
 void CvDllNetMessageHandler::ResponseLeagueVoteEnact(LeagueTypes /*eLeague*/, int iResolutionID, PlayerTypes eVoter, int iNumVotes, int iChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eVoter != NO_PLAYER, "eVoter invalid");
 
@@ -572,10 +736,22 @@ void CvDllNetMessageHandler::ResponseLeagueVoteEnact(LeagueTypes /*eLeague*/, in
 #else
 void CvDllNetMessageHandler::ResponseLeagueVoteEnact(LeagueTypes eLeague, int iResolutionID, PlayerTypes eVoter, int iNumVotes, int iChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eVoter != NO_PLAYER, "eVoter invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(eLeague);
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LEAGUE)
+	// FIX-0109 / FIX-VALIDATION: GetLeague() returns NULL for an unknown league id (NULL dereference below), the
+	// CanVote() check was only a CvAssertMsg (compiled out), a negative vote count would have added votes.
+	if(pLeague == NULL || !HeadlessIsPlayerId(eVoter) || iNumVotes < 0 || !pLeague->CanVote(eVoter))
+	{
+		HeadlessRejectResponse(109, "ResponseLeagueVoteEnact", eVoter);
+		return;
+	}
 #endif
 	CvAssertMsg(pLeague->CanVote(eVoter), "eVoter not allowed to vote. Please send Anton your save file and version.");
 	pLeague->DoVoteEnact(iResolutionID, eVoter, iNumVotes, iChoice);
@@ -584,6 +760,9 @@ void CvDllNetMessageHandler::ResponseLeagueVoteEnact(LeagueTypes eLeague, int iR
 #ifdef AUI_LEAGUES_FIX_POSSIBLE_DEALLOCATION_CRASH
 void CvDllNetMessageHandler::ResponseLeagueVoteRepeal(LeagueTypes /*eLeague*/, int iResolutionID, PlayerTypes eVoter, int iNumVotes, int iChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eVoter != NO_PLAYER, "eVoter invalid");
 
@@ -593,10 +772,22 @@ void CvDllNetMessageHandler::ResponseLeagueVoteRepeal(LeagueTypes /*eLeague*/, i
 #else
 void CvDllNetMessageHandler::ResponseLeagueVoteRepeal(LeagueTypes eLeague, int iResolutionID, PlayerTypes eVoter, int iNumVotes, int iChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eVoter != NO_PLAYER, "eVoter invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(eLeague);
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LEAGUE)
+	// FIX-0109 / FIX-VALIDATION: GetLeague() returns NULL for an unknown league id (NULL dereference below), the
+	// CanVote() check was only a CvAssertMsg (compiled out), a negative vote count would have added votes.
+	if(pLeague == NULL || !HeadlessIsPlayerId(eVoter) || iNumVotes < 0 || !pLeague->CanVote(eVoter))
+	{
+		HeadlessRejectResponse(109, "ResponseLeagueVoteRepeal", eVoter);
+		return;
+	}
 #endif
 	CvAssertMsg(pLeague->CanVote(eVoter), "eVoter not allowed to vote. Please send Anton your save file and version.");
 	pLeague->DoVoteRepeal(iResolutionID, eVoter, iNumVotes, iChoice);
@@ -605,6 +796,9 @@ void CvDllNetMessageHandler::ResponseLeagueVoteRepeal(LeagueTypes eLeague, int i
 #ifdef AUI_LEAGUES_FIX_POSSIBLE_DEALLOCATION_CRASH
 void CvDllNetMessageHandler::ResponseLeagueVoteAbstain(LeagueTypes /*eLeague*/, PlayerTypes eVoter, int iNumVotes)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eVoter != NO_PLAYER, "eVoter invalid");
 
@@ -614,10 +808,22 @@ void CvDllNetMessageHandler::ResponseLeagueVoteAbstain(LeagueTypes /*eLeague*/, 
 #else
 void CvDllNetMessageHandler::ResponseLeagueVoteAbstain(LeagueTypes eLeague, PlayerTypes eVoter, int iNumVotes)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eVoter != NO_PLAYER, "eVoter invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(eLeague);
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LEAGUE)
+	// FIX-0109 / FIX-VALIDATION: GetLeague() returns NULL for an unknown league id (NULL dereference below), the
+	// CanVote() check was only a CvAssertMsg (compiled out), a negative vote count would have added votes.
+	if(pLeague == NULL || !HeadlessIsPlayerId(eVoter) || iNumVotes < 0 || !pLeague->CanVote(eVoter))
+	{
+		HeadlessRejectResponse(109, "ResponseLeagueVoteAbstain", eVoter);
+		return;
+	}
 #endif
 	CvAssertMsg(pLeague->CanVote(eVoter), "eVoter not allowed to vote. Please send Anton your save file and version.");
 	pLeague->DoVoteAbstain(eVoter, iNumVotes);
@@ -626,6 +832,9 @@ void CvDllNetMessageHandler::ResponseLeagueVoteAbstain(LeagueTypes eLeague, Play
 #ifdef AUI_LEAGUES_FIX_POSSIBLE_DEALLOCATION_CRASH
 void CvDllNetMessageHandler::ResponseLeagueProposeEnact(LeagueTypes /*eLeague*/, ResolutionTypes eResolution, PlayerTypes eProposer, int iChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eResolution != NO_RESOLUTION, "eResolution invalid");
 	CvAssertMsg(eProposer != NO_PLAYER, "eProposer invalid");
@@ -636,11 +845,25 @@ void CvDllNetMessageHandler::ResponseLeagueProposeEnact(LeagueTypes /*eLeague*/,
 #else
 void CvDllNetMessageHandler::ResponseLeagueProposeEnact(LeagueTypes eLeague, ResolutionTypes eResolution, PlayerTypes eProposer, int iChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eResolution != NO_RESOLUTION, "eResolution invalid");
 	CvAssertMsg(eProposer != NO_PLAYER, "eProposer invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(eLeague);
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LEAGUE)
+	// FIX-0109 / FIX-VALIDATION: NULL league, resolution id out of range (GC.getResolutionInfo), and CanProposeEnact() as a
+	// real check: DoProposeEnact() refuses an invalid proposal itself, but golden still ran the AssignSecondProposalPrivilege /
+	// "call for proposals" notification tail below for it.
+	if(pLeague == NULL || !HeadlessIsPlayerId(eProposer) || eResolution < 0 || eResolution >= GC.getNumResolutionInfos() ||
+	   !pLeague->CanProposeEnact(eResolution, eProposer, iChoice))
+	{
+		HeadlessRejectResponse(109, "ResponseLeagueProposeEnact", eProposer);
+		return;
+	}
 #endif
 	CvAssertMsg(pLeague->CanProposeEnact(eResolution, eProposer, iChoice), "eProposer not allowed to enact Resolution. Please send Anton your save file and version.");
 	pLeague->DoProposeEnact(eResolution, eProposer, iChoice);
@@ -683,6 +906,9 @@ void CvDllNetMessageHandler::ResponseLeagueProposeEnact(LeagueTypes eLeague, Res
 #ifdef AUI_LEAGUES_FIX_POSSIBLE_DEALLOCATION_CRASH
 void CvDllNetMessageHandler::ResponseLeagueProposeRepeal(LeagueTypes /*eLeague*/, int iResolutionID, PlayerTypes eProposer)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eProposer != NO_PLAYER, "eProposer invalid");
 
@@ -692,10 +918,21 @@ void CvDllNetMessageHandler::ResponseLeagueProposeRepeal(LeagueTypes /*eLeague*/
 #else
 void CvDllNetMessageHandler::ResponseLeagueProposeRepeal(LeagueTypes eLeague, int iResolutionID, PlayerTypes eProposer)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 	CvAssertMsg(eProposer != NO_PLAYER, "eProposer invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(eLeague);
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LEAGUE)
+	// FIX-0109 / FIX-VALIDATION: see ResponseLeagueProposeEnact
+	if(pLeague == NULL || !HeadlessIsPlayerId(eProposer) || !pLeague->CanProposeRepeal(iResolutionID, eProposer))
+	{
+		HeadlessRejectResponse(109, "ResponseLeagueProposeRepeal", eProposer);
+		return;
+	}
 #endif
 	CvAssertMsg(pLeague->CanProposeRepeal(iResolutionID, eProposer), "eProposer not allowed to repeal Resolution. Please send Anton your save file and version.");
 	pLeague->DoProposeRepeal(iResolutionID, eProposer);
@@ -738,6 +975,9 @@ void CvDllNetMessageHandler::ResponseLeagueProposeRepeal(LeagueTypes eLeague, in
 #ifdef AUI_LEAGUES_FIX_POSSIBLE_DEALLOCATION_CRASH
 void CvDllNetMessageHandler::ResponseLeagueEditName(LeagueTypes /*eLeague*/, PlayerTypes ePlayer, const char* szCustomName)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
@@ -746,15 +986,29 @@ void CvDllNetMessageHandler::ResponseLeagueEditName(LeagueTypes /*eLeague*/, Pla
 #else
 void CvDllNetMessageHandler::ResponseLeagueEditName(LeagueTypes eLeague, PlayerTypes ePlayer, const char* szCustomName)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(eLeague != NO_LEAGUE, "eLeague invalid");
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(eLeague);
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_LEAGUE)
+	// FIX-0109 / FIX-VALIDATION: NULL league (DoChangeCustomName checks CanChangeCustomName itself)
+	if(pLeague == NULL || !HeadlessIsPlayerId(ePlayer))
+	{
+		HeadlessRejectResponse(109, "ResponseLeagueEditName", ePlayer);
+		return;
+	}
 #endif
 	pLeague->DoChangeCustomName(ePlayer, szCustomName);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseSetSwappableGreatWork(PlayerTypes ePlayer, int iWorkClass, int iWorkIndex)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(ePlayer != NO_PLAYER, "ePlayer invalid");
 	
 	// is this player alive
@@ -809,6 +1063,9 @@ void CvDllNetMessageHandler::ResponseSetSwappableGreatWork(PlayerTypes ePlayer, 
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseSwapGreatWorks(PlayerTypes ePlayer1, int iWorkIndex1, PlayerTypes ePlayer2, int iWorkIndex2)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GC.getGame().GetGameCulture()->SwapGreatWorks(ePlayer1, iWorkIndex1, ePlayer2, iWorkIndex2);
 }
 
@@ -816,11 +1073,17 @@ void CvDllNetMessageHandler::ResponseSwapGreatWorks(PlayerTypes ePlayer1, int iW
 void CvDllNetMessageHandler::ResponseMoveGreatWorks(PlayerTypes ePlayer, int iCity1, int iBuildingClass1, int iWorkIndex1, 
 																																				 int iCity2, int iBuildingClass2, int iWorkIndex2)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GC.getGame().GetGameCulture()->MoveGreatWorks(ePlayer, iCity1, iBuildingClass1, iWorkIndex1, iCity2, iBuildingClass2, iWorkIndex2);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseChangeIdeology(PlayerTypes ePlayer)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvAssertMsg(ePlayer != NO_PLAYER, "ePlayer invalid");
 
 	// is this player alive
@@ -835,6 +1098,9 @@ void CvDllNetMessageHandler::ResponseChangeIdeology(PlayerTypes ePlayer)
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseGiftUnit(PlayerTypes ePlayer, PlayerTypes eMinor, int iUnitID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 #ifdef MP_PLAYERS_VOTING_SYSTEM
 	// -2 -- irr
 	// -3 -- cc
@@ -1025,6 +1291,9 @@ void CvDllNetMessageHandler::ResponseGiftUnit(PlayerTypes ePlayer, PlayerTypes e
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseLaunchSpaceship(PlayerTypes ePlayer, VictoryTypes eVictory)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvTeam& kTeam = GET_TEAM(kPlayer.getTeam());
 
@@ -1036,21 +1305,57 @@ void CvDllNetMessageHandler::ResponseLaunchSpaceship(PlayerTypes ePlayer, Victor
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseLiberatePlayer(PlayerTypes ePlayer, PlayerTypes eLiberatedPlayer, int iCityID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GET_PLAYER(ePlayer).DoLiberatePlayer(eLiberatedPlayer, iCityID);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMinorCivBullyGold(PlayerTypes ePlayer, PlayerTypes eMinor, int iGold)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(ePlayer) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponseMinorCivBullyGold", ePlayer);
+		return;
+	}
+#endif
 	GET_PLAYER(eMinor).GetMinorCivAI()->DoMajorBullyGold(ePlayer, iGold);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMinorCivBullyUnit(PlayerTypes ePlayer, PlayerTypes eMinor, UnitTypes eUnitType)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(ePlayer) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponseMinorCivBullyUnit", ePlayer);
+		return;
+	}
+#endif
 	GET_PLAYER(eMinor).GetMinorCivAI()->DoMajorBullyUnit(ePlayer, eUnitType);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMinorCivGiftGold(PlayerTypes ePlayer, PlayerTypes eMinor, int iGold)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(ePlayer) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponseMinorCivGiftGold", ePlayer);
+		return;
+	}
+#endif
 #ifdef NQ_BELIEF_TOGGLE_ALLOW_FAITH_GIFTS_TO_MINORS
 	if (iGold > 100000) // HACK!!! ... when sending a faith gift, we still use this function but we add in 100K to clue us in
 	{
@@ -1080,21 +1385,57 @@ void CvDllNetMessageHandler::ResponseMinorCivGiftGold(PlayerTypes ePlayer, Playe
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMinorCivGiftTileImprovement(PlayerTypes eMajor, PlayerTypes eMinor, int iPlotX, int iPlotY)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(eMajor) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponseMinorCivGiftTileImprovement", eMajor);
+		return;
+	}
+#endif
 	GET_PLAYER(eMinor).GetMinorCivAI()->DoTileImprovementGiftFromMajor(eMajor, iPlotX, iPlotY);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMinorCivBuyout(PlayerTypes eMajor, PlayerTypes eMinor)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(eMajor) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponseMinorCivBuyout", eMajor);
+		return;
+	}
+#endif
 	GET_PLAYER(eMinor).GetMinorCivAI()->DoBuyout(eMajor);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMinorNoUnitSpawning(PlayerTypes ePlayer, PlayerTypes eMinor, bool bValue)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(ePlayer) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponseMinorNoUnitSpawning", ePlayer);
+		return;
+	}
+#endif
 	GET_PLAYER(eMinor).GetMinorCivAI()->SetUnitSpawningDisabled(ePlayer, bValue);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponsePlayerDealFinalized(PlayerTypes eFromPlayer, PlayerTypes eToPlayer, PlayerTypes eActBy, bool bAccepted)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvGame& game = GC.getGame();
 #ifndef AUI_WARNING_FIXES
 	PlayerTypes eActivePlayer = game.getActivePlayer();
@@ -1168,16 +1509,45 @@ void CvDllNetMessageHandler::ResponsePlayerDealFinalized(PlayerTypes eFromPlayer
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponsePlayerOption(PlayerTypes ePlayer, PlayerOptionTypes eOption, bool bValue)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GET_PLAYER(ePlayer).setOption(eOption, bValue);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponsePledgeMinorProtection(PlayerTypes ePlayer, PlayerTypes eMinor, bool bValue, bool bPledgeNowBroken)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_MINOR_CIV)
+	// FIX-0107 / FIX-VALIDATION: the major must be a major civ and the minor a city-state (GET_PLAYER(eMinor)->GetMinorCivAI())
+	if(!HeadlessIsMajorId(ePlayer) || !HeadlessIsMinorId(eMinor))
+	{
+		HeadlessRejectResponse(107, "ResponsePledgeMinorProtection", ePlayer);
+		return;
+	}
+#endif
 	GET_PLAYER(eMinor).GetMinorCivAI()->DoChangeProtectionFromMajor(ePlayer, bValue, bPledgeNowBroken);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponsePushMission(PlayerTypes ePlayer, int iUnitID, MissionTypes eMission, int iData1, int iData2, int iFlags, bool bShift)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_PUSH_MISSION)
+	// FIX-0112 / FIX-VALIDATION: a MOVE_TO / ROUTE_TO (the missions whose iData1/iData2 is always the target plot) to a plot
+	// that does not exist is rejected before any mutation (also before the GAMEOPTION_FIRSTMOVE flags below). Golden queued it,
+	// and code that reads the head mission's target plot dereferences NULL later: CvUnit::setExperience (popup text on the
+	// owner's machine) crashed when the unit gained XP. Honest senders (UI path/route orders, the DLL's own pushes) only
+	// target plots that exist; CvMap::plot already wraps the X/Y of a wrapping map, so only truly off-map plots are refused.
+	if((eMission == CvTypes::getMISSION_MOVE_TO() || eMission == CvTypes::getMISSION_ROUTE_TO()) && GC.getMap().plot(iData1, iData2) == NULL)
+	{
+		HeadlessRejectResponse(112, "ResponsePushMission", ePlayer);
+		return;
+	}
+#endif
 	CvUnit::dispatchingNetMessage(true);
 
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
@@ -1213,6 +1583,9 @@ void CvDllNetMessageHandler::ResponsePushMission(PlayerTypes ePlayer, int iUnitI
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseGreatPersonChoice(PlayerTypes ePlayer, UnitTypes eGreatPersonUnit)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pCity = kPlayer.GetGreatPersonSpawnCity(eGreatPersonUnit);
 #ifdef NET_FIX_SINGLE_USE_ABILITY_DUPE
@@ -1229,6 +1602,9 @@ void CvDllNetMessageHandler::ResponseGreatPersonChoice(PlayerTypes ePlayer, Unit
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseMayaBonusChoice(PlayerTypes ePlayer, UnitTypes eGreatPersonUnit)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pCity = kPlayer.GetGreatPersonSpawnCity(eGreatPersonUnit);
 #ifdef NET_FIX_SINGLE_USE_ABILITY_DUPE
@@ -1249,6 +1625,9 @@ void CvDllNetMessageHandler::ResponseMayaBonusChoice(PlayerTypes ePlayer, UnitTy
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseFaithGreatPersonChoice(PlayerTypes ePlayer, UnitTypes eGreatPersonUnit)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pCity = kPlayer.GetGreatPersonSpawnCity(eGreatPersonUnit);
 	if(pCity)
@@ -1260,6 +1639,25 @@ void CvDllNetMessageHandler::ResponseFaithGreatPersonChoice(PlayerTypes ePlayer,
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseGoodyChoice(PlayerTypes ePlayer, int iPlotX, int iPlotY, GoodyTypes eGoody, int iUnitID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_GOODY_CHOICE)
+	// FIX-0108 / FIX-VALIDATION: the only honest sender is the "choose a goody hut reward" popup, which CvPlayer::doGoody
+	// opens only for a unit that has PROMOTION_GOODY_HUT_PICKER (the hut itself is already gone by then, the DLL keeps no
+	// pending-choice state). So: plot must exist, the unit must exist and carry the picker promotion, the goody id must be
+	// a real index. canReceiveGoody() is NOT used: it calls the Lua hook GoodyHutCanResearch (impure).
+	{
+		CvPlot* pkValidatePlot = GC.getMap().plot(iPlotX, iPlotY);
+		CvUnit* pkValidateUnit = HeadlessIsPlayerId(ePlayer) ? GET_PLAYER(ePlayer).getUnit(iUnitID) : NULL;
+		if(pkValidatePlot == NULL || eGoody < 0 || pkValidateUnit == NULL ||
+		   !pkValidateUnit->isHasPromotion((PromotionTypes)GC.getPROMOTION_GOODY_HUT_PICKER()))
+		{
+			HeadlessRejectResponse(108, "ResponseGoodyChoice", ePlayer);
+			return;
+		}
+	}
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvPlot* pPlot = GC.getMap().plot(iPlotX, iPlotY);
 	CvUnit* pUnit = kPlayer.getUnit(iUnitID);
@@ -1269,12 +1667,18 @@ void CvDllNetMessageHandler::ResponseGoodyChoice(PlayerTypes ePlayer, int iPlotX
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseArchaeologyChoice(PlayerTypes ePlayer, ArchaeologyChoiceType eChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	kPlayer.GetCulture()->DoArchaeologyChoice(eChoice);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseIdeologyChoice(PlayerTypes ePlayer, PolicyBranchTypes eChoice)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	kPlayer.GetPlayerPolicies()->SetPolicyBranchUnlocked(eChoice, true, false);
 }
@@ -1285,6 +1689,9 @@ void CvDllNetMessageHandler::ResponseRenameCity(PlayerTypes ePlayer, int iCityID
 void CvDllNetMessageHandler::ResponseRenameCity(PlayerTypes ePlayer, int iCityID, const char* szName)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvCity* pkCity = kPlayer.getCity(iCityID);
 	if(pkCity)
@@ -1300,6 +1707,9 @@ void CvDllNetMessageHandler::ResponseRenameUnit(PlayerTypes ePlayer, int iUnitID
 void CvDllNetMessageHandler::ResponseRenameUnit(PlayerTypes ePlayer, int iUnitID, const char* szName)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvUnit* pkUnit = kPlayer.getUnit(iUnitID);
 	if(pkUnit)
@@ -1311,11 +1721,46 @@ void CvDllNetMessageHandler::ResponseRenameUnit(PlayerTypes ePlayer, int iUnitID
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseResearch(PlayerTypes ePlayer, TechTypes eTech, int iDiscover, bool bShift)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	ResponseResearch(ePlayer, eTech, iDiscover, NO_PLAYER, bShift);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseResearch(PlayerTypes ePlayer, TechTypes eTech, int iDiscover, PlayerTypes ePlayerToStealFrom, bool bShift)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_RESEARCH)
+	// FIX-0101 / FIX-VALIDATION. Honest senders (TechPopup, TechTree, EUI/Lekmod TechTree) always send
+	// iDiscover = player:GetNumFreeTechs() (free tech / normal research when 0) or iDiscover = 0 with the espionage target.
+	// 1) iDiscover > 0 is valid only while the player has that many free techs: golden set NumFreeTechs to iDiscover-1
+	//    for ANY iDiscover (arbitrary number of free techs; also a double-click on a stale tech chooser gave a second one).
+	// 2) The espionage branch indexes m_aiNumTechsToStealList[ePlayerToStealFrom] (MAX_MAJOR_CIVS entries) and
+	//    HasTech(eTech) without range checks.
+	// CanResearchForFree()/CanResearch() are NOT called here: they run the Lua hooks PlayerCanResearch/PlayerCanEverResearch.
+	if(!HeadlessIsPlayerId(ePlayer) ||
+	   (iDiscover > 0 && iDiscover > GET_PLAYER(ePlayer).GetNumFreeTechs()) ||
+	   (iDiscover <= 0 && ePlayerToStealFrom != NO_PLAYER &&
+	    (!HeadlessIsMajorId(ePlayerToStealFrom) || eTech < 0 || eTech >= GC.getNumTechInfos())))
+	{
+		HeadlessRejectResponse(101, "ResponseResearch", ePlayer);
+		return;
+	}
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_VAL_RESEARCH_TECH)
+	// FIX-0111 / FIX-VALIDATION: eTech must be NO_TECH or a real tech index, in every branch. FIX-0101 range-checks eTech only in
+	// the espionage branch. The normal-research branch passes it to CvPlayerTechs::CanEverResearch -> GC.getTechInfo(eTech),
+	// which indexes the tech table unchecked (AUI_WARNING_FIXES is off): a tech id past the table crashed every machine.
+	// (The free-tech branch was safe: CanResearchForFree range-checks itself.) Honest senders pass a tech from the tech
+	// tree / chooser or NO_TECH (clear the queue), so they are unaffected.
+	if(!HeadlessIsPlayerId(ePlayer) || eTech < NO_TECH || eTech >= GC.getNumTechInfos())
+	{
+		HeadlessRejectResponse(111, "ResponseResearch", ePlayer);
+		return;
+	}
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	CvTeam& kTeam = GET_TEAM(kPlayer.getTeam());
 
@@ -1404,11 +1849,17 @@ void CvDllNetMessageHandler::ResponseResearch(PlayerTypes ePlayer, TechTypes eTe
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseReturnCivilian(PlayerTypes ePlayer, PlayerTypes eToPlayer, int iUnitID, bool bReturn)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	GET_PLAYER(ePlayer).DoCivilianReturnLogic(bReturn, eToPlayer, iUnitID);
 }
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseSellBuilding(PlayerTypes ePlayer, int iCityID, BuildingTypes eBuilding)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvCity* pCity = GET_PLAYER(ePlayer).getCity(iCityID);
 	if(pCity)
 	{
@@ -1430,6 +1881,9 @@ void CvDllNetMessageHandler::ResponseSellBuilding(PlayerTypes ePlayer, int iCity
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseSetCityAIFocus(PlayerTypes ePlayer, int iCityID, CityAIFocusTypes eFocus)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvCity* pCity = GET_PLAYER(ePlayer).getCity(iCityID);
 	if(pCity != NULL)
 	{
@@ -1443,6 +1897,9 @@ void CvDllNetMessageHandler::ResponseSetCityAIFocus(PlayerTypes ePlayer, int iCi
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseSetCityAvoidGrowth(PlayerTypes ePlayer, int iCityID, bool bAvoidGrowth)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvCity* pCity = GET_PLAYER(ePlayer).getCity(iCityID);
 	if(pCity != NULL)
 	{
@@ -1460,6 +1917,9 @@ void CvDllNetMessageHandler::ResponseSwapUnits(PlayerTypes ePlayer, int iUnitID,
 void CvDllNetMessageHandler::ResponseSwapUnits(PlayerTypes ePlayer, int iUnitID, MissionTypes eMission, int iData1, int iData2, int iFlags, bool bShift)
 #endif
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvUnit::dispatchingNetMessage(true);
 
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
@@ -1516,6 +1976,9 @@ void CvDllNetMessageHandler::ResponseSwapUnits(PlayerTypes ePlayer, int iUnitID,
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseUpdateCityCitizens(PlayerTypes ePlayer, int iCityID)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvCity* pCity = GET_PLAYER(ePlayer).getCity(iCityID);
 	if(NULL != pCity && pCity->GetCityCitizens())
 	{
@@ -1530,6 +1993,9 @@ void CvDllNetMessageHandler::ResponseUpdateCityCitizens(PlayerTypes ePlayer, int
 //------------------------------------------------------------------------------
 void CvDllNetMessageHandler::ResponseUpdatePolicies(PlayerTypes ePlayer, bool bNOTPolicyBranch, int iPolicyID, bool bValue)
 {
+#if defined(LEKMOD_HEADLESS_FIX_0017)
+	HEADLESS_FPU_GUARD();	// FIX-0017 / DS-0028
+#endif
 	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 
 	// Policy Update

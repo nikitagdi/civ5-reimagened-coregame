@@ -86,6 +86,23 @@ const CvString&                            gameName();
 bool                                       gameStarted();
 bool										 GetGameOption(const char* szOptionName, int& iValue);
 bool									     GetGameOption(GameOptionTypes eOption, int& iValue);
+#if defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+// OPT-0010: drop every memoised GetGameOption(const char*) result (game options changed, game database (re)loaded)
+void										 InvalidateGameOptionCache();
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE) && !defined(LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+#error OPT-0046 (LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE) needs OPT-0010 (LEKMOD_HEADLESS_OPT_GAMEOPTION_CACHE)
+#endif
+#if defined(LEKMOD_HEADLESS_OPT_OPTION_SITE_CACHE)
+// OPT-0046 (needs OPT-0010): cache of one call site's GetGameOption(name) == 1, valid while OPT-0010's memo is
+// (every InvalidateGameOptionCache moves the generation). Sites are block-scope statics initialised { 0, false }.
+struct HeadlessOptionSite
+{
+	unsigned int m_uiGen;
+	bool m_bValue;
+};
+bool										 HeadlessIsOptionAtSite(HeadlessOptionSite& kSite, const char* szOptionName);
+#endif
 const std::vector<CustomOption>&			 GetGameOptions();
 bool										 GetMapOption(const char* szOptionName, int& iValue);
 const std::vector<CustomOption>&			 GetMapOptions();
@@ -288,7 +305,7 @@ SlotStatus                                 slotStatus(PlayerTypes eID);
 unsigned int                               syncRandomSeed();
 int                                        targetScore();
 bool                                       transferredMap();                    // setupddata
-#ifndef AUI_WARNING_FIXES
+#if !defined(AUI_WARNING_FIXES) && !defined(LEKMOD_PORTABLE)	// the static inline definition below is the one used
 TeamTypes                                  teamType(PlayerTypes p);
 #endif
 const CvTurnTimerInfo&                     turnTimerInfo();

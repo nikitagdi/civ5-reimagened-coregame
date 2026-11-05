@@ -140,7 +140,13 @@
 ** CHANGE that if ptrdiff_t is not adequate on your machine. (On most
 ** machines, ptrdiff_t gives a good choice between int or long.)
 */
+/* LEKMOD: the portable build pins lua_Integer (LEKMOD_LUA_INTEGER=int) so it is 4 bytes on every
+** target, as ptrdiff_t is on Win32. */
+#if defined(LEKMOD_LUA_INTEGER)
+#define LUA_INTEGER	LEKMOD_LUA_INTEGER
+#else
 #define LUA_INTEGER	ptrdiff_t
+#endif
 
 
 /*
@@ -553,8 +559,20 @@
 ** in C is extremely slow, so any alternative is worth trying.
 */
 
+/* LEKMOD: the portable build (LEKMOD_LUA_INTEGER set; x86_64 Linux, wasm32) converts like the game's
+** lua51_Win32.dll (MSVC fistp, default rounding): round half to even, so 66.67 -> 67 and 2.5 -> 2 where
+** the plain C cast below would truncate (map scripts pass such values, e.g. Lekmap's BuildRidges seed
+** count). Low word of d + 1.5 * 2^52 (IEEE double, little-endian): exact for |d| < 2^31; NaN and values
+** out of the int range give a wrapped value instead of fistp's INT_MIN, the same on every target. */
+#if defined(LEKMOD_LUA_INTEGER) && defined(LUA_NUMBER_DOUBLE)
+
+union lekmod_luai_Cast { double l_d; int l_i[2]; };
+#define lua_number2int(i,d) \
+  { volatile union lekmod_luai_Cast u; u.l_d = (d) + 6755399441055744.0; (i) = u.l_i[0]; }
+#define lua_number2integer(i,n)		lua_number2int(i, n)
+
 /* On a Pentium, resort to a trick */
-#if defined(LUA_NUMBER_DOUBLE) && !defined(LUA_ANSI) && !defined(__SSE2__) && \
+#elif defined(LUA_NUMBER_DOUBLE) && !defined(LUA_ANSI) && !defined(__SSE2__) && \
     (defined(__i386) || defined (_M_IX86) || defined(__i386__))
 
 /* On a Microsoft compiler, use assembler */

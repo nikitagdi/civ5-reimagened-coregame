@@ -56,6 +56,60 @@ protected:
 	static int BasicLuaMethod(lua_State* L, void (InstanceType::*func)(arg1, arg2, arg3));
 	template<typename arg1, typename arg2, typename arg3, typename arg4>
 	static int BasicLuaMethod(lua_State* L, void (InstanceType::*func)(arg1, arg2, arg3, arg4));
+#if defined(LEKMOD_PORTABLE)
+	// MSVC deduces these templates from members inherited from a base of InstanceType (e.g. &CvPlayerAI::f
+	// naming a CvPlayer member); standard deduction does not convert. Forward through an explicit cast.
+	template<typename Owner, typename ret>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)())
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)()>(func));
+	}
+	template<typename Owner, typename ret>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)() const)
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)() const>(func));
+	}
+	template<typename Owner, typename ret, typename a1>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1))
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1)>(func));
+	}
+	template<typename Owner, typename ret, typename a1>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1) const)
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1) const>(func));
+	}
+	template<typename Owner, typename ret, typename a1, typename a2>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1, a2))
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1, a2)>(func));
+	}
+	template<typename Owner, typename ret, typename a1, typename a2>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1, a2) const)
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1, a2) const>(func));
+	}
+	template<typename Owner, typename ret, typename a1, typename a2, typename a3>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1, a2, a3))
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1, a2, a3)>(func));
+	}
+	template<typename Owner, typename ret, typename a1, typename a2, typename a3>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1, a2, a3) const)
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1, a2, a3) const>(func));
+	}
+	template<typename Owner, typename ret, typename a1, typename a2, typename a3, typename a4>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1, a2, a3, a4))
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1, a2, a3, a4)>(func));
+	}
+	template<typename Owner, typename ret, typename a1, typename a2, typename a3, typename a4>
+	static int BasicLuaMethod(lua_State* L, ret (Owner::*func)(a1, a2, a3, a4) const)
+	{
+		return BasicLuaMethod(L, static_cast<ret (InstanceType::*)(a1, a2, a3, a4) const>(func));
+	}
+#endif
 };
 
 //------------------------------------------------------------------------------

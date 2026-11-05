@@ -218,6 +218,14 @@ FDataStream& operator>>(FDataStream& loadFrom, CvLandmass& writeTo)
 }
 
 static uint sgCvMapInstanceCount = 0;
+#if defined(LEKMOD_HEADLESS_FIX_0011)
+// FIX-0011 / DS-0021: set by CvMap::Read, consumed by the next recalculateLandmasses (the exe's post-load call).
+static bool s_bHeadlessLandmassesFromSave = false;
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0013)
+// FIX-0013 / DS-0010: set by CvMap::Read, consumed by the next Validate (the exe's post-load call).
+static bool s_bHeadlessValidateAfterRead = false;
+#endif
 //////////////////////////////////////////////////////////////////////////////
 
 // Public Functions...
@@ -441,6 +449,12 @@ void CvMap::reset(CvMapInitData* pInitInfo)
 	//--------------------------------
 	// Uninit class
 	uninit();
+#if defined(LEKMOD_HEADLESS_FIX_0011)
+	s_bHeadlessLandmassesFromSave = false;
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0013)
+	s_bHeadlessValidateAfterRead = false;
+#endif
 
 	m_iAIMapHints = 0;
 	//
@@ -520,6 +534,11 @@ void CvMap::reset(CvMapInitData* pInitInfo)
 // Initializes all data that is not serialized but needs to be initialized after loading.
 void CvMap::setup()
 {
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	// OPT-0022: a new map or a loaded one (CvPlot::read writes the plot members directly): every trade-path memo entry is void
+	HeadlessTradePathBumpLand();
+	HeadlessTradePathBumpWater();
+#endif
 	GC.getPathFinder().Initialize(getGridWidth(), getGridHeight(), isWrapX(), isWrapY(), PathDest, PathDestValid, PathHeuristic, PathCost, PathValid, PathAdd, PathNodeAdd, UnitPathInitialize, UnitPathUninitialize, NULL);
 	GC.getPathFinder().SetDataChangeInvalidatesCache(true);
 	GC.getInterfacePathFinder().Initialize(getGridWidth(), getGridHeight(), isWrapX(), isWrapY(), PathDest, PathDestValid, PathHeuristic, PathCost, PathValid, PathAdd, PathNodeAdd, UnitPathInitialize, UnitPathUninitialize, NULL);
@@ -823,6 +842,9 @@ void CvMap::updateAdjacency()
 		CvPlot* pPlot = plotByIndexUnchecked(iI);
 		pPlot->m_bIsAdjacentToLand = pPlot->isAdjacentToLand();
 	}
+#if defined(LEKMOD_HEADLESS_OPT_TRADE_PATH_MEMO)
+	HeadlessTradePathBumpWater();	// OPT-0022: isAdjacentToLand_Cached recomputed for every plot
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -1603,6 +1625,12 @@ void CvMap::Read(FDataStream& kStream)
 	updateAdjacency();
 
 	gDLL->DoMapSetup(numPlots());
+#if defined(LEKMOD_HEADLESS_FIX_0011)
+	s_bHeadlessLandmassesFromSave = true;
+#endif
+#if defined(LEKMOD_HEADLESS_FIX_0013)
+	s_bHeadlessValidateAfterRead = true;
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -2355,6 +2383,30 @@ CvLandmass* CvMap::nextLandmass(int* pIterIdx, bool bRev)
 //	--------------------------------------------------------------------------------
 void CvMap::recalculateLandmasses()
 {
+#if defined(LEKMOD_HEADLESS_FIX_0011)
+	// FIX-0011 / DS-0021: the exe recalculates the landmasses right after a load (ICvMap1::RecalculateLandmasses).
+	// FFreeListTrashArray::Add takes IDs from a counter that RemoveAll does not rewind, so golden gave every landmass and
+	// every plot's m_iLandmass a new ID: a loaded game's map state differed from the continuous game's (IDs only: all
+	// uses compare or look up IDs, the partition is the same). Rewind the counter to the generation of the oldest saved
+	// landmass, so the same recalculation (plot order, slots from 0) reproduces the saved IDs. CvLandmass::init also
+	// cleared the continent type (set once by DefaultContinentStamper at map generation, not recomputed): put the saved
+	// one back. Only the first recalculation after CvMap::Read; save format unchanged.
+	int iHeadlessFirstGeneration = 0;
+	std::vector< std::pair<int, int> > aHeadlessContinentTypes;
+	if(s_bHeadlessLandmassesFromSave)
+	{
+		s_bHeadlessLandmassesFromSave = false;
+		int iLoop;
+		for(CvLandmass* pLoopLandmass = firstLandmass(&iLoop); pLoopLandmass != NULL; pLoopLandmass = nextLandmass(&iLoop))
+		{
+			const int iGeneration = pLoopLandmass->GetID() & FLTA_ID_MASK;
+			if(iHeadlessFirstGeneration == 0 || iGeneration < iHeadlessFirstGeneration)
+				iHeadlessFirstGeneration = iGeneration;
+			if(pLoopLandmass->GetContinentType() != 0)
+				aHeadlessContinentTypes.push_back(std::make_pair(pLoopLandmass->GetID(), (int)pLoopLandmass->GetContinentType()));
+		}
+	}
+#endif
 #ifdef AUI_WARNING_FIXES
 	for (uint iI = 0; iI < numPlots(); iI++)
 #else
@@ -2366,8 +2418,23 @@ void CvMap::recalculateLandmasses()
 	}
 
 	m_landmasses.RemoveAll();
+#if defined(LEKMOD_HEADLESS_FIX_0011)
+	if(iHeadlessFirstGeneration != 0 && iHeadlessFirstGeneration != m_landmasses.GetCurrentID())
+	{
+		HEADLESS_FIX_TRIGGER(11);
+		m_landmasses.SetCurrentID(iHeadlessFirstGeneration);
+	}
+#endif
 
 	calculateLandmasses();
+#if defined(LEKMOD_HEADLESS_FIX_0011)
+	for(size_t uiHeadless = 0; uiHeadless < aHeadlessContinentTypes.size(); uiHeadless++)
+	{
+		CvLandmass* pLandmass = getLandmass(aHeadlessContinentTypes[uiHeadless].first);
+		if(pLandmass != NULL)
+			pLandmass->SetContinentType((char)aHeadlessContinentTypes[uiHeadless].second);
+	}
+#endif
 }
 
 //	--------------------------------------------------------------------------------
@@ -2463,6 +2530,21 @@ int CvMap::Validate()
 		CvPlot* pLoopPlot = plotByIndexUnchecked(iI);
 		iErrors |= pLoopPlot->Validate(*this);
 	}
+
+#if defined(LEKMOD_HEADLESS_FIX_0013)
+	// FIX-0013 / DS-0010: worker-AI state that is not serialized (CvBuilderTaskingAI::HeadlessAfterLoad). The exe calls
+	// Validate right after a load; only then (CvMap::Read sets the flag). Save format unchanged.
+	if(s_bHeadlessValidateAfterRead)
+	{
+		s_bHeadlessValidateAfterRead = false;
+		for(int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
+		{
+			CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iPlayer);
+			if(kPlayer.isAlive())
+				kPlayer.GetBuilderTaskingAI()->HeadlessAfterLoad();
+		}
+	}
+#endif
 
 	return iErrors;
 }

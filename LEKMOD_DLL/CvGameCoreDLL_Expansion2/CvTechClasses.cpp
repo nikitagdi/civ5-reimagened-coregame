@@ -621,6 +621,7 @@ void CvTechXMLEntries::DeleteArray()
 }
 
 /// Get a specific entry
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 #ifdef AUI_WARNING_FIXES
 _Ret_maybenull_ CvTechEntry* CvTechXMLEntries::GetEntry(uint index)
 #else
@@ -629,6 +630,7 @@ CvTechEntry* CvTechXMLEntries::GetEntry(int index)
 {
 	return m_paTechEntries[index];
 }
+#endif
 
 
 //=====================================
@@ -2112,6 +2114,7 @@ void CvTeamTechs::SetHasTech(TechTypes eIndex, bool bNewValue)
 }
 
 /// Accessor: does team have a tech?
+#if !defined(LEKMOD_HEADLESS_OPT_INLINE_ACCESSORS)	// OPT-0061: inline in HeadlessInlineAccessors.h
 bool CvTeamTechs::HasTech(TechTypes eIndex) const
 {
 	if(eIndex == NO_TECH)
@@ -2127,6 +2130,7 @@ bool CvTeamTechs::HasTech(TechTypes eIndex) const
 	else
 		return false;
 }
+#endif
 
 #ifdef HAS_TECH_BY_HUMAN
 /// Accessor: set whether team owns a tech researched by a human
