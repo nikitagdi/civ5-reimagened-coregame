@@ -6,6 +6,11 @@ This branch (`reimagened/v34.15`) is based on
 It was created for the civ5-reimagened project, which uses the Lekmod gamecore as the rules engine of a server. It is not an official
 Lekmod release and is not endorsed by the Lekmod authors.
 
+## Permission
+
+EnormousApplePie, the author of Lekmod, gave written permission on 2026-11-05 to publish this fork with our changes and to name it as
+we see fit. The permission covers this fork; it is not a license for anyone else to redistribute Lekmod.
+
 ## Licensing
 
 - **Upstream files** (everything outside `headless/`) and **our modifications to them** remain under the terms of the upstream Lekmod
