@@ -2,7 +2,7 @@
 // change the simulation. A network game like `mp` (test-bot humans through gc_pump), one process per run; run.sh runs three of the same seed and compares the
 // "purity-digest|turn|hex" lines (gc_state_digest(-2), the simulation digest, after every turn change) turn by turn:
 //   --noise 0  nothing else: the reference;
-//   --noise 1  between the gc_pump calls 10 000 random queries Q_* 1..21 for every human (kind, player, unit, city, plot, viewer by a generator with its own RNG: not the
+//   --noise 1  between the gc_pump calls 10 000 random queries Q_* 1..21 and 23..27 for every human (kind, player, unit, city, plot, viewer by a generator with its own RNG: not the
 //              bot and not the game's RNG; about one in five with arguments that must be refused), 200 a turn (also the ones the bot's own queries do not make);
 //   --noise 2  between the calls 5 000 random commands that must be refused (a wrong player, a unit of another human, a plot off the map, a wrong argument count, an unknown
 //              kind, ...); a command that is accepted is a failure of the scenario (the generator makes only commands the checks must refuse) and a refusal must change nothing.
@@ -153,9 +153,15 @@ struct Noise
 };
 
 // One random query. `bad` makes the arguments (probably) wrong. The reply is only released: what counts is what the call does to the game.
+// The kinds the noise picks from: Q_* 1..21 and the UI v2 read queries 23..27 (22, Q_TRADE_PATHS, as before not).
+const int kNoiseKinds[] = {GC_Q_GAME, GC_Q_PLOTS, GC_Q_UNITS, GC_Q_CITIES, GC_Q_PLAYERS, GC_Q_TOP_BAR, GC_Q_CITY_BUILDS, GC_Q_UNIT_ACTIONS, GC_Q_PATH,
+	GC_Q_REACHABLE, GC_Q_RANGE_TARGETS, GC_Q_NOTIFICATIONS, GC_Q_CATALOG, GC_Q_TURN, GC_Q_DIPLO, GC_Q_REACHABLE_TREE, GC_Q_CITY_ART, GC_Q_TRADE_ROUTES,
+	GC_Q_PLOT_BASIS, GC_Q_COMBAT_PREVIEW, GC_Q_PLOTS_DIRTY, GC_Q_CITY_QUEUE, GC_Q_TECHS, GC_Q_PLAYER_RESOURCES, GC_Q_POLICY_BRANCHES, GC_Q_UNIT_PROMOTIONS};
+const int kNoiseKindCount = (int)(sizeof(kNoiseKinds) / sizeof(kNoiseKinds[0]));
+
 void OneQuery(gc_instance* inst, Rng& rng, const World& w, Noise& n, const std::vector<int>& only)
 {
-	const int kind = only.empty() ? 1 + rng.Below(21) : only[(size_t)rng.Below((int)only.size())];
+	const int kind = only.empty() ? kNoiseKinds[rng.Below(kNoiseKindCount)] : only[(size_t)rng.Below((int)only.size())];
 	const bool bad = rng.Chance(20);
 	const size_t h = w.humans.empty() ? 0 : (size_t)rng.Below((int)w.humans.size());
 	const int player = w.humans.empty() ? 0 : (bad && rng.Chance(50) ? rng.Below(MAX_PLAYERS + 3) - 1 : w.humans[h]);
@@ -181,9 +187,18 @@ void OneQuery(gc_instance* inst, Rng& rng, const World& w, Noise& n, const std::
 	case GC_Q_TRADE_PATHS: args[argc++] = viewer; break;
 	case GC_Q_CITIES:
 	case GC_Q_TOP_BAR: args[argc++] = (kind == GC_Q_CITIES ? viewer : player); break;
-	case GC_Q_CITY_BUILDS: args[argc++] = player; args[argc++] = city; break;
+	case GC_Q_CITY_BUILDS:
+	case GC_Q_CITY_QUEUE: args[argc++] = player; args[argc++] = city; break;
 	case GC_Q_UNIT_ACTIONS:
-	case GC_Q_REACHABLE: args[argc++] = player; args[argc++] = unit; break;
+		args[argc++] = player;
+		args[argc++] = unit;
+		if (rng.Chance(50)) args[argc++] = bad && rng.Chance(50) ? 2 + rng.Below(6) : (int)GC_UNIT_ACTIONS_ROWS_EXTRA;  // UI v2: the extra rows
+		break;
+	case GC_Q_REACHABLE:
+	case GC_Q_UNIT_PROMOTIONS: args[argc++] = player; args[argc++] = unit; break;
+	case GC_Q_TECHS:
+	case GC_Q_PLAYER_RESOURCES:
+	case GC_Q_POLICY_BRANCHES: args[argc++] = player; break;
 	case GC_Q_PATH: args[argc++] = player; args[argc++] = unit; args[argc++] = x; args[argc++] = y; break;
 	case GC_Q_RANGE_TARGETS: args[argc++] = player; args[argc++] = rng.Chance(25) ? -city : unit; break;
 	case GC_Q_NOTIFICATIONS:
@@ -498,7 +513,7 @@ extern "C" int rt_selftest_purity(const gc_host* host, unsigned seed, unsigned t
 	c.add("no_stuck", stuck == 0 && gameOver == 0 && pumpErrors == 0 && digestFail == 0, "%d STUCK, %d GAME_OVER, %d gc_pump error(s), %d digest failure(s)", stuck, gameOver, pumpErrors, digestFail);
 	if (noise == 1)
 		c.add("queries_made", nz.done >= (long long)turns * kQueriesPerTurn && nz.ok > nz.done / 2 && nz.other == 0,
-			"%lld random queries (%lld answered, %lld refused as INVALID_ARG, %lld with another result); %d of 21 kinds asked", nz.done, nz.ok, nz.refused, nz.other, (int)nz.perKind.size());
+			"%lld random queries (%lld answered, %lld refused as INVALID_ARG, %lld with another result); %d of %d kinds asked", nz.done, nz.ok, nz.refused, nz.other, (int)nz.perKind.size(), kNoiseKindCount);
 	if (noise == 2)
 		c.add("commands_refused", nz.done >= (long long)turns * kCommandsPerTurn && nz.unexpectedOk == 0 && nz.other == 0,
 			"%lld random commands that must be refused: %lld refused, %lld accepted, %lld with another result%s%s", nz.done, nz.refused, nz.unexpectedOk, nz.other,

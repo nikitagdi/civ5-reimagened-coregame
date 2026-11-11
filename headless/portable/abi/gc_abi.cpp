@@ -41,10 +41,12 @@ namespace {
 bool g_instance_exists = false;
 
 // The query kinds whose args[0] is the player the query is for: answered under ActiveAs(player) (audit F-06). Q_GAME takes an optional player but
-// reads no local-player getter; Q_TURN has no argument (it takes ActiveAs per human itself).
+// reads no local-player getter; Q_TURN has no argument (it takes ActiveAs per human itself). The UI v2 queries Q_CITY_QUEUE .. Q_UNIT_PROMOTIONS
+// are all for args[0] (the research turns read the science rate, which has local-player branches, like Q_TOP_BAR).
 bool QueryIsForPlayer(int32_t kind)
 {
-	return (kind >= GC_Q_TOP_BAR && kind <= GC_Q_NOTIFICATIONS) || kind == GC_Q_DIPLO || kind == GC_Q_REACHABLE_TREE || kind == GC_Q_COMBAT_PREVIEW;
+	return (kind >= GC_Q_TOP_BAR && kind <= GC_Q_NOTIFICATIONS) || kind == GC_Q_DIPLO || kind == GC_Q_REACHABLE_TREE || kind == GC_Q_COMBAT_PREVIEW ||
+		(kind >= GC_Q_CITY_QUEUE && kind <= GC_Q_UNIT_PROMOTIONS);
 }
 
 // Layout of the GCS1 "abi" section (gc_save / gc_load_game): u32 version, i32 lastPumpStatus, u8 gameOverSent, u8 rawWaiting, u8 botPending,

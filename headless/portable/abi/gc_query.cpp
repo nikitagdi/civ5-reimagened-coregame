@@ -1,10 +1,11 @@
 // GCQ1 queries over the gamecore objects: Q_GAME, Q_PLOTS, Q_UNITS, Q_PLAYERS, Q_UNIT_ACTIONS,
-// Q_PATH, Q_REACHABLE, Q_CATALOG.
+// Q_PATH, Q_REACHABLE, Q_CATALOG, Q_UNIT_PROMOTIONS.
 // C++03 (the portable build uses -std=gnu++03). Everything here only reads the game; the buffer is malloc'ed and freed by
 // gc_buf.release.
 #include "CvGameCoreDLLPCH.h"
 
 #include "CvGameCoreUtils.h"
+#include "CvTypes.h"
 #include "gc_command.h"
 #include "gc_diplo.h"
 #include "gc_notify.h"
@@ -32,7 +33,8 @@ GCQ_ASSERT_SIZE(gcq_plot, 32);  // v2 (P13): + build_type, build_pct
 GCQ_ASSERT_SIZE(gcq_player, 48);
 GCQ_ASSERT_SIZE(gcq_catalog, 36);
 GCQ_ASSERT_SIZE(gcq_unit, 44);  // v2 (P13): + transport_id, build_type, facing
-GCQ_ASSERT_SIZE(gcq_unit_action, 8);
+GCQ_ASSERT_SIZE(gcq_unit_action, 12);  // UI v2: + cost
+GCQ_ASSERT_SIZE(gcq_promotion, 4);
 GCQ_ASSERT_SIZE(gcq_path_node, 12);
 GCQ_ASSERT_SIZE(gcq_turn, 24);
 GCQ_ASSERT_SIZE(gcq_diplo, 8);
@@ -788,10 +790,11 @@ int32_t QueryCatalog(int32_t table, gc_buf* out, std::string& msg)
 	case GC_CATALOG_ERAS: CollectInfos(GC.getEraInfo(), entries); break;
 	case GC_CATALOG_HANDICAPS: CollectInfos(GC.getHandicapInfo(), entries); break;
 	case GC_CATALOG_PROMOTIONS: CollectInfos(GC.getPromotionInfo(), entries); break;
+	case GC_CATALOG_POLICY_BRANCHES: CollectInfos(GC.getPolicyBranchInfo(), entries); break;  // v5 (UI v2): no art columns
 	default: return Invalid(msg, "Q_CATALOG: table out of range");
 	}
 	std::map<std::string, CatalogArt> art;
-	LoadArt(kTables[table], art);
+	if (table < GC_CATALOG_TABLE_COUNT) LoadArt(kTables[table], art);
 
 	GcqWriter w(GC_Q_CATALOG, sizeof(gcq_catalog));
 	w.Reserve((uint32_t)entries.size());
@@ -916,8 +919,49 @@ CvUnit* FindQueryUnit(const char* query, int32_t player, int32_t id, std::string
 	return u;
 }
 
-int32_t QueryUnitActions(int32_t player, int32_t unit, gc_buf* out, std::string& msg)
+// UI v2 rows of Q_UNIT_ACTIONS (GC_UNIT_ROW_*): what the unit panel offers besides the commands of this ABI. Only const checks of the core: CanStartMission
+// (the same entry CheckUnitCommand uses for FORTIFY / SLEEP / HEAL: CvUnit::canSentry / canPillage behind it), CanUpgradeRightNow and upgradePrice (const;
+// the gold, resources and plot are read, nothing is stored). Does the row apply to the unit at all, and can it be done now (why = the reason when not)?
+bool UnitRowApplies(CvUnit* u, int row)
 {
+	switch (row)
+	{
+	case GC_UNIT_ROW_ALERT: return u->IsCanDefend();
+	case GC_UNIT_ROW_PILLAGE: return u->getUnitInfo().IsPillage();
+	case GC_UNIT_ROW_UPGRADE: return u->CanUpgradeRightNow(true);
+	}
+	return false;
+}
+
+bool UnitRowEnabled(CvUnit* u, int row, std::string& why)
+{
+	if (u->isDelayedDeath() || u->IsBusy())
+	{
+		why = "the unit is busy (moving or fighting)";
+		return false;
+	}
+	switch (row)
+	{
+	case GC_UNIT_ROW_ALERT:
+		if (u->CanStartMission(CvTypes::getMISSION_ALERT(), -1, -1, NULL, false)) return true;
+		why = "the unit cannot be put on alert here (already on alert, or over the stacking limit)";
+		return false;
+	case GC_UNIT_ROW_PILLAGE:
+		if (u->CanStartMission(CvTypes::getMISSION_PILLAGE(), -1, -1, NULL, false)) return true;
+		why = "nothing the unit may pillage on this plot";
+		return false;
+	case GC_UNIT_ROW_UPGRADE:
+		if (u->CanUpgradeRightNow(false)) return true;
+		why = "the unit cannot upgrade now (outside own territory, not enough gold or resources, or no moves left)";
+		return false;
+	}
+	why = "not a unit action row";
+	return false;
+}
+
+int32_t QueryUnitActions(int32_t player, int32_t unit, uint32_t rows, gc_buf* out, std::string& msg)
+{
+	if (rows & ~(uint32_t)GC_UNIT_ACTIONS_ROWS_EXTRA) return Invalid(msg, "Q_UNIT_ACTIONS: unknown rows bit");
 	CvUnit* u = FindQueryUnit("Q_UNIT_ACTIONS", player, unit, msg);
 	if (!u) return GC_ERR_INVALID_ARG;
 	GcqWriter w(GC_Q_UNIT_ACTIONS, sizeof(gcq_unit_action));
@@ -930,6 +974,41 @@ int32_t QueryUnitActions(int32_t player, int32_t unit, gc_buf* out, std::string&
 		r.action = (int16_t)kind;
 		r.enabled = CheckUnitCommand(u, kind, false, -1, -1, why) ? 1 : 0;
 		r.reason = r.enabled ? GCQ_NO_STRING : w.Str(why.c_str());
+		r.cost = -1;
+		w.Add(&r);
+	}
+	if (rows & GC_UNIT_ACTIONS_ROWS_EXTRA)
+	{
+		static const int kRows[] = {GC_UNIT_ROW_ALERT, GC_UNIT_ROW_PILLAGE, GC_UNIT_ROW_UPGRADE};
+		for (size_t i = 0; i < sizeof(kRows) / sizeof(kRows[0]); ++i)
+		{
+			if (!UnitRowApplies(u, kRows[i])) continue;
+			std::string why;
+			gcq_unit_action r;
+			memset(&r, 0, sizeof(r));
+			r.action = (int16_t)kRows[i];
+			r.enabled = UnitRowEnabled(u, kRows[i], why) ? 1 : 0;
+			r.reason = r.enabled ? GCQ_NO_STRING : w.Str(why.c_str());
+			r.cost = kRows[i] == GC_UNIT_ROW_UPGRADE ? u->upgradePrice(u->GetUpgradeUnitType()) : -1;
+			w.Add(&r);
+		}
+	}
+	return w.Finish(out) ? GC_OK : Internal(msg, "out of memory");
+}
+
+// Q_UNIT_PROMOTIONS (UI v2): the promotions the unit has (CvUnit::isHasPromotion, a plain read of the unit's promotion set).
+int32_t QueryUnitPromotions(int32_t player, int32_t unit, gc_buf* out, std::string& msg)
+{
+	const CvUnit* u = FindQueryUnit("Q_UNIT_PROMOTIONS", player, unit, msg);
+	if (!u) return GC_ERR_INVALID_ARG;
+	GcqWriter w(GC_Q_UNIT_PROMOTIONS, sizeof(gcq_promotion));
+	const int n = (int)GC.getNumPromotionInfos();
+	for (int i = 0; i < n; ++i)
+	{
+		if (!u->isHasPromotion((PromotionTypes)i)) continue;
+		gcq_promotion r;
+		memset(&r, 0, sizeof(r));
+		r.promotion = (int16_t)i;
 		w.Add(&r);
 	}
 	return w.Finish(out) ? GC_OK : Internal(msg, "out of memory");
@@ -1024,6 +1103,7 @@ int32_t RunGameQuery(int32_t kind, const int32_t* args, uint32_t argc, int32_t l
 	const GameQueryExtra* extra)
 {
 	if (kind == GC_Q_CITIES || kind == GC_Q_TOP_BAR || kind == GC_Q_CITY_BUILDS || kind == GC_Q_CITY_ART || kind == GC_Q_TRADE_ROUTES || kind == GC_Q_TRADE_PATHS) return RunCityQuery(kind, args, argc, out, msg);  // G1a: gc_query_city.cpp
+	if (kind >= GC_Q_CITY_QUEUE && kind <= GC_Q_POLICY_BRANCHES) return RunCityQuery(kind, args, argc, out, msg);  // UI v2 player queries: gc_query_city.cpp
 	switch (kind)
 	{
 	case GC_Q_GAME:
@@ -1053,15 +1133,19 @@ int32_t RunGameQuery(int32_t kind, const int32_t* args, uint32_t argc, int32_t l
 	case GC_Q_DIPLO: return QueryDiplo(args, argc, out, msg);  // N3.10: gc_diplo.cpp
 	case GC_Q_CATALOG:
 		if (argc != 1) return Invalid(msg, "Q_CATALOG takes one argument: table");
-		if (args[0] < 0 || args[0] >= GC_CATALOG_TABLE_COUNT_V4) return Invalid(msg, "Q_CATALOG: table out of range");
+		if (args[0] < 0 || args[0] >= GC_CATALOG_TABLE_COUNT_V5) return Invalid(msg, "Q_CATALOG: table out of range");
 		return QueryCatalog(args[0], out, msg);
 	case GC_Q_UNITS:
 		if (argc != 1) return Invalid(msg, "Q_UNITS takes one argument: viewer_team");
 		if (args[0] < -1 || args[0] >= MAX_TEAMS) return Invalid(msg, "Q_UNITS: viewer_team out of range");
 		return QueryUnits(args[0], out, msg);
 	case GC_Q_UNIT_ACTIONS:
-		if (argc != 2) return Invalid(msg, "Q_UNIT_ACTIONS takes two arguments: player, unit");
-		return QueryUnitActions(args[0], args[1], out, msg);
+		// UI v2: an optional third argument, the GC_UNIT_ACTIONS_ROWS_* bits.
+		if (argc != 2 && argc != 3) return Invalid(msg, "Q_UNIT_ACTIONS takes two or three arguments: player, unit [, rows]");
+		return QueryUnitActions(args[0], args[1], argc == 3 ? (uint32_t)args[2] : 0u, out, msg);
+	case GC_Q_UNIT_PROMOTIONS:
+		if (argc != 2) return Invalid(msg, "Q_UNIT_PROMOTIONS takes two arguments: player, unit");
+		return QueryUnitPromotions(args[0], args[1], out, msg);
 	case GC_Q_PATH:
 		if (argc != 4) return Invalid(msg, "Q_PATH takes four arguments: player, unit, x, y");
 		return QueryPath(args, out, msg);
