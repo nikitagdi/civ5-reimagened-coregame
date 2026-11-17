@@ -15,7 +15,7 @@ namespace lekmod_portable {
 
 struct RtEvent
 {
-	enum { kMaxArgs = 8 };  // v2: NOTIFICATION_ADDED has 7 args
+	enum { kMaxArgs = 10 };  // Headless: capture popups append data4 and data5; the public ABI uses a pointer/count.
 	int kind;                  // GC_EVENT_*
 	int argc;
 	int args[kMaxArgs];
@@ -30,12 +30,13 @@ public:
 	static const size_t kMaxEvents = 65536;
 
 	// Builds an event: Add(kind, argc, a0, a1, ...) is spelled out by the callers through Make + Push.
-	static RtEvent Make(int kind, int argc, int a0 = 0, int a1 = 0, int a2 = 0, int a3 = 0, int a4 = 0, int a5 = 0, int a6 = 0, int a7 = 0)
+	static RtEvent Make(int kind, int argc, int a0 = 0, int a1 = 0, int a2 = 0, int a3 = 0, int a4 = 0, int a5 = 0, int a6 = 0, int a7 = 0, int a8 = 0, int a9 = 0)
 	{
 		RtEvent e;
 		e.kind = kind;
 		e.argc = argc;
 		e.args[0] = a0; e.args[1] = a1; e.args[2] = a2; e.args[3] = a3; e.args[4] = a4; e.args[5] = a5; e.args[6] = a6; e.args[7] = a7;
+		e.args[8] = a8; e.args[9] = a9;
 		return e;
 	}
 	void Push(const RtEvent& e)

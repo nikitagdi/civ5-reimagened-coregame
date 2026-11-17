@@ -304,7 +304,8 @@ std::string PopupText(const char* s)
 
 }  // namespace
 
-// event 7 POPUP_INFO: args popup_type (ButtonPopupTypes), data1, data2, data3, player (the player the popup is for: the one the popup names where it names one,
+// Headless event 7 POPUP_INFO: args popup_type, data1, data2, data3, player, flags, option1, option2
+// (the player the popup is for: the one the popup names where it names one,
 // else the active player at the moment of the popup, who is the human under ActiveAs for what a human does); text = the popup's text when it has one (localized), else NULL.
 // Nothing waits for the popup: the gamecore does not block on it (the blocking ones are notifications, see RtSession::CurrentBlocking).
 void RtUserInterface::AddPopup(const CvPopupInfo& kPopup)
@@ -332,7 +333,11 @@ void RtUserInterface::AddPopup(const CvPopupInfo& kPopup)
 	// The ruin reward names its player (data1); the other popups the core opens only for the active player (isActive / isLocalPlayer branches).
 	int target = (int)CvPreGame::activePlayer();
 	if (kPopup.eButtonPopupType == BUTTONPOPUP_CHOOSE_GOODY_HUT_REWARD && kPopup.iData1 >= 0 && kPopup.iData1 < MAX_PLAYERS) target = kPopup.iData1;
-	m_events->Push(GC_EVENT_POPUP_INFO, 5, (int)kPopup.eButtonPopupType, kPopup.iData1, kPopup.iData2, kPopup.iData3, target, 0, text.empty() ? NULL : text.c_str());
+	RtEvent ev = RtEventQueue::Make(GC_EVENT_POPUP_INFO, 8, (int)kPopup.eButtonPopupType,
+		kPopup.iData1, kPopup.iData2, kPopup.iData3, target, kPopup.iFlags,
+		kPopup.bOption1 ? 1 : 0, kPopup.bOption2 ? 1 : 0);
+	if (!text.empty()) { ev.hasText = true; ev.text = text; }
+	m_events->Push(ev);
 }
 
 // The int-array overload (CvPlayer.cpp:3466, city captured): data1..data3 are the first three ints, -1 when the array is shorter.
@@ -350,9 +355,13 @@ void RtUserInterface::AddPopup(int iPopupType, int iIntArraySize, const int* pIn
 		m_replica->Send(ev);
 	}
 	if (!m_events) return;
-	int d[3] = {-1, -1, -1};
-	for (int i = 0; i < 3 && pIntArray && i < iIntArraySize; ++i) d[i] = pIntArray[i];
-	m_events->Push(GC_EVENT_POPUP_INFO, 5, iPopupType, d[0], d[1], d[2], (int)CvPreGame::activePlayer());
+	int d[5] = {-1, -1, -1, -1, -1};
+	for (int i = 0; i < 5 && pIntArray && i < iIntArraySize; ++i) d[i] = pIntArray[i];
+	const int option1 = pBoolArray && iBoolArraySize > 0 && pBoolArray[0] ? 1 : 0;
+	const int option2 = pBoolArray && iBoolArraySize > 1 && pBoolArray[1] ? 1 : 0;
+	// Headless: keep the eight-value prefix; captured cities append Great Works and liberation eligibility.
+	m_events->Push(RtEventQueue::Make(GC_EVENT_POPUP_INFO, iPopupType == BUTTONPOPUP_CITY_CAPTURED ? 10 : 8,
+		iPopupType, d[0], d[1], d[2], (int)CvPreGame::activePlayer(), 0, option1, option2, d[3], d[4]));
 }
 
 // CvPlayer::setTurnActive for the active player (the human). event 2 PLAYER_TURN_STARTED: args player. Other (AI) players' turns have no hook.

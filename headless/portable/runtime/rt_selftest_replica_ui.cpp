@@ -26,6 +26,8 @@
 #include "rt_selftest.h"
 #include "rt_selftest_slots.h"
 #include "rt_session.h"
+#include "rt_ui.h"
+#include "rt_events.h"
 
 using namespace lekmod_portable;
 
@@ -372,6 +374,35 @@ extern "C" int rt_selftest_replica_ui(const gc_host* host, unsigned seed, unsign
 	const int startTurn = turn;
 	const size_t firstBatches = batches.size();
 	const uint64_t startDigest = Digest(inst, -3);
+	// Headless popup contract, including a server without a replica sink and malformed optional arrays.
+	{
+		RtUserInterface ui;
+		RtEventQueue events;
+		CvPopupInfo popup(BUTTONPOPUP_CHOOSE_GOODY_HUT_REWARD, -1, -1);
+		ui.AddPopup(popup);  // Neither an event queue nor a target unit is required.
+		ui.SetEvents(&events);
+		popup.eButtonPopupType = BUTTONPOPUP_TEXT;
+		popup.iData1 = 11; popup.iData2 = 12; popup.iData3 = 13;
+		popup.iFlags = 7; popup.bOption1 = true; popup.bOption2 = false;
+		strcpy(popup.szText, "popup contract fixture");
+		ui.AddPopup(popup);
+		RtEvent e;
+		const bool structured = events.Pop(e) && e.argc == 8 && e.args[1] == 11 && e.args[2] == 12 && e.args[3] == 13 &&
+			e.args[4] == (int)CvPreGame::activePlayer() && e.args[5] == 7 && e.args[6] == 1 && e.args[7] == 0 && e.hasText && e.text == popup.szText;
+		c.add("popup_structured_payload", structured, "eight values and text without a replica");
+		const int ints[] = {21, 22, 23, 24, -1};
+		const bool bools[] = {false, true};
+		ui.AddPopup(BUTTONPOPUP_CITY_CAPTURED, 5, ints, 2, bools);
+		c.add("popup_capture_payload", events.Pop(e) && e.argc == 10 && e.args[1] == 21 && e.args[2] == 22 && e.args[3] == 23 &&
+			e.args[5] == 0 && e.args[6] == 0 && e.args[7] == 1 && e.args[8] == 24 && e.args[9] == -1, "capture appends data4/data5");
+		ui.AddPopup(BUTTONPOPUP_TEXT, 5, NULL, 2, NULL);
+		c.add("popup_null_arrays", events.Pop(e) && e.argc == 8 && e.args[1] == -1 && e.args[2] == -1 && e.args[3] == -1 &&
+			e.args[6] == 0 && e.args[7] == 0, "null arrays use absent values");
+		ui.AddPopup(BUTTONPOPUP_TEXT, 1, ints, 1, bools);
+		c.add("popup_short_arrays", events.Pop(e) && e.argc == 8 && e.args[1] == 21 && e.args[2] == -1 && e.args[3] == -1 &&
+			e.args[6] == 0 && e.args[7] == 0, "short arrays do not overread");
+		c.add("popup_digest", Digest(inst, -3) == startDigest, "popup publication leaves saved state alone");
+	}
 	last = first;
 	// The batches the replica applies are the ones after the first snapshot.
 	std::vector<Batch> journal;
@@ -415,6 +446,31 @@ extern "C" int rt_selftest_replica_ui(const gc_host* host, unsigned seed, unsign
 	rc = gc_lua_attach_ui(inst, U, &err);
 	c.add("attach_ui", rc == GC_OK, "gc_lua_attach_ui: %d %s", err.code, err.message);
 	c.add("attach_stack", lua_gettop(U) == top0, "stack %d before, %d after", top0, lua_gettop(U));
+	{
+		const uint64_t before = Digest(inst, -3);
+		const char* queries =
+			"local scratch = GcUiGetScratchDeal()\n"
+			"local from, to, n = scratch:GetFromPlayer(), scratch:GetToPlayer(), scratch:GetNumItems()\n"
+			"for seat = 0, 1 do\n"
+			"  local counsel = GcUiGetAdvisorCounsel(seat) assert(type(counsel) == 'table')\n"
+			"  for advisor, rows in pairs(counsel) do assert(type(advisor) == 'number') for _, text in pairs(rows) do assert(type(text) == 'string') end end\n"
+			"  for _, deals in ipairs{GcUiGetCurrentDeals(seat), GcUiGetHistoricDeals(seat)} do\n"
+			"    for _, deal in ipairs(deals) do\n"
+			"      assert(deal.from == seat or deal.to == seat) assert(type(deal.items) == 'table')\n"
+			"      for _, item in ipairs(deal.items) do assert(type(item.type) == 'number' and type(item.data1) == 'number' and type(item.duration) == 'number' and item.turns_left >= 0) end\n"
+			"    end\n"
+			"  end\n"
+			"  local d = GcUiGetProposedDeal(seat, 0, 1) assert(d == nil or (d.from == 0 and d.to == 1))\n"
+			"end\n"
+			"assert(scratch:GetFromPlayer() == from and scratch:GetToPlayer() == to and scratch:GetNumItems() == n)\n"
+			"for _, f in ipairs{GcUiGetAdvisorCounsel, GcUiGetCurrentDeals, GcUiGetHistoricDeals} do\n"
+			"  assert(not pcall(f, -1)) assert(not pcall(f, GameDefines.MAX_MAJOR_CIVS))\n"
+			"end\n"
+			"assert(Game.GetActivePlayer() == 0)\n";
+		const std::string error = RunLua(U, queries, "=seat-read-contract");
+		c.add("seat_read_contract", error.empty(), "%s", error.empty() ? "two explicit seats, invalid-seat rejection, scratch untouched" : error.c_str());
+		c.add("seat_read_digest", Digest(inst, -3) == before, "seat queries leave saved state alone");
+	}
 	// A second attach is harmless (hosts attach again to a rebuilt state).
 	{
 		const int top = lua_gettop(U);

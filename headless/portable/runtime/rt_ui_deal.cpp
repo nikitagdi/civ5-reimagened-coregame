@@ -5,6 +5,8 @@
 #include "CvDealAI.h"
 #include "CvDealClasses.h"
 #include "CvDiplomacyAI.h"
+#include "CvAdvisorCounsel.h"
+#include "CvTreasury.h"
 #include "rt_engine.h"
 #include "rt_ui_deal.h"
 
@@ -141,6 +143,112 @@ int lLoadDeal(lua_State* L, bool historic)
 int lLoadCurrentDeal(lua_State* L) { return lLoadDeal(L, false); }
 int lLoadHistoricDeal(lua_State* L) { return lLoadDeal(L, true); }
 
+// Headless read-only snapshots. Explicit seats never borrow Active() or the UI scratch deal.
+PlayerTypes ReadSeat(lua_State* L, int arg)
+{
+	const int p = (int)luaL_checkinteger(L, arg);
+	if (p < 0 || p >= MAX_MAJOR_CIVS || !GET_PLAYER((PlayerTypes)p).isEverAlive())
+		luaL_argerror(L, arg, "expected an initialized major player");
+	return (PlayerTypes)p;
+}
+
+void IntField(lua_State* L, const char* key, int value)
+{
+	lua_pushinteger(L, value);
+	lua_setfield(L, -2, key);
+}
+
+void PushDealSnapshot(lua_State* L, const CvDeal* d)
+{
+	if (!d) { lua_pushnil(L); return; }
+	lua_newtable(L);
+	IntField(L, "from", d->m_eFromPlayer);
+	IntField(L, "to", d->m_eToPlayer);
+	IntField(L, "start_turn", d->m_iStartTurn);
+	IntField(L, "final_turn", d->m_iFinalTurn);
+	IntField(L, "duration", d->m_iDuration);
+	lua_newtable(L);
+	int index = 0;
+	for (TradedItemList::const_iterator it = d->m_TradedItems.begin(); it != d->m_TradedItems.end(); ++it)
+	{
+		lua_newtable(L);
+		IntField(L, "type", it->m_eItemType);
+		IntField(L, "from", it->m_eFromPlayer);
+		IntField(L, "data1", it->m_iData1);
+		IntField(L, "data2", it->m_iData2);
+		IntField(L, "data3", it->m_iData3);
+		IntField(L, "duration", it->m_iDuration);
+#ifdef AUI_YIELDS_APPLIED_AFTER_TURN_NOT_BEFORE
+		const int left = it->m_iTurnsRemaining;
+#else
+		const int left = it->m_iFinalTurn - GC.getGame().getGameTurn();
+#endif
+		IntField(L, "turns_left", left > 0 ? left : 0);
+		lua_pushboolean(L, it->m_bFlag1);
+		lua_setfield(L, -2, "flag1");
+		lua_rawseti(L, -2, ++index);
+	}
+	lua_setfield(L, -2, "items");
+}
+
+int lReadDeals(lua_State* L, bool historic)
+{
+	const PlayerTypes seat = ReadSeat(L, 1);
+	CvGameDeals* deals = GC.getGame().GetGameDeals();
+	lua_newtable(L);
+	if (!deals) return 1;
+	const uint count = historic ? deals->GetNumHistoricDeals(seat) : deals->GetNumCurrentDeals(seat);
+	for (uint i = 0; i < count; ++i)
+	{
+		PushDealSnapshot(L, historic ? deals->GetHistoricDeal(seat, i) : deals->GetCurrentDeal(seat, i));
+		lua_rawseti(L, -2, i + 1);
+	}
+	return 1;
+}
+int lReadCurrentDeals(lua_State* L) { return lReadDeals(L, false); }
+int lReadHistoricDeals(lua_State* L) { return lReadDeals(L, true); }
+
+int lReadProposedDeal(lua_State* L)
+{
+	const PlayerTypes seat = ReadSeat(L, 1);
+	const PlayerTypes from = ReadSeat(L, 2), to = ReadSeat(L, 3);
+	if (seat != from && seat != to) return luaL_error(L, "seat must be a party to the deal");
+	CvGameDeals* deals = GC.getGame().GetGameDeals();
+	PushDealSnapshot(L, deals ? deals->GetProposedDeal(from, to) : NULL);
+	return 1;
+}
+
+int lReadAdvisorCounsel(lua_State* L)
+{
+	const PlayerTypes seat = ReadSeat(L, 1);
+	// A local counsel avoids replacing the global advisor's cached list for another seat.
+	CvAdvisorCounsel counsel;
+	{
+#if defined(LEKMOD_HEADLESS_FIX_0023)
+		HEADLESS_UI_TREASURY_SCOPE();
+#endif
+		counsel.BuildCounselList(seat);
+	}
+	lua_newtable(L);
+	int indices[NUM_ADVISOR_TYPES] = {0};
+	for (uint i = 0; i < counsel.m_aCounsel.size(); ++i)
+	{
+		const CvAdvisorCounsel::Counsel& c = counsel.m_aCounsel[i];
+		const int advisor = (int)c.m_eAdvisor;
+		if (advisor < 0 || advisor >= NUM_ADVISOR_TYPES) continue;
+		lua_rawgeti(L, -1, advisor);
+		if (lua_isnil(L, -1))
+		{
+			lua_pop(L, 1);
+			lua_newtable(L);
+		}
+		lua_pushstring(L, c.m_strTxtKey);
+		lua_rawseti(L, -2, indices[advisor]++);
+		lua_rawseti(L, -2, advisor);
+	}
+	return 1;
+}
+
 // UI.OnHumanOpenedTradeScreen / OnHumanDemand: the leader answers with the state the trade screen shows.
 int SayState(lua_State* L, DiploUIStateTypes state, DiploMessageTypes msg)
 {
@@ -166,6 +274,10 @@ void RegisterUiDealLib(lua_State* L, ICvScriptSystemUtility1* libs, RtEngine* en
 	g_libs = libs;
 	g_engine = engine;
 	static const luaL_Reg fns[] = {
+		{"GcUiGetAdvisorCounsel", lReadAdvisorCounsel},
+		{"GcUiGetCurrentDeals", lReadCurrentDeals},
+		{"GcUiGetHistoricDeals", lReadHistoricDeals},
+		{"GcUiGetProposedDeal", lReadProposedDeal},
 		{"GcUiGetScratchDeal", lGetScratchDeal},
 		{"GcUiProposeDeal", lProposeDeal},
 		{"GcUiDemand", lDemand},
