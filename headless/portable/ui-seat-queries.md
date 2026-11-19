@@ -27,20 +27,39 @@ argument selects the data; it does not authenticate the caller.
   `TRADE_REJECT_UNACCEPTABLE`, `TRADE_REJECT_INSULTING`, `REPEAT_TRADE`,
   `REPEAT_TRADE_TOO_MUCH`, `TRADE_DEAL_UNCHANGED`, `TRADE_NO_DEAL_POSSIBLE`,
   `TRADE_CANT_MATCH_OFFER`, `TRADE_AI_MAKES_OFFER`, `PEACE_WHAT_WILL_HUMAN_OFFER`,
-  `NO_PEACE`, `TOO_SOON_NO_PEACE`.
+  `NO_PEACE`, `TOO_SOON_NO_PEACE`, `HUMAN_DEMAND_YES`, `HUMAN_DEMAND_REFUSE_WEAK`,
+  `HUMAN_DEMAND_REFUSE_HOSTILE`, `HUMAN_DEMAND_REFUSE_TOO_MUCH`,
+  `HUMAN_DEMAND_REFUSE_TOO_SOON`.
 * `GcUiDealQuery(seat, partner, items, op[, mode])` works on a local deal from the
   seat to a met major, built from `items` (a list of `{type, from, data1, data2,
   data3, flag1}`, `from` one of the two parties, at most 64) with the deal's own
   `Add*` calls. `op` is `"check"` (one boolean per item: the core took it after
-  the ones before), `"pockets"` (`{from, type, data1, data2, max}` rows of what
-  each side may still add: gold, gold per turn, the tradeable resources, embassy,
-  open borders, defensive pact, research agreement, peace), `"evaluate"` (an AI
-  partner's verdict as `DoHumanOfferDealToThisAI` makes it: `response` is
-  `accept`, `unacceptable` or `insulting`, with `value`, `mine`, `theirs`, `peace`
-  and `cant_match`; `value` is what `sendNetDealAccepted` carries), `"equalize"`
-  (`DoEqualizeDealWithHuman` on the local deal, `mode` 0 balance, 1 the AI's items
-  stay, 2 the seat's items stay: `ok`, `good`, `cant_match`, `items`) or `"blob"`
-  (the hex of `ICvDeal1::Write`; an error when an item was refused).
+  the ones before), `"pockets"` (`{from, type, data1, data2, data3, flag1, max[,
+  label]}` rows of what each side may still add: gold, gold per turn, the
+  tradeable resources, embassy, open borders, defensive pact, research agreement,
+  trade agreement, peace, cities by plot (the partner's only on plots the seat has revealed), a
+  third team's peace and war (teams the seat has met), and vote commitments on the
+  active league's proposals with the member's votes and the core's wording),
+  `"evaluate"` (an AI partner's verdict as `DoHumanOfferDealToThisAI` makes it:
+  `response` is `accept`, `unacceptable` or `insulting`, with `value`, `mine`,
+  `theirs`, `peace` and `cant_match`; `value` is what `sendNetDealAccepted`
+  carries), `"equalize"` (`DoEqualizeDealWithHuman` on the local deal, `mode` 0
+  balance, 1 the AI's items stay, 2 the seat's items stay: `ok`, `good`,
+  `cant_match`, `items`), `"demand"` (the AI's answer to the items as the seat's
+  demand, `CvDealAI::GetHumanDemandResponse`, the decision half of `DoHumanDemand`
+  with its async draw: `response` and the `code` that
+  `FROM_UI_DIPLO_EVENT_HUMAN_DEMAND` carries), `"peace"` (the AI's peace terms
+  for the seat: `at_war`, `wants_peace`, `willing`, `too_soon`, `surrendering`,
+  `treaty`, `value`, and the `items` the trade screen opens with: both peace
+  treaties and the allies' peace) or `"blob"` (the hex of `ICvDeal1::Write`; an
+  error when an item was refused).
+* An AI's price of peace is per seat. The original keeps it in the AI's
+  `m_iCachedValueOfPeaceWithHuman` on the asking human's machine
+  (`DoTradeScreenOpened`); a server has one AI for every seat, so the queries
+  compute the seat's terms (`DoAddItemsToDealForPeaceTreaty` and `GetDealValue`
+  on a local deal, as `DoTradeScreenOpened` does) and lend that value to the
+  AI's cache only while `"evaluate"` or `"equalize"` runs. A peace deal carries
+  the surrendering side and starts as white peace, as on the trade screen.
 
 These diplomacy functions run as the seat (`ActiveAs` switches the pregame field for
 the call and nothing else) and raise no Lua error while it is switched. They use no

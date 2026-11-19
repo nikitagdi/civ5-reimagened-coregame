@@ -47,6 +47,7 @@ public:
 	void DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int iDealValueToMe, int iValueImOffering, int iValueTheyreOffering);
 
 	DemandResponseTypes DoHumanDemand(CvDeal* pDeal);
+	DemandResponseTypes GetHumanDemandResponse(CvDeal* pDeal, PlayerTypes eFromPlayer);
 	void DoAcceptedDemand(PlayerTypes eFromPlayer, const CvDeal& kDeal);
 
 	bool IsDealWithHumanAcceptable(CvDeal* pDeal, PlayerTypes eOtherPlayer, int& iTotalValueToMe, int& iValueImOffering, int& iValueTheyreOffering, int& iAmountOverWeWillRequest, int& iAmountUnderWeWillOffer, bool& bCantMatchOffer);

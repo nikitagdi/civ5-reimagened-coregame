@@ -439,6 +439,11 @@ const NamedDiploMessage kDiploMessages[] = {
 	{"PEACE_WHAT_WILL_HUMAN_OFFER", DIPLO_MESSAGE_PEACE_WHAT_WILL_HUMAN_OFFER},
 	{"NO_PEACE", DIPLO_MESSAGE_NO_PEACE},
 	{"TOO_SOON_NO_PEACE", DIPLO_MESSAGE_TOO_SOON_NO_PEACE},
+	{"HUMAN_DEMAND_YES", DIPLO_MESSAGE_HUMAN_DEMAND_YES},
+	{"HUMAN_DEMAND_REFUSE_WEAK", DIPLO_MESSAGE_HUMAN_DEMAND_REFUSE_WEAK},
+	{"HUMAN_DEMAND_REFUSE_HOSTILE", DIPLO_MESSAGE_HUMAN_DEMAND_REFUSE_HOSTILE},
+	{"HUMAN_DEMAND_REFUSE_TOO_MUCH", DIPLO_MESSAGE_HUMAN_DEMAND_REFUSE_TOO_MUCH},
+	{"HUMAN_DEMAND_REFUSE_TOO_SOON", DIPLO_MESSAGE_HUMAN_DEMAND_REFUSE_TOO_SOON},
 	{NULL, NO_DIPLO_MESSAGE_TYPE}};
 
 // GcUiDiploText(seat, ai, name): the leader's line for one of the messages above (GetDiploStringForMessage for the seat).
@@ -511,11 +516,24 @@ void ReadDraft(lua_State* L, int arg, PlayerTypes a, PlayerTypes b, std::vector<
 	}
 }
 
+// The peace treaty length the trade screen puts on a deal between these two (CvDealAI::DoTradeScreenOpened).
+int PeaceLength(PlayerTypes a, PlayerTypes b)
+{
+#ifdef AI_PEACE_TURNS
+	if (!(GET_PLAYER(a).isHuman() && GET_PLAYER(b).isHuman())) return 5;
+#else
+	(void)a;
+	(void)b;
+#endif
+	return GC.getGame().getGameSpeedInfo().getPeaceDealDuration();
+}
+
 // Adds one item the way the trade screen does (TradeLogic: the deal's own Add* calls, which test IsPossibleToTradeItem against what the
 // deal holds already). False: the core refuses it, or the item is not one this table supports.
 bool AddDraftItem(CvDeal& d, const DraftItem& it)
 {
 	const PlayerTypes from = (PlayerTypes)it.from;
+	const PlayerTypes other = d.GetOtherPlayer(from);
 	const int duration = GC.getGame().GetDealDuration();
 	const int before = d.GetNumItems();
 	switch (it.type)
@@ -523,13 +541,27 @@ bool AddDraftItem(CvDeal& d, const DraftItem& it)
 	case TRADE_ITEM_GOLD: d.AddGoldTrade(from, it.data1); break;
 	case TRADE_ITEM_GOLD_PER_TURN: d.AddGoldPerTurnTrade(from, it.data1, duration); break;
 	case TRADE_ITEM_RESOURCES: d.AddResourceTrade(from, (ResourceTypes)it.data1, it.data2, duration); break;
+	case TRADE_ITEM_CITIES:
+	{
+		// The table names a city by its plot (CvTradedItem data1, data2), as the core stores it.
+		CvPlot* plot = GC.getMap().plot(it.data1, it.data2);
+		CvCity* city = plot ? plot->getPlotCity() : NULL;
+		if (!city || city->getOwner() != from) return false;
+		d.AddCityTrade(from, city->GetID());
+		break;
+	}
 	case TRADE_ITEM_ALLOW_EMBASSY: d.AddAllowEmbassy(from); break;
 	case TRADE_ITEM_OPEN_BORDERS: d.AddOpenBorders(from, duration); break;
 	case TRADE_ITEM_DEFENSIVE_PACT: d.AddDefensivePact(from, duration); break;
 	case TRADE_ITEM_RESEARCH_AGREEMENT: d.AddResearchAgreement(from, duration); break;
-	case TRADE_ITEM_PEACE_TREATY: d.AddPeaceTreaty(from, GC.getPEACE_TREATY_LENGTH()); break;
+	case TRADE_ITEM_TRADE_AGREEMENT: d.AddTradeAgreement(from, duration); break;
+	case TRADE_ITEM_PEACE_TREATY: d.AddPeaceTreaty(from, PeaceLength(from, other)); break;
 	case TRADE_ITEM_THIRD_PARTY_PEACE: d.AddThirdPartyPeace(from, (TeamTypes)it.data1, GC.getPEACE_TREATY_LENGTH()); break;
 	case TRADE_ITEM_THIRD_PARTY_WAR: d.AddThirdPartyWar(from, (TeamTypes)it.data1); break;
+	case TRADE_ITEM_VOTE_COMMITMENT:
+		if (!d.IsPossibleToTradeItem(from, other, TRADE_ITEM_VOTE_COMMITMENT, it.data1, it.data2, it.data3, it.flag1)) return false;
+		d.AddVoteCommitment(from, it.data1, it.data2, it.data3, it.flag1);
+		break;
 	default: return false;
 	}
 	return d.GetNumItems() > before;
@@ -575,18 +607,226 @@ std::string DealHex(CvDeal& d)
 // One candidate of the trade screen's pockets: a kind of item a side could put on the table now.
 struct PocketRow
 {
-	int from, type, data1, data2, max;
+	int from, type, data1, data2, data3, max;
+	bool flag1;
+	std::string label;  // votes only: the proposal and the choice, as the core words them
+	PocketRow() : from(-1), type(-1), data1(0), data2(0), data3(0), max(1), flag1(false) {}
 };
 
-// GcUiDealQuery(seat, ai, items, op[, mode]): the AI side of the trade screen for a draft from `seat` to `ai` (the deal of UI.DoProposeDeal).
+// What the AI asks for peace with this seat: CvDealAI::DoTradeScreenOpened, run for the seat instead of the machine's active player.
+// The original keeps the price in the AI's m_iCachedValueOfPeaceWithHuman on the asking machine; a server has one AI for every seat,
+// so the price is computed here per seat and lent to the AI only while its verdict is asked (PeaceValueScope).
+struct PeaceTerms
+{
+	bool atWar, wantsPeace, willing, tooSoon;
+	int offer, accept, treaty, value;
+	PlayerTypes surrendering;
+};
+
+PeaceTerms SeatPeaceTerms(PlayerTypes seat, PlayerTypes ai)
+{
+	PeaceTerms t;
+	CvPlayer& p = GET_PLAYER(ai);
+	CvDiplomacyAI* dip = p.GetDiplomacyAI();
+	t.atWar = GET_TEAM(p.getTeam()).isAtWar(GET_PLAYER(seat).getTeam());
+	t.offer = t.atWar ? (int)dip->GetTreatyWillingToOffer(seat) : (int)NO_PEACE_TREATY_TYPE;
+	t.accept = t.atWar ? (int)dip->GetTreatyWillingToAccept(seat) : (int)NO_PEACE_TREATY_TYPE;
+	t.wantsPeace = t.atWar && t.offer >= PEACE_TREATY_WHITE_PEACE && t.accept >= PEACE_TREATY_WHITE_PEACE;
+	// FROM_UI_DIPLO_EVENT_HUMAN_NEGOTIATE_PEACE: the AI talks peace only when it wants it and its rules for peace with a human allow it.
+	t.willing = t.wantsPeace && dip->IsWillingToMakePeaceWithHuman(seat);
+	t.tooSoon = t.atWar && dip->GetPlayerNumTurnsAtWar(seat) < 1;
+	t.treaty = PEACE_TREATY_WHITE_PEACE;
+	t.value = 0;
+	t.surrendering = NO_PLAYER;
+	if (!t.wantsPeace) return t;
+	CvDealAI* dealAI = p.GetDealAI();
+	CvDeal terms(seat, ai);
+	int mine = 0, theirs = 0;
+	if (t.offer > PEACE_TREATY_WHITE_PEACE)
+	{
+		t.surrendering = ai;
+		t.treaty = t.offer;
+		dealAI->DoAddItemsToDealForPeaceTreaty(seat, &terms, (PeaceTreatyTypes)t.offer, /*bMeSurrendering*/ true);
+		dealAI->GetDealValue(&terms, mine, theirs, false);
+		t.value = -mine;
+	}
+	else if (t.accept > PEACE_TREATY_WHITE_PEACE)
+	{
+		t.surrendering = seat;
+		t.treaty = t.accept;
+		dealAI->DoAddItemsToDealForPeaceTreaty(seat, &terms, (PeaceTreatyTypes)t.accept, /*bMeSurrendering*/ false);
+		dealAI->GetDealValue(&terms, mine, theirs, false);
+		t.value = theirs;
+	}
+	return t;
+}
+
+// The seat's peace price in the AI's cache for the one verdict; the AI's own value comes back afterwards.
+struct PeaceValueScope
+{
+	CvDealAI* ai;
+	int saved;
+	PeaceValueScope(CvDealAI* a, int value) : ai(a), saved(a->GetCachedValueOfPeaceWithHuman()) { ai->SetCachedValueOfPeaceWithHuman(value); }
+	~PeaceValueScope() { ai->SetCachedValueOfPeaceWithHuman(saved); }
+};
+
+// A peace deal carries the surrender the trade screen set up (DoTradeScreenOpened): who surrenders, and white peace to start with.
+void ApplyPeaceTerms(CvDeal& d, PlayerTypes seat, PlayerTypes ai, const PeaceTerms& t)
+{
+	if (!d.IsPeaceTreatyTrade(seat) && !d.IsPeaceTreatyTrade(ai)) return;
+	if (t.surrendering != NO_PLAYER) d.SetSurrenderingPlayer(t.surrendering);
+	d.SetPeaceTreatyType(PEACE_TREATY_WHITE_PEACE);
+}
+
+const char* DemandResponseName(DemandResponseTypes r)
+{
+	switch (r)
+	{
+	case DEMAND_RESPONSE_ACCEPT: return "accept";
+	case DEMAND_RESPONSE_REFUSE_WEAK: return "refuse_weak";
+	case DEMAND_RESPONSE_REFUSE_HOSTILE: return "refuse_hostile";
+	case DEMAND_RESPONSE_REFUSE_TOO_MUCH: return "refuse_too_much";
+	case DEMAND_RESPONSE_REFUSE_TOO_SOON: return "refuse_too_soon";
+	default: return "none";
+	}
+}
+
+void PocketsOf(CvDeal& d, PlayerTypes seat, PlayerTypes other, std::vector<PocketRow>& pockets)
+{
+	const PlayerTypes sides[2] = {seat, other};
+	const TeamTypes seatTeam = GET_PLAYER(seat).getTeam();
+	const int duration = GC.getGame().GetDealDuration();
+	for (int s = 0; s < 2; ++s)
+	{
+		const PlayerTypes from = sides[s], dest = sides[1 - s];
+		CvPlayer& p = GET_PLAYER(from);
+		PocketRow r;
+		r.from = from;
+		r.type = TRADE_ITEM_GOLD;
+		r.max = d.GetGoldAvailable(from, TRADE_ITEM_GOLD);
+		if (r.max > 0 && d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_GOLD, 1)) pockets.push_back(r);
+		r.type = TRADE_ITEM_GOLD_PER_TURN;
+		r.max = p.calculateGoldRate();
+		for (TradedItemList::iterator it = d.m_TradedItems.begin(); it != d.m_TradedItems.end(); ++it)
+			if (it->m_eItemType == TRADE_ITEM_GOLD_PER_TURN && it->m_eFromPlayer == from) r.max -= it->m_iData1;
+		if (r.max > 0 && d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_GOLD_PER_TURN, 1, duration)) pockets.push_back(r);
+		for (int res = 0; res < GC.getNumResourceInfos(); ++res)
+		{
+			const CvResourceInfo* info = GC.getResourceInfo((ResourceTypes)res);
+			if (!info || info->getResourceUsage() == RESOURCEUSAGE_BONUS) continue;
+			const int have = p.getNumResourceAvailable((ResourceTypes)res, false);
+			if (have <= 0) continue;
+			// TradeLogic offers one copy of a luxury and every available copy of a strategic resource.
+			if (!d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_RESOURCES, res, 1)) continue;
+			PocketRow q = r;
+			q.type = TRADE_ITEM_RESOURCES;
+			q.data1 = res;
+			q.max = info->getResourceUsage() == RESOURCEUSAGE_LUXURY ? 1 : have;
+			pockets.push_back(q);
+		}
+		const TradeableItems singles[] = {TRADE_ITEM_ALLOW_EMBASSY, TRADE_ITEM_OPEN_BORDERS, TRADE_ITEM_DEFENSIVE_PACT, TRADE_ITEM_RESEARCH_AGREEMENT,
+			TRADE_ITEM_TRADE_AGREEMENT, TRADE_ITEM_PEACE_TREATY};
+		for (size_t k = 0; k < sizeof(singles) / sizeof(singles[0]); ++k)
+		{
+			const TradeableItems t = singles[k];
+			const bool possible = (t == TRADE_ITEM_ALLOW_EMBASSY || t == TRADE_ITEM_PEACE_TREATY) ? d.IsPossibleToTradeItem(from, dest, t)
+				: d.IsPossibleToTradeItem(from, dest, t, duration);
+			if (!possible) continue;
+			PocketRow q;
+			q.from = from;
+			q.type = t;
+			pockets.push_back(q);
+		}
+		// Cities: the other side's only on plots the seat has revealed.
+		int loop = 0;
+		for (CvCity* city = p.firstCity(&loop); city != NULL; city = p.nextCity(&loop))
+		{
+			if (from != seat && !city->plot()->isRevealed(seatTeam)) continue;
+			if (!d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_CITIES, city->getX(), city->getY())) continue;
+			PocketRow q;
+			q.from = from;
+			q.type = TRADE_ITEM_CITIES;
+			q.data1 = city->getX();
+			q.data2 = city->getY();
+			pockets.push_back(q);
+		}
+		// Wars and peace with a third team: only teams the seat knows.
+		for (int team = 0; team < MAX_CIV_TEAMS; ++team)
+		{
+			const TeamTypes t = (TeamTypes)team;
+			if (t == seatTeam || t == GET_PLAYER(other).getTeam() || !GET_TEAM(t).isAlive() || !GET_TEAM(seatTeam).isHasMet(t)) continue;
+			const TradeableItems kinds[] = {TRADE_ITEM_THIRD_PARTY_PEACE, TRADE_ITEM_THIRD_PARTY_WAR};
+			for (int k = 0; k < 2; ++k)
+			{
+				if (!d.IsPossibleToTradeItem(from, dest, kinds[k], team)) continue;
+				PocketRow q;
+				q.from = from;
+				q.type = kinds[k];
+				q.data1 = team;
+				pockets.push_back(q);
+			}
+		}
+		// Votes: a commitment on each choice of each proposal of the active league, with the member's core votes.
+		CvLeague* league = GC.getGame().GetGameLeagues()->GetActiveLeague();
+		if (league && league->IsMember(from))
+		{
+			const int votes = league->GetCoreVotesForMember(from);
+			for (int repeal = 0; repeal < 2; ++repeal)
+			{
+				std::vector<std::pair<int, std::pair<ResolutionDecisionTypes, ResolutionTypes> > > proposals;
+				if (repeal)
+				{
+					RepealProposalList list = league->GetRepealProposals();
+					for (RepealProposalList::iterator it = list.begin(); it != list.end(); ++it)
+						proposals.push_back(std::make_pair(it->GetID(), std::make_pair(it->GetRepealDecision()->GetType(), it->GetType())));
+				}
+				else
+				{
+					EnactProposalList list = league->GetEnactProposals();
+					for (EnactProposalList::iterator it = list.begin(); it != list.end(); ++it)
+						proposals.push_back(std::make_pair(it->GetID(), std::make_pair(it->GetVoterDecision()->GetType(), it->GetType())));
+				}
+				for (size_t i = 0; i < proposals.size(); ++i)
+				{
+					const ResolutionDecisionTypes decision = proposals[i].second.first;
+					const CvResolutionEntry* info = GC.getResolutionInfo(proposals[i].second.second);
+					std::vector<int> choices = league->GetChoicesForDecision(decision, from);
+					for (size_t c = 0; c < choices.size(); ++c)
+					{
+						if (!d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_VOTE_COMMITMENT, proposals[i].first, choices[c], votes, repeal != 0)) continue;
+						PocketRow q;
+						q.from = from;
+						q.type = TRADE_ITEM_VOTE_COMMITMENT;
+						q.data1 = proposals[i].first;
+						q.data2 = choices[c];
+						q.data3 = votes;
+						q.flag1 = repeal != 0;
+						q.max = votes;
+						std::string name = info ? Localization::Lookup(info->GetDescription()).toUTF8() : "";
+						q.label = (repeal ? "Repeal: " : "") + name + ": " + std::string(league->GetTextForChoice(decision, choices[c]).c_str());
+						pockets.push_back(q);
+					}
+				}
+			}
+		}
+	}
+}
+
+// GcUiDealQuery(seat, partner, items, op[, mode]): the trade screen for a draft from `seat` to `partner` (the deal of UI.DoProposeDeal).
 //  "check":    a list of booleans, one per item: the core takes the item after the ones before it (TradeLogic adds them in that order).
-//  "pockets":  what each side could still add: {from, type, data1, data2, max} rows for gold, gold per turn, the tradeable resources,
-//              embassy, open borders, defensive pact, research agreement and peace (IsPossibleToTradeItem with the draft on the table).
+//  "pockets":  what each side could still add: {from, type, data1, data2, data3, flag1, max[, label]} rows for gold, gold per turn, the
+//              tradeable resources, embassy, open borders, defensive pact, research agreement, trade agreement, peace, cities, a third team's war and peace,
+//              and vote commitments (IsPossibleToTradeItem with the draft on the table).
 //  "evaluate": {response = "accept" | "unacceptable" | "insulting", value, mine, theirs, peace}: DoHumanOfferDealToThisAI's verdict
-//              (IsDealWithHumanAcceptable, a gift accepted, the "insulting" bounds); value is what sendNetDealAccepted carries.
+//              (IsDealWithHumanAcceptable, a gift accepted, the "insulting" bounds) with the seat's own peace price; value is what
+//              sendNetDealAccepted carries.
 //  "equalize": {ok, good, cant_match, items}: DoEqualizeDealWithHuman on a copy; mode 0 make it work, 1 what the AI wants (its items stay),
 //              2 what the AI would give (the seat's items stay).
-//  "blob":     the deal as the hex of ICvDeal1::Write, the text of the seat's sendNetDealAccepted / sendNetDealProposed.
+//  "demand":   {response, code}: the AI's answer to the draft as the seat's demand (CvDealAI::GetHumanDemandResponse); `code` is the
+//              DemandResponseTypes that FROM_UI_DIPLO_EVENT_HUMAN_DEMAND carries.
+//  "peace":    {at_war, wants_peace, willing, too_soon, surrendering, treaty, value, items}: the AI's peace terms for the seat and the table
+//              the trade screen opens with (both peace treaties and the allies' peace, DoTradeScreenOpened).
+//  "blob":     the deal as the hex of ICvDeal1::Write, the text of the seat's sendNetDealAccepted / sendNetDemandAccepted.
 int lDealQuery(lua_State* L)
 {
 	const PlayerTypes seat = ReadHumanSeat(L, 1);
@@ -600,14 +840,20 @@ int lDealQuery(lua_State* L)
 	const std::string op = luaL_checkstring(L, 4);
 	const int mode = (int)luaL_optinteger(L, 5, 0);
 	const bool ai = !GET_PLAYER(other).isHuman();
-	if ((op == "evaluate" || op == "equalize") && !ai) return luaL_argerror(L, 2, "only an AI evaluates a deal");
-	if (op != "check" && op != "pockets" && op != "evaluate" && op != "equalize" && op != "blob") return luaL_argerror(L, 4, "unknown deal query");
+	if ((op == "evaluate" || op == "equalize" || op == "demand" || op == "peace") && !ai) return luaL_argerror(L, 2, "only an AI answers this");
+	if (op != "check" && op != "pockets" && op != "evaluate" && op != "equalize" && op != "blob" && op != "demand" && op != "peace")
+		return luaL_argerror(L, 4, "unknown deal query");
 
 	// Everything below runs as the seat with no Lua error until the results are pushed.
 	std::vector<bool> taken;
 	std::vector<PocketRow> pockets;
 	CvDeal d(seat, other);
 	DealOfferResponseTypes response = NO_DEAL_RESPONSE_TYPE;
+	DemandResponseTypes demand = NO_DEMAND_RESPONSE_TYPE;
+	PeaceTerms terms;
+	terms.atWar = terms.wantsPeace = terms.willing = terms.tooSoon = false;
+	terms.offer = terms.accept = terms.treaty = terms.value = 0;
+	terms.surrendering = NO_PLAYER;
 	int value = 0, mine = 0, theirs = 0;
 	bool acceptable = false, good = false, cant = false, peace = false;
 	std::string blob;
@@ -616,58 +862,29 @@ int lDealQuery(lua_State* L)
 #if defined(LEKMOD_HEADLESS_FIX_0023) || defined(LEKMOD_HEADLESS_FIX_0030)
 		HEADLESS_UI_TREASURY_SCOPE();
 #endif
-		for (size_t i = 0; i < items.size(); ++i) taken.push_back(AddDraftItem(d, items[i]));
-		if (op == "pockets")
+		if (ai) terms = SeatPeaceTerms(seat, other);
+		if (op == "peace")
 		{
-			const PlayerTypes sides[2] = {seat, other};
-			const int duration = GC.getGame().GetDealDuration();
-			for (int s = 0; s < 2; ++s)
+			// The table the trade screen opens with: both peace treaties and the peace of the allies (DoTradeScreenOpened).
+			if (terms.wantsPeace)
 			{
-				const PlayerTypes from = sides[s], dest = sides[1 - s];
-				CvPlayer& p = GET_PLAYER(from);
-				PocketRow r;
-				r.from = from;
-				r.data1 = r.data2 = 0;
-				r.type = TRADE_ITEM_GOLD;
-				r.max = d.GetGoldAvailable(from, TRADE_ITEM_GOLD);
-				if (r.max > 0 && d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_GOLD, 1)) pockets.push_back(r);
-				r.type = TRADE_ITEM_GOLD_PER_TURN;
-				r.max = p.calculateGoldRate();
-				for (TradedItemList::iterator it = d.m_TradedItems.begin(); it != d.m_TradedItems.end(); ++it)
-					if (it->m_eItemType == TRADE_ITEM_GOLD_PER_TURN && it->m_eFromPlayer == from) r.max -= it->m_iData1;
-				if (r.max > 0 && d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_GOLD_PER_TURN, 1, duration)) pockets.push_back(r);
-				for (int res = 0; res < GC.getNumResourceInfos(); ++res)
-				{
-					const CvResourceInfo* info = GC.getResourceInfo((ResourceTypes)res);
-					if (!info || info->getResourceUsage() == RESOURCEUSAGE_BONUS) continue;
-					const int have = p.getNumResourceAvailable((ResourceTypes)res, false);
-					if (have <= 0) continue;
-					// TradeLogic offers one copy of a luxury and every available copy of a strategic resource.
-					if (!d.IsPossibleToTradeItem(from, dest, TRADE_ITEM_RESOURCES, res, 1)) continue;
-					r.type = TRADE_ITEM_RESOURCES;
-					r.data1 = res;
-					r.data2 = 0;
-					r.max = info->getResourceUsage() == RESOURCEUSAGE_LUXURY ? 1 : have;
-					pockets.push_back(r);
-				}
-				r.data1 = r.data2 = 0;
-				r.max = 1;
-				const TradeableItems singles[] = {TRADE_ITEM_ALLOW_EMBASSY, TRADE_ITEM_OPEN_BORDERS, TRADE_ITEM_DEFENSIVE_PACT, TRADE_ITEM_RESEARCH_AGREEMENT, TRADE_ITEM_PEACE_TREATY};
-				for (size_t k = 0; k < sizeof(singles) / sizeof(singles[0]); ++k)
-				{
-					const TradeableItems t = singles[k];
-					const bool possible = (t == TRADE_ITEM_ALLOW_EMBASSY || t == TRADE_ITEM_PEACE_TREATY) ? d.IsPossibleToTradeItem(from, dest, t)
-						: d.IsPossibleToTradeItem(from, dest, t, duration);
-					if (!possible) continue;
-					r.type = t;
-					pockets.push_back(r);
-				}
+				d.AddPeaceTreaty(other, PeaceLength(other, seat));
+				d.AddPeaceTreaty(seat, PeaceLength(seat, other));
+				GET_PLAYER(other).GetDealAI()->DoAddPlayersAlliesToTreaty(seat, &d);
 			}
 		}
+		else
+		{
+			for (size_t i = 0; i < items.size(); ++i) taken.push_back(AddDraftItem(d, items[i]));
+			if (ai) ApplyPeaceTerms(d, seat, other, terms);
+		}
+		if (op == "pockets")
+			PocketsOf(d, seat, other, pockets);
 		else if (op == "evaluate")
 		{
 			int over = 0, under = 0;
 			CvDealAI* dealAI = GET_PLAYER(other).GetDealAI();
+			PeaceValueScope price(dealAI, terms.value);
 			peace = d.IsPeaceTreatyTrade(seat);
 			acceptable = d.GetNumItems() > 0 && dealAI->IsDealWithHumanAcceptable(&d, seat, value, mine, theirs, over, under, cant);
 			// DoHumanOfferDealToThisAI: more than we are asked for (a gift) is accepted too.
@@ -686,9 +903,13 @@ int lDealQuery(lua_State* L)
 		}
 		else if (op == "equalize")
 		{
+			CvDealAI* dealAI = GET_PLAYER(other).GetDealAI();
+			PeaceValueScope price(dealAI, terms.value);
 			good = false;
-			acceptable = GET_PLAYER(other).GetDealAI()->DoEqualizeDealWithHuman(&d, seat, mode == 1, mode == 2, good, cant);
+			acceptable = dealAI->DoEqualizeDealWithHuman(&d, seat, mode == 1, mode == 2, good, cant);
 		}
+		else if (op == "demand")
+			demand = d.GetNumItems() > 0 ? GET_PLAYER(other).GetDealAI()->GetHumanDemandResponse(&d, seat) : NO_DEMAND_RESPONSE_TYPE;
 		else if (op == "blob")
 			blob = DealHex(d);
 	}
@@ -713,7 +934,15 @@ int lDealQuery(lua_State* L)
 			IntField(L, "type", pockets[i].type);
 			IntField(L, "data1", pockets[i].data1);
 			IntField(L, "data2", pockets[i].data2);
+			IntField(L, "data3", pockets[i].data3);
 			IntField(L, "max", pockets[i].max);
+			lua_pushboolean(L, pockets[i].flag1);
+			lua_setfield(L, -2, "flag1");
+			if (!pockets[i].label.empty())
+			{
+				lua_pushstring(L, pockets[i].label.c_str());
+				lua_setfield(L, -2, "label");
+			}
 			lua_rawseti(L, -2, (int)i + 1);
 		}
 		return 1;
@@ -737,6 +966,30 @@ int lDealQuery(lua_State* L)
 		lua_setfield(L, -2, "peace");
 		lua_pushboolean(L, cant);
 		lua_setfield(L, -2, "cant_match");
+		return 1;
+	}
+	if (op == "demand")
+	{
+		lua_pushstring(L, DemandResponseName(demand));
+		lua_setfield(L, -2, "response");
+		IntField(L, "code", (int)demand);
+		return 1;
+	}
+	if (op == "peace")
+	{
+		lua_pushboolean(L, terms.atWar);
+		lua_setfield(L, -2, "at_war");
+		lua_pushboolean(L, terms.wantsPeace);
+		lua_setfield(L, -2, "wants_peace");
+		lua_pushboolean(L, terms.willing);
+		lua_setfield(L, -2, "willing");
+		lua_pushboolean(L, terms.tooSoon);
+		lua_setfield(L, -2, "too_soon");
+		IntField(L, "surrendering", (int)terms.surrendering);
+		IntField(L, "treaty", terms.treaty);
+		IntField(L, "value", terms.value);
+		PushItems(L, d);
+		lua_setfield(L, -2, "items");
 		return 1;
 	}
 	lua_pushboolean(L, acceptable);

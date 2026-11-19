@@ -300,9 +300,31 @@ void CvDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, const CvDeal& kDeal, int 
 /// Human making a demand of the AI
 DemandResponseTypes CvDealAI::DoHumanDemand(CvDeal* pDeal)
 {
-	DemandResponseTypes eResponse = NO_DEMAND_RESPONSE_TYPE;
-
 	PlayerTypes eFromPlayer = GC.getGame().getActivePlayer();
+	PlayerTypes eMyPlayer = GetPlayer()->GetID();
+	DemandResponseTypes eResponse = GetHumanDemandResponse(pDeal, eFromPlayer);
+
+	// Have to sent AI response through the network  - it affects AI behavior
+	GC.getGame().DoFromUIDiploEvent(FROM_UI_DIPLO_EVENT_HUMAN_DEMAND, eMyPlayer, /*iData1*/ eResponse, -1);
+
+	// Demand agreed to
+	if(eResponse == DEMAND_RESPONSE_ACCEPT)
+	{
+		CvDeal kDeal = *pDeal;
+		//gDLL->sendNetDealAccepted(eFromPlayer, GetPlayer()->GetID(), kDeal, -1, -1, -1);
+		GC.GetEngineUserInterface()->SetDealInTransit(true);
+
+		auto_ptr<ICvDeal1> pDllDeal = GC.WrapDealPointer(&kDeal);
+		gDLL->sendNetDemandAccepted(eFromPlayer, GetPlayer()->GetID(), pDllDeal.get());
+	}
+
+	return eResponse;
+}
+
+/// The AI's answer to a demand of eFromPlayer (the decision half of DoHumanDemand; headless: a server asks it for one seat, read-only)
+DemandResponseTypes CvDealAI::GetHumanDemandResponse(CvDeal* pDeal, PlayerTypes eFromPlayer)
+{
+	DemandResponseTypes eResponse = NO_DEMAND_RESPONSE_TYPE;
 	PlayerTypes eMyPlayer = GetPlayer()->GetID();
 
 	int iValueWillingToGiveUp = 0;
@@ -489,20 +511,6 @@ DemandResponseTypes CvDealAI::DoHumanDemand(CvDeal* pDeal)
 			else
 				eResponse = DEMAND_RESPONSE_REFUSE_TOO_MUCH;
 		}
-	}
-
-	// Have to sent AI response through the network  - it affects AI behavior
-	GC.getGame().DoFromUIDiploEvent(FROM_UI_DIPLO_EVENT_HUMAN_DEMAND, eMyPlayer, /*iData1*/ eResponse, -1);
-
-	// Demand agreed to
-	if(eResponse == DEMAND_RESPONSE_ACCEPT)
-	{
-		CvDeal kDeal = *pDeal;
-		//gDLL->sendNetDealAccepted(eFromPlayer, GetPlayer()->GetID(), kDeal, -1, -1, -1);
-		GC.GetEngineUserInterface()->SetDealInTransit(true);
-
-		auto_ptr<ICvDeal1> pDllDeal = GC.WrapDealPointer(&kDeal);
-		gDLL->sendNetDemandAccepted(eFromPlayer, GetPlayer()->GetID(), pDllDeal.get());
 	}
 
 	return eResponse;
