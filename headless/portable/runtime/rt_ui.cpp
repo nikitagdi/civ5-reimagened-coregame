@@ -487,6 +487,13 @@ ICvDeal1* RtUserInterface::GetScratchDeal()
 	return GC.WrapDealPointer(s_hostScratch).release();
 }
 
+// CvDiplomacyAI::GetGreetHumanMessage picks the repeat greetings by this count. The exe keeps it per machine (UI.ChangeStartDiploRepeatCount of the
+// leader list); a server has one per seat, which GcUiLeaderGreeting lends here for the one call. 0 at any other time, as the generated stub said.
+int RtUserInterface::GetStartDiploRepeatCount() const
+{
+	return RtUiStartDiploRepeat();
+}
+
 
 // ============================================================================================================================================
 // B4 M2 WO-1: the interface methods of the replica role (the table in rt_ui_replica.h says which are "I"). Without the role each one is the generated stub it was.

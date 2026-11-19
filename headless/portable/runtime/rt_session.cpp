@@ -794,6 +794,9 @@ void RtSession::PushDiploEvents(size_t first)
 	const std::vector<RtDiploEvent>& evs = m_diplo.Events();
 	for (size_t i = first; i < evs.size(); ++i)
 	{
+		// The leader's line for the human it was shown to: the server's leader session of that seat (GC_EVENT_DIPLO_LEADER_MESSAGE).
+		m_events.Push(GC_EVENT_DIPLO_LEADER_MESSAGE, 7, evs[i].from, evs[i].state, evs[i].to, evs[i].anim, evs[i].data, evs[i].request ? 1 : 0, evs[i].text.c_str(), NULL,
+			(int)evs[i].answer);
 		if (evs[i].answer == RTDIPLO_DISMISSED) continue;  // a statement without choices (war declaration, AI answer): nothing was declined
 		const std::string line = RtDiplo::Describe(evs[i]);
 		m_events.Push(GC_EVENT_DIPLO_AUTO_DECLINED, 3, evs[i].from, evs[i].state, evs[i].to, 0, 0, 0, evs[i].text.c_str(), line.c_str());  // v2: args end with the human who was offered

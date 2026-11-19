@@ -13,6 +13,10 @@ namespace lekmod_portable {
 // The scratch deal of the seat's UI (what the DLL reads through GetScratchDeal): one object for the life of the process.
 CvDeal* RtUiScratchDeal();
 
+// The start-diplomacy repeat count GcUiLeaderGreeting lends the core while it builds a greeting for a seat (the seat's own count, kept by its
+// screen session); 0 at any other time. RtUserInterface::GetStartDiploRepeatCount answers it.
+int RtUiStartDiploRepeat();
+
 class RtEngine;
 
 // Registers the GcUi* globals in L; `libs` pushes Deal instances (the DLL's script system utility); `engine` sends the deals between two humans

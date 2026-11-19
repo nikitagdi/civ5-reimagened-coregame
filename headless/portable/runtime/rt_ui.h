@@ -123,6 +123,8 @@ public:
 	virtual bool isDiploOrPopupWaiting();
 	virtual void SetScratchDeal(ICvDeal1* pDeal);
 	virtual ICvDeal1* GetScratchDeal();
+	// The seat's own count while GcUiLeaderGreeting builds its greeting (rt_ui_deal.h), 0 otherwise as the generated stub.
+	virtual int GetStartDiploRepeatCount() const;
 
 	// ---- B4 M2 WO-1: interface methods that answer from RtUiReplica / send to its sink in the replica role (table in rt_ui_replica.h) ----
 	virtual void lookAtSelectionPlot(bool bRelease);

@@ -18,6 +18,34 @@ argument selects the data; it does not authenticate the caller.
   possible at zero and above. It makes the same calls as those getters, so it
   adds no state change of its own.
 
+* `GcUiLeaderGreeting(seat, ai, count)` returns the greeting of
+  `CvDiplomacyAI::DoBeginDiploWithHuman` for the seat and its animation (nil under
+  Always War). `count` is the seat's own start-diplomacy count, which
+  `RtUserInterface::GetStartDiploRepeatCount` answers during the call only.
+* `GcUiDiploText(seat, ai, name)` returns the leader's line
+  `GetDiploStringForMessage` builds for the seat. Names: `LETS_HEAR_IT`,
+  `TRADE_REJECT_UNACCEPTABLE`, `TRADE_REJECT_INSULTING`, `REPEAT_TRADE`,
+  `REPEAT_TRADE_TOO_MUCH`, `TRADE_DEAL_UNCHANGED`, `TRADE_NO_DEAL_POSSIBLE`,
+  `TRADE_CANT_MATCH_OFFER`, `TRADE_AI_MAKES_OFFER`, `PEACE_WHAT_WILL_HUMAN_OFFER`,
+  `NO_PEACE`, `TOO_SOON_NO_PEACE`.
+* `GcUiDealQuery(seat, partner, items, op[, mode])` works on a local deal from the
+  seat to a met major, built from `items` (a list of `{type, from, data1, data2,
+  data3, flag1}`, `from` one of the two parties, at most 64) with the deal's own
+  `Add*` calls. `op` is `"check"` (one boolean per item: the core took it after
+  the ones before), `"pockets"` (`{from, type, data1, data2, max}` rows of what
+  each side may still add: gold, gold per turn, the tradeable resources, embassy,
+  open borders, defensive pact, research agreement, peace), `"evaluate"` (an AI
+  partner's verdict as `DoHumanOfferDealToThisAI` makes it: `response` is
+  `accept`, `unacceptable` or `insulting`, with `value`, `mine`, `theirs`, `peace`
+  and `cant_match`; `value` is what `sendNetDealAccepted` carries), `"equalize"`
+  (`DoEqualizeDealWithHuman` on the local deal, `mode` 0 balance, 1 the AI's items
+  stay, 2 the seat's items stay: `ok`, `good`, `cant_match`, `items`) or `"blob"`
+  (the hex of `ICvDeal1::Write`; an error when an item was refused).
+
+These diplomacy functions run as the seat (`ActiveAs` switches the pregame field for
+the call and nothing else) and raise no Lua error while it is switched. They use no
+scratch deal and change no game state; the server runs them inside the read scope.
+
 * `GcUiReadScope(f, ...)` calls `f(...)` and returns its results. Before it
   returns, and also when `f` raises (the error is raised again afterwards), it
   puts back what a Lua getter may change on the asking machine only: the game
@@ -58,6 +86,15 @@ for _, deal in ipairs(current) do
   end
 end
 ```
+
+`GC_EVENT_DIPLO_LEADER_MESSAGE` (17) reports every leader message the core shows a
+human (`gDLL->GameplayDiplomacyAILeaderMessage`, queued by `rt_diplo`): the replies to
+the human's own diplomacy, which a delivery builds for its sender, and the AI's
+requests. Args: AI, `DiploUIStateTypes`, human, animation, data, request (1 for an
+AI request), answer (how `rt_diplo` answered it: 0 declined offer, 1 refused demand,
+2 refused request, 3 replied no, 4 dismissed); text: the line. A server hands it to
+the seat's leader screen. `GC_EVENT_DIPLO_AUTO_DECLINED` still reports the declined
+requests (SIMP-003).
 
 `GC_EVENT_POPUP_INFO` has the eight-value prefix
 `(type, data1, data2, data3, player, flags, option1, option2)`, with localized
