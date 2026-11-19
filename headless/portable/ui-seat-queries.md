@@ -25,7 +25,14 @@ argument selects the data; it does not authenticate the caller.
   from the game RNG) and every player's military/economic might cache (DS-0034
   through the bully metric: `CanMajorBullyGold`, `GetMajorBullyGoldDetails`,
   `GetMajorBullyUnitDetails`, which FIX-0022 does not route through
-  `HeadlessUiMight`). Values are restored only where they changed. A host runs
+  `HeadlessUiMight`), and every player's exploration plots
+  (`Unit:CanDoCommand(COMMAND_AUTOMATE, AUTOMATE_EXPLORE)` reaches
+  `CvEconomicAI::GetExplorationPlots` through `CvUnit::CanAutomate` and
+  `CvHomelandAI::IsAnyValidExploreMoves`, which runs `UpdatePlots` while
+  `m_bExplorationPlotsDirty` is set). The economic AI of a player whose plots
+  are dirty is saved with its own `Write` and, when the read rebuilt them, put
+  back with its `Read`, so the flag stays set and the simulation rebuilds them
+  where it would have. Values are restored only where they changed. A host runs
   every screen query and screen action script through it; the action's net
   messages are sent afterwards and run as ordinary commands.
 

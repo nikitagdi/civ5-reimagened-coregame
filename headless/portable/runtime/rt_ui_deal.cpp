@@ -5,6 +5,7 @@
 #include "CvDealAI.h"
 #include "CvDealClasses.h"
 #include "CvDiplomacyAI.h"
+#include "CvEconomicAI.h"
 #include "CvAdvisorCounsel.h"
 #include "CvTreasury.h"
 #include "CvMinorCivAI.h"
@@ -277,13 +278,19 @@ struct MightPeek : CvPlayer
 };
 
 // What a screen script may change on the asking machine only, through Lua getters that refresh or draw on synced state:
-// the game and map RNG (DS-0038: City:GetNextBuyablePlot / City:CanBuyPlot() draw from the jon stream) and every player's
+// the game and map RNG (DS-0038: City:GetNextBuyablePlot / City:CanBuyPlot() draw from the jon stream), every player's
 // might cache (DS-0034 through the bully metric: Player:CanMajorBullyGold / GetMajorBullyGoldDetails / GetMajorBullyUnitDetails,
-// which FIX-0022 does not route through HeadlessUiMight). Restoring the saved values makes the read leave them as they were.
+// which FIX-0022 does not route through HeadlessUiMight) and every player's exploration plots (Unit:CanDoCommand(COMMAND_AUTOMATE,
+// AUTOMATE_EXPLORE) -> CvUnit::CanAutomate -> CvHomelandAI::IsAnyValidExploreMoves -> CvEconomicAI::GetExplorationPlots, which
+// runs UpdatePlots while m_bExplorationPlotsDirty is set). Restoring the saved values makes the read leave them as they were.
 struct UiReadSnapshot
 {
 	CvRandom jon, map;
 	int turn[MAX_PLAYERS], military[MAX_PLAYERS], economic[MAX_PLAYERS];
+	// The exploration plots are rebuilt only while dirty, so only a dirty player's economic AI can change: it is saved with the
+	// class's own Write (the lists, their serialized size, the dirty flag) and put back with its Read, which leaves the flag set,
+	// so the simulation rebuilds them where it would have (UpdatePlots also rebuilds the unserialized explorer list).
+	FMemoryStream* exploration[MAX_PLAYERS];
 	UiReadSnapshot() : jon(GC.getGame().getJonRand()), map(GC.getGame().getMapRand())
 	{
 		for (int i = 0; i < MAX_PLAYERS; ++i)
@@ -292,7 +299,18 @@ struct UiReadSnapshot
 			turn[i] = (p.*MightPeek::Turn()).get();
 			military[i] = (p.*MightPeek::Military()).get();
 			economic[i] = (p.*MightPeek::Economic()).get();
+			exploration[i] = NULL;
+			CvEconomicAI* ai = p.GetEconomicAI();
+			if (ai && ai->m_bExplorationPlotsDirty)
+			{
+				exploration[i] = new FMemoryStream();
+				ai->Write(*exploration[i]);
+			}
 		}
+	}
+	~UiReadSnapshot()
+	{
+		for (int i = 0; i < MAX_PLAYERS; ++i) delete exploration[i];
 	}
 	void Restore() const
 	{
@@ -304,8 +322,18 @@ struct UiReadSnapshot
 			if ((p.*MightPeek::Turn()).get() != turn[i]) p.*MightPeek::Turn() = turn[i];
 			if ((p.*MightPeek::Military()).get() != military[i]) p.*MightPeek::Military() = military[i];
 			if ((p.*MightPeek::Economic()).get() != economic[i]) p.*MightPeek::Economic() = economic[i];
+			CvEconomicAI* ai = p.GetEconomicAI();
+			if (exploration[i] && ai && !ai->m_bExplorationPlotsDirty)
+			{
+				exploration[i]->Rewind();
+				ai->Read(*exploration[i]);
+			}
 		}
 	}
+
+private:
+	UiReadSnapshot(const UiReadSnapshot&);
+	void operator=(const UiReadSnapshot&);
 };
 
 // GcUiReadScope(f, ...): calls f(...) and returns its results; whatever f changed of the state above is put back first, also
