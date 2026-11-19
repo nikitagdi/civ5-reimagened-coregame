@@ -241,8 +241,8 @@ static void run_query_checks(gc_instance* inst, const gc_pump_result* pr)
 	CHECK(gc_query(inst, GC_Q_PLOTS, args, 1, &bg, &err) == GC_ERR_INVALID_ARG, "Q_PLOTS viewer -2 -> INVALID_ARG");
 	args[0] = 100000;
 	CHECK(gc_query(inst, GC_Q_PLAYERS, args, 1, &bg, &err) == GC_ERR_INVALID_ARG, "Q_PLAYERS viewer 100000 -> INVALID_ARG");
-	args[0] = GC_CATALOG_TABLE_COUNT_V4;
-	CHECK(gc_query(inst, GC_Q_CATALOG, args, 1, &bg, &err) == GC_ERR_INVALID_ARG, "Q_CATALOG table 25 -> INVALID_ARG");
+	args[0] = GC_CATALOG_TABLE_COUNT_V5;
+	CHECK(gc_query(inst, GC_Q_CATALOG, args, 1, &bg, &err) == GC_ERR_INVALID_ARG, "Q_CATALOG table 26 (first unknown) -> INVALID_ARG");
 	args[0] = GC_CATALOG_TURN_TIMERS;
 	{
 		gcq_header htt;
