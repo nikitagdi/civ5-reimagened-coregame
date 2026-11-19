@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "CvGameCoreUtils.h"
+#include "CvTypes.h"
 
 #include "CvDllCity.h"
 #include "CvDllPlot.h"
@@ -21,7 +22,7 @@
 
 namespace lekmod_portable {
 
-RtUserInterface::RtUserInterface() : m_canEndTurn(false), m_perPlayerCanEndTurn(false), m_hasMovedUnit(false), m_policyNotificationSeen(false), m_diplo(NULL), m_events(NULL), m_replica(NULL)
+RtUserInterface::RtUserInterface() : m_canEndTurn(false), m_perPlayerCanEndTurn(false), m_hasMovedUnit(false), m_policyNotificationSeen(false), m_diplo(NULL), m_events(NULL), m_replica(NULL), m_moveQuestionUnit(-1), m_moveQuestionFlags(0)
 {
 	for (int i = 0; i < MAX_PLAYERS; ++i) m_canEndTurnBy[i] = false;
 }
@@ -302,6 +303,41 @@ std::string PopupText(const char* s)
 	return s;
 }
 
+// Reads CvUnit::m_iFlags without changing the core's class (a pointer to the protected member, formed through a derived name).
+struct UnitFlagsPeek : CvUnit
+{
+	static bool EvaluatingMission(CvUnit& u)
+	{
+		FAutoVariable<int, CvUnit> CvUnit::* m = &UnitFlagsPeek::m_iFlags;
+		return ((u.*m).get() & UNITFLAG_EVALUATING_MISSION) != 0;
+	}
+};
+
+// CvUnit::UnitAttack opens BUTTONPOPUP_DECLAREWARMOVE for the active player's unit whose MOVE_TO mission to the popup's plot
+// CvUnitMission::ContinueMission is evaluating (UNITFLAG_EVALUATING_MISSION, pushed this turn). Answers that unit's id and its
+// mission flags; -1 when not exactly one unit matches. Read-only.
+int DeclareWarMoveUnit(int player, int x, int y, int* flags)
+{
+	*flags = 0;
+	if (player < 0 || player >= MAX_PLAYERS) return -1;
+	CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)player);
+	const int turn = GC.getGame().getGameTurn();
+	int found = -1, count = 0, foundFlags = 0, it = 0;
+	for (CvUnit* u = kPlayer.firstUnit(&it); u != NULL; u = kPlayer.nextUnit(&it))
+	{
+		if (!UnitFlagsPeek::EvaluatingMission(*u)) continue;
+		const MissionData* m = u->GetHeadMissionData();
+		if (!m || m->eMissionType != CvTypes::getMISSION_MOVE_TO() || m->iData1 != x || m->iData2 != y) continue;
+		if (m->iPushTurn != turn && (m->iFlags & MOVE_UNITS_THROUGH_ENEMY) == 0) continue;
+		found = u->GetID();
+		foundFlags = m->iFlags;
+		++count;
+	}
+	if (count != 1) return -1;
+	*flags = foundFlags;
+	return found;
+}
+
 }  // namespace
 
 // Headless event 7 POPUP_INFO: args popup_type, data1, data2, data3, player, flags, option1, option2
@@ -337,7 +373,24 @@ void RtUserInterface::AddPopup(const CvPopupInfo& kPopup)
 		kPopup.iData1, kPopup.iData2, kPopup.iData3, target, kPopup.iFlags,
 		kPopup.bOption1 ? 1 : 0, kPopup.bOption2 ? 1 : 0);
 	if (!text.empty()) { ev.hasText = true; ev.text = text; }
+	if (kPopup.eButtonPopupType == BUTTONPOPUP_DECLAREWARMOVE)
+	{
+		// Headless: the move question appends data4 (the acting unit) and data5 (its mission flags) so that a yes can replay the order.
+		int flags = m_moveQuestionFlags;
+		ev.args[8] = m_moveQuestionUnit >= 0 ? m_moveQuestionUnit : DeclareWarMoveUnit(target, kPopup.iData2, kPopup.iData3, &flags);
+		ev.args[9] = flags;
+		ev.argc = 10;
+	}
 	m_events->Push(ev);
+}
+
+void RtUserInterface::AddDeclareWarMovePopup(const CvPopupInfo& kPopup, int unit, int flags)
+{
+	m_moveQuestionUnit = unit;
+	m_moveQuestionFlags = flags;
+	AddPopup(kPopup);
+	m_moveQuestionUnit = -1;
+	m_moveQuestionFlags = 0;
 }
 
 // The int-array overload (CvPlayer.cpp:3466, city captured): data1..data3 are the first three ints, -1 when the array is shorter.

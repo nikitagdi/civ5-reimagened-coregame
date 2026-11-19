@@ -3,7 +3,10 @@
 //
 //  kind | name                  | validation                                          | loopback
 //   1   UNIT_MOVE_TO            target on the map, not the unit's plot, immobile?,    sendPushMission(MISSION_MOVE_TO, x, y)
-//                               interface pathfinder finds a path
+//                               interface pathfinder finds a path. Headless (gc_apply_command, OpenMoveQuestion): first, as
+//                               the exe's move click, a visible target that CvUnit::GetDeclareWarMove names a rival for opens
+//                               BUTTONPOPUP_DECLAREWARMOVE (data4 = the unit) instead of the move; nothing is sent
+
 //   2   UNIT_RANGE_ATTACK       target on the map, CanStartMission(RANGE_ATTACK)      sendPushMission(MISSION_RANGE_ATTACK, x, y)
 //   3   UNIT_FOUND_CITY         canFound(plot) via CanStartMission(FOUND)             sendPushMission(MISSION_FOUND)
 //   4   UNIT_FORTIFY            CanStartMission(FORTIFY)                              sendPushMission(MISSION_FORTIFY)
@@ -41,6 +44,7 @@
 #include "gc_command.h"
 #include "gc_replica.h"
 #include "../runtime/rt_active.h"
+#include "../runtime/rt_ui.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -65,6 +69,26 @@ bool OnMap(int x, int y)
 {
 	CvMap& map = GC.getMap();
 	return x >= 0 && y >= 0 && x < map.getGridWidth() && y < map.getGridHeight();
+}
+
+// The exe asks CvDllUnit::GetDeclareWarMove before it orders a human's move and opens the war question instead (the
+// question CvUnit::UnitAttack also opens, with the same payload). Read-only up to the popup: true when the question opened.
+bool OpenDeclareWarMoveQuestion(CvUnit* u, int x, int y)
+{
+	if (!OnMap(x, y) || !u->isHuman() || u->isDelayedDeath() || u->IsBusy()) return false;
+	if (u->IsImmobile() && u->getDomainType() != DOMAIN_AIR) return false;
+	if (u->getX() == x && u->getY() == y) return false;
+	CvPlot* plot = GC.getMap().plot(x, y);
+	if (!plot || !plot->isVisible(u->getTeam())) return false;
+	const TeamTypes rival = u->GetDeclareWarMove(*plot);
+	if (rival == NO_TEAM) return false;
+	CvPopupInfo popup(BUTTONPOPUP_DECLAREWARMOVE, rival, x, y);
+	popup.bOption2 = plot->getTeam() != rival;
+	if (plot->isCity()) popup.iFlags = DOW_MOVE_ONTO_CITY;
+	else if (plot->isVisibleOtherUnit(u->getOwner())) popup.iFlags = DOW_MOVE_ONTO_UNIT;
+	else popup.iFlags = DOW_MOVE_INTO_TERRITORY;
+	static_cast<RtUserInterface*>(GC.GetEngineUserInterface())->AddDeclareWarMovePopup(popup, u->GetID(), 0);
+	return true;
 }
 
 const char* UnitTypeName(const CvUnit* u)
@@ -694,6 +718,19 @@ bool CheckHumanMayAct(RtSession& s, int player, std::string& msg, int32_t* reaso
 {
 	CvPlayer* who = NULL;
 	return HumanMayAct(s, player, &who, msg, reason);
+}
+
+bool OpenMoveQuestion(RtSession& s, const gc_command& cmd)
+{
+	if ((int)cmd.kind != GC_CMD_UNIT_MOVE_TO || cmd.argc != 3 || !cmd.args) return false;
+	const int player = (int)cmd.player;
+	ActiveAs as((PlayerTypes)player, IsSeatedHuman(player));
+	CvPlayer* human = NULL;
+	std::string msg;
+	int32_t reason = GC_REASON_NONE;
+	if (!HumanMayAct(s, player, &human, msg, &reason)) return false;
+	CvUnit* unit = human->getUnit(cmd.args[0]);
+	return unit != NULL && OpenDeclareWarMoveQuestion(unit, (int)cmd.args[1], (int)cmd.args[2]);
 }
 
 // B4 gc-replica: an accepted command is an input of the game; a server journals it for its replicas (gc_journal_take).

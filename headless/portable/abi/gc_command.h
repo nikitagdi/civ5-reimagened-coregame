@@ -22,6 +22,11 @@ namespace lekmod_portable {
 // NULL it gets the GC_REASON_* of a refusal (GC_REASON_NONE otherwise).
 int32_t ApplyHumanCommand(RtSession& session, const gc_command& cmd, std::string& msg, int32_t* reason = NULL);
 
+// Headless, gc_apply_command only: a seated human's UNIT_MOVE_TO whose visible target CvUnit::GetDeclareWarMove names a rival for
+// opens BUTTONPOPUP_DECLAREWARMOVE (data4 = the unit), as the exe's move click does, instead of the move. True when it opened; then
+// nothing is sent or journaled. Autoplay and journal replays do not ask.
+bool OpenMoveQuestion(RtSession& session, const gc_command& cmd);
+
 // HumanMayAct for other entries (B4 gc_net_submit): player is a seated human, the AI has moved, its turn is active and not ended.
 bool CheckHumanMayAct(RtSession& session, int player, std::string& msg, int32_t* reason);
 

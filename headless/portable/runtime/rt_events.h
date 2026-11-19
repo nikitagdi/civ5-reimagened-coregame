@@ -15,7 +15,7 @@ namespace lekmod_portable {
 
 struct RtEvent
 {
-	enum { kMaxArgs = 10 };  // Headless: capture popups append data4 and data5; the public ABI uses a pointer/count.
+	enum { kMaxArgs = 10 };  // Headless: capture and declare-war-move popups append data4 and data5; the public ABI uses a pointer/count.
 	int kind;                  // GC_EVENT_*
 	int argc;
 	int args[kMaxArgs];

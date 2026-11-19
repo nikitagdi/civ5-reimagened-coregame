@@ -395,6 +395,11 @@ extern "C" int rt_selftest_replica_ui(const gc_host* host, unsigned seed, unsign
 		ui.AddPopup(BUTTONPOPUP_CITY_CAPTURED, 5, ints, 2, bools);
 		c.add("popup_capture_payload", events.Pop(e) && e.argc == 10 && e.args[1] == 21 && e.args[2] == 22 && e.args[3] == 23 &&
 			e.args[5] == 0 && e.args[6] == 0 && e.args[7] == 1 && e.args[8] == 24 && e.args[9] == -1, "capture appends data4/data5");
+		// No unit is evaluating a mission here, so the move question names no acting unit.
+		CvPopupInfo move(BUTTONPOPUP_DECLAREWARMOVE, 1, 3, 4);
+		ui.AddPopup(move);
+		c.add("popup_declare_war_move_payload", events.Pop(e) && e.argc == 10 && e.args[1] == 1 && e.args[2] == 3 && e.args[3] == 4 &&
+			e.args[8] == -1 && e.args[9] == 0, "the move question appends data4/data5");
 		ui.AddPopup(BUTTONPOPUP_TEXT, 5, NULL, 2, NULL);
 		c.add("popup_null_arrays", events.Pop(e) && e.argc == 8 && e.args[1] == -1 && e.args[2] == -1 && e.args[3] == -1 &&
 			e.args[6] == 0 && e.args[7] == 0, "null arrays use absent values");
@@ -461,7 +466,16 @@ extern "C" int rt_selftest_replica_ui(const gc_host* host, unsigned seed, unsign
 			"    end\n"
 			"  end\n"
 			"  local d = GcUiGetProposedDeal(seat, 0, 1) assert(d == nil or (d.from == 0 and d.to == 1))\n"
+			"  for minor = GameDefines.MAX_MAJOR_CIVS, GameDefines.MAX_CIV_PLAYERS - 1 do\n"
+			"    local p = Players[minor]\n"
+			"    if p and p:IsMinorCiv() and p:IsAlive() then\n"
+			"      local gold, unit = GcUiGetBullyScores(seat, minor)\n"
+			"      assert(type(gold) == 'number' and type(unit) == 'number')\n"
+			"      assert((gold >= 0) == p:CanMajorBullyGold(seat) and (unit >= 0) == p:CanMajorBullyUnit(seat))\n"
+			"    end\n"
+			"  end\n"
 			"end\n"
+			"assert(not pcall(GcUiGetBullyScores, 0, 0))\n"
 			"assert(scratch:GetFromPlayer() == from and scratch:GetToPlayer() == to and scratch:GetNumItems() == n)\n"
 			"for _, f in ipairs{GcUiGetAdvisorCounsel, GcUiGetCurrentDeals, GcUiGetHistoricDeals} do\n"
 			"  assert(not pcall(f, -1)) assert(not pcall(f, GameDefines.MAX_MAJOR_CIVS))\n"

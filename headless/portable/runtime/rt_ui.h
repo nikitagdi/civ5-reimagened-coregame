@@ -109,6 +109,9 @@ public:
 	virtual uint AddPlotMessage(uint uiParentEvent, int iPlotID, PlayerTypes ePlayer, bool bForce, int iLength, const char* szString, LPCTSTR pszSound, InterfaceMessageTypes eType, LPCSTR pszIcon, ColorTypes eFlashColor, int iFlashX, int iFlashY, bool bShowOffScreenArrows, bool bShowOnScreenArrows);
 	virtual void AddPopup(const CvPopupInfo& kPopup);
 	virtual void AddPopup(int iPopupType, int iIntArraySize, const int* pIntArray, int iBoolArraySize, const bool* pBoolArray);
+	// Headless: the move question the exe opens instead of ordering a move (CvDllUnit::GetDeclareWarMove, gc_command.cpp) names
+	// its unit; AddPopup appends it as data4 and the mission flags as data5.
+	void AddDeclareWarMovePopup(const CvPopupInfo& kPopup, int unit, int flags);
 	virtual void PublishActivePlayerTurnStart();
 	virtual void PublishPlayerTurnStatus(CvDLLInterfaceIFaceBase::TURN_STATUS_TYPE eStatus, PlayerTypes ePlayer, const char* pszTag);
 	// F3: the exe's "policy notification seen" flag (false until the human dismisses a NOTIFICATION_POLICY, CvNotifications::Dismiss;
@@ -197,6 +200,8 @@ private:
 	std::map<int, RtNotification> m_notifications;
 	std::map<int, RtNotification> m_seen[MAX_MAJOR_CIVS];  // network game: what SyncNetworkNotifications reported per human (not saved: the first call after a load re-reports)
 	std::vector<PendingGoody> m_pendingGoodies;
+	int m_moveQuestionUnit;   // AddDeclareWarMovePopup's unit during its AddPopup call, else -1 (not saved)
+	int m_moveQuestionFlags;
 };
 
 }  // namespace lekmod_portable

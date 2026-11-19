@@ -540,6 +540,12 @@ extern "C" int32_t gc_apply_command(gc_instance* inst, const gc_command* cmd, gc
 	const int32_t need = NeedGame(inst, err);
 	if (need != GC_OK) return need;
 	if (inst->role == GC_ROLE_REPLICA) return Fail(err, GC_ERR_REJECTED, "gc_apply_command: a replica takes no commands; its UI's go to the server (gc_net_take)");
+	// Headless: a move that first needs war opens the exe's question (an event only; the game is unchanged and nothing is journaled).
+	if (lekmod_portable::OpenMoveQuestion(inst->session, *cmd))
+	{
+		Ok(err);
+		return GC_OK;
+	}
 	std::string msg;
 	int32_t reason = GC_REASON_NONE;
 	const int32_t rc = lekmod_portable::ApplyHumanCommand(inst->session, *cmd, msg, &reason);

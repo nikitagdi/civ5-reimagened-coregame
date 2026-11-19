@@ -11,6 +11,12 @@ argument selects the data; it does not authenticate the caller.
   one-based lists of plain deal tables, in the core's order.
 * `GcUiGetProposedDeal(player, from, to)` returns a plain deal table or `nil`.
   The explicit player must be one of the two parties.
+* `GcUiGetBullyScores(player, minor)` returns two integers: the tribute
+  pressure of the player on a living city-state for gold and for a worker
+  (`CvMinorCivAI::CalculateBullyMetric`). These are the scores that
+  `GetMajorBullyGoldDetails` and `GetMajorBullyUnitDetails` print. Tribute is
+  possible at zero and above. It makes the same calls as those getters, so it
+  adds no state change of its own.
 
 Players must be initialized major civilizations; invalid arguments raise Lua
 errors. These queries neither select an active player nor load a scratch deal.
@@ -43,10 +49,25 @@ appends `data4` (captured Great Works count) and `data5` (player eligible for
 liberation, or -1). Thus capture events have ten values. This uses the existing
 ABI pointer/count; consumers must accept the ten-value shape before deploying.
 
-SIMPLIFIED(SIMP-530): pending command/move/attack/plunder confirmations have no
-server-owned unit/command record to read. The original handlers rely on client
-selection and interface-mode state. No guessed selection accessor is provided;
-the host must retain authenticated action context before showing such a prompt.
+`BUTTONPOPUP_DECLAREWARMOVE` also has ten values: `data4` is the acting unit
+and `data5` its `MOVE_TO` mission flags. Like the original executable's move
+click, `gc_apply_command` asks `CvUnit::GetDeclareWarMove` before a seated
+human's `GC_CMD_UNIT_MOVE_TO` to a visible plot. When it names a rival team,
+the command opens this question for that unit (flags 0) and returns `GC_OK`
+without sending or journaling anything. Autoplay and journal replays skip this
+check. `CvUnit::UnitAttack` can also raise the question while a mission runs.
+Then the acting unit is the popup player's one unit whose head `MOVE_TO`
+mission to (`data2`, `data3`) `CvUnitMission::ContinueMission` is evaluating
+(`UNITFLAG_EVALUATING_MISSION`). When no single unit matches, `data4` is -1 and
+`data5` is 0. Both paths only read game state. They do not touch the mission
+queue or the random numbers, so the simulation and its digests do not change.
+A host replays a "yes" as the war declaration followed by the same move for
+that unit.
+
+SIMPLIFIED(SIMP-530): command and improvement-rebuild confirmations come from
+`CvGame::handleAction`, which acts on the client's head-selected unit; a server
+has no selection, so those events carry no unit. Range-strike, plunder and gift
+confirmations are raised by the original client UI, not by the core.
 
 The `replicaui` runtime scenario checks popup payloads without a replica sink,
 null/short arrays, two explicit seats, invalid arguments, unchanged scratch

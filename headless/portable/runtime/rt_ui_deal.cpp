@@ -7,6 +7,7 @@
 #include "CvDiplomacyAI.h"
 #include "CvAdvisorCounsel.h"
 #include "CvTreasury.h"
+#include "CvMinorCivAI.h"
 #include "rt_engine.h"
 #include "rt_ui_deal.h"
 
@@ -249,6 +250,21 @@ int lReadAdvisorCounsel(lua_State* L)
 	return 1;
 }
 
+// GcUiGetBullyScores(player, minor): the tribute pressure of a major on a living city-state, for gold and for a worker
+// (CvMinorCivAI::CalculateBullyMetric, the scores GetMajorBullyGoldDetails / GetMajorBullyUnitDetails print; tribute is
+// possible at zero and above). The same calls those Lua getters make, without the tooltip text.
+int lReadBullyScores(lua_State* L)
+{
+	const PlayerTypes seat = ReadSeat(L, 1);
+	const int minor = luaL_checkinteger(L, 2);
+	if (minor < MAX_MAJOR_CIVS || minor >= MAX_CIV_PLAYERS || !GET_PLAYER((PlayerTypes)minor).isMinorCiv() || !GET_PLAYER((PlayerTypes)minor).isAlive())
+		return luaL_argerror(L, 2, "expected a living city-state");
+	CvMinorCivAI* ai = GET_PLAYER((PlayerTypes)minor).GetMinorCivAI();
+	lua_pushinteger(L, ai->CalculateBullyMetric(seat, false));
+	lua_pushinteger(L, ai->CalculateBullyMetric(seat, true));
+	return 2;
+}
+
 // UI.OnHumanOpenedTradeScreen / OnHumanDemand: the leader answers with the state the trade screen shows.
 int SayState(lua_State* L, DiploUIStateTypes state, DiploMessageTypes msg)
 {
@@ -278,6 +294,7 @@ void RegisterUiDealLib(lua_State* L, ICvScriptSystemUtility1* libs, RtEngine* en
 		{"GcUiGetCurrentDeals", lReadCurrentDeals},
 		{"GcUiGetHistoricDeals", lReadHistoricDeals},
 		{"GcUiGetProposedDeal", lReadProposedDeal},
+		{"GcUiGetBullyScores", lReadBullyScores},
 		{"GcUiGetScratchDeal", lGetScratchDeal},
 		{"GcUiProposeDeal", lProposeDeal},
 		{"GcUiDemand", lDemand},
