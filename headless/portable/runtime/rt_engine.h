@@ -138,6 +138,16 @@ public:
 	// Delivers the queued commands to ICvNetMessageHandler3 (commands sent by the responses wait for the next call); returns how many.
 	int DispatchNetMessages();
 	int NetQueueSize() const { return (int)m_netQueue.size(); }
+	// Is a war declaration of `player` on `team` (sendChangeWar(team, true)) waiting for the next delivery? Read only.
+	bool WarDeclarationQueued(PlayerTypes player, int team) const
+	{
+		for (size_t i = 0; i < m_netQueue.size(); ++i)
+		{
+			const RtNetMessage& m = m_netQueue[i];
+			if (m.eId == kRtNet_sendChangeWar && m.ePlayer == player && m.aiArg[0] == team && m.aiArg[1] != 0) return true;
+		}
+		return false;
+	}
 	// B4 M4 WO-D: an accepted human offer / demand arrives (kRtNet_sendNetDealAccepted / sendNetDemandAccepted).
 	void DeliverDeal(const RtNetMessage& m);
 	// B4 fix-mp-trade: a deal between two humans. The exe sends NetPlayerDealProposed when the UI proposes a deal to a human (UI.DoProposeDeal) and

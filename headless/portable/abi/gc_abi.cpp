@@ -272,6 +272,7 @@ extern "C" gc_instance* gc_create(const gc_host* host, gc_error* err)
 		inst = new gc_instance();
 		inst->host = *host;
 		g_instance_exists = true;
+		lekmod_portable::ClearMoveQuestions();
 		lekmod_portable::SetLogSink(LogSink, inst);
 		RtSession::LoadStatus ls;
 		if (!inst->session.Load(inst->host, ls))

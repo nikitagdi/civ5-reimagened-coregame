@@ -24,8 +24,16 @@ int32_t ApplyHumanCommand(RtSession& session, const gc_command& cmd, std::string
 
 // Headless, gc_apply_command only: a seated human's UNIT_MOVE_TO whose visible target CvUnit::GetDeclareWarMove names a rival for
 // opens BUTTONPOPUP_DECLAREWARMOVE (data4 = the unit), as the exe's move click does, instead of the move. True when it opened; then
-// nothing is sent or journaled. Autoplay and journal replays do not ask.
+// nothing is sent or journaled. Autoplay and journal replays do not ask. Only for a player whose host turned the question on
+// (SetMoveQuestions: its client answers BUTTONPOPUP_DECLAREWARMOVE), and not while that player's own war declaration on the
+// rival team waits in the loopback (a client that sends DECLARE_WAR and then the move before the next pump).
 bool OpenMoveQuestion(RtSession& session, const gc_command& cmd);
+
+// Runtime-only, per player (not saved, cleared by gc_create): does gc_apply_command ask the war question for this player's moves?
+// Off by default: a move into a rival's land at peace then goes to the core's own move checks, as before the question existed.
+void SetMoveQuestions(int player, bool on);
+bool MoveQuestionsOn(int player);
+void ClearMoveQuestions();
 
 // HumanMayAct for other entries (B4 gc_net_submit): player is a seated human, the AI has moved, its turn is active and not ended.
 bool CheckHumanMayAct(RtSession& session, int player, std::string& msg, int32_t* reason);

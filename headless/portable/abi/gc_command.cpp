@@ -720,17 +720,43 @@ bool CheckHumanMayAct(RtSession& s, int player, std::string& msg, int32_t* reaso
 	return HumanMayAct(s, player, &who, msg, reason);
 }
 
+namespace {
+bool g_moveQuestions[MAX_PLAYERS];
+}
+
+void SetMoveQuestions(int player, bool on)
+{
+	if (player >= 0 && player < MAX_PLAYERS) g_moveQuestions[player] = on;
+}
+
+bool MoveQuestionsOn(int player) { return player >= 0 && player < MAX_PLAYERS && g_moveQuestions[player]; }
+
+void ClearMoveQuestions()
+{
+	for (int i = 0; i < MAX_PLAYERS; ++i) g_moveQuestions[i] = false;
+}
+
 bool OpenMoveQuestion(RtSession& s, const gc_command& cmd)
 {
 	if ((int)cmd.kind != GC_CMD_UNIT_MOVE_TO || cmd.argc != 3 || !cmd.args) return false;
 	const int player = (int)cmd.player;
+	if (!MoveQuestionsOn(player)) return false;
 	ActiveAs as((PlayerTypes)player, IsSeatedHuman(player));
 	CvPlayer* human = NULL;
 	std::string msg;
 	int32_t reason = GC_REASON_NONE;
 	if (!HumanMayAct(s, player, &human, msg, &reason)) return false;
 	CvUnit* unit = human->getUnit(cmd.args[0]);
-	return unit != NULL && OpenDeclareWarMoveQuestion(unit, (int)cmd.args[1], (int)cmd.args[2]);
+	if (unit == NULL) return false;
+	const int x = (int)cmd.args[1], y = (int)cmd.args[2];
+	if (OnMap(x, y))
+	{
+		// The war this move would need is already declared and on its way: the move follows it, as the exe's own order of messages does.
+		CvPlot* plot = GC.getMap().plot(x, y);
+		const TeamTypes rival = plot ? unit->GetDeclareWarMove(*plot) : NO_TEAM;
+		if (rival != NO_TEAM && s.Engine().WarDeclarationQueued((PlayerTypes)player, (int)rival)) return false;
+	}
+	return OpenDeclareWarMoveQuestion(unit, x, y);
 }
 
 // B4 gc-replica: an accepted command is an input of the game; a server journals it for its replicas (gc_journal_take).

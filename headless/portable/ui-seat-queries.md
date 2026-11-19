@@ -18,6 +18,17 @@ argument selects the data; it does not authenticate the caller.
   possible at zero and above. It makes the same calls as those getters, so it
   adds no state change of its own.
 
+* `GcUiReadScope(f, ...)` calls `f(...)` and returns its results. Before it
+  returns, and also when `f` raises (the error is raised again afterwards), it
+  puts back what a Lua getter may change on the asking machine only: the game
+  and map RNG (DS-0038, `City:GetNextBuyablePlot` and `City:CanBuyPlot()` draw
+  from the game RNG) and every player's military/economic might cache (DS-0034
+  through the bully metric: `CanMajorBullyGold`, `GetMajorBullyGoldDetails`,
+  `GetMajorBullyUnitDetails`, which FIX-0022 does not route through
+  `HeadlessUiMight`). Values are restored only where they changed. A host runs
+  every screen query and screen action script through it; the action's net
+  messages are sent afterwards and run as ordinary commands.
+
 Players must be initialized major civilizations; invalid arguments raise Lua
 errors. These queries neither select an active player nor load a scratch deal.
 Dead, previously initialized players can still read their history.
@@ -55,7 +66,13 @@ click, `gc_apply_command` asks `CvUnit::GetDeclareWarMove` before a seated
 human's `GC_CMD_UNIT_MOVE_TO` to a visible plot. When it names a rival team,
 the command opens this question for that unit (flags 0) and returns `GC_OK`
 without sending or journaling anything. Autoplay and journal replays skip this
-check. `CvUnit::UnitAttack` can also raise the question while a mission runs.
+check. The question is asked only for a player whose host called
+`GcUiSetMoveQuestions(player, true)`, meaning that its client answers this popup.
+The flag is runtime-only: it is never saved and `gc_create` clears it. For any other
+player, the move goes through the ordinary move checks, as before. The question
+is also skipped while that player's own war declaration on the rival team
+(`GC_CMD_DECLARE_WAR`) waits in the loopback for the next pump, so a declaration
+followed at once by the move still works. `CvUnit::UnitAttack` can also raise the question while a mission runs.
 Then the acting unit is the popup player's one unit whose head `MOVE_TO`
 mission to (`data2`, `data3`) `CvUnitMission::ContinueMission` is evaluating
 (`UNITFLAG_EVALUATING_MISSION`). When no single unit matches, `data4` is -1 and

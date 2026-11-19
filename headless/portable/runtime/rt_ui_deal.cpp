@@ -10,6 +10,7 @@
 #include "CvMinorCivAI.h"
 #include "rt_engine.h"
 #include "rt_ui_deal.h"
+#include "../abi/gc_command.h"
 
 namespace lekmod_portable {
 
@@ -265,6 +266,71 @@ int lReadBullyScores(lua_State* L)
 	return 2;
 }
 
+// The lazy might cache of a player (CvPlayer::GetMilitaryMight / GetEconomicMight refresh it for whoever asks first in a turn,
+// DS-0034): pointers to the protected members, formed through a derived name; the core's class is unchanged.
+struct MightPeek : CvPlayer
+{
+	typedef FAutoVariable<int, CvPlayer> CvPlayer::* Field;
+	static Field Turn() { return &MightPeek::m_iTurnMightRecomputed; }
+	static Field Military() { return &MightPeek::m_iMilitaryMight; }
+	static Field Economic() { return &MightPeek::m_iEconomicMight; }
+};
+
+// What a screen script may change on the asking machine only, through Lua getters that refresh or draw on synced state:
+// the game and map RNG (DS-0038: City:GetNextBuyablePlot / City:CanBuyPlot() draw from the jon stream) and every player's
+// might cache (DS-0034 through the bully metric: Player:CanMajorBullyGold / GetMajorBullyGoldDetails / GetMajorBullyUnitDetails,
+// which FIX-0022 does not route through HeadlessUiMight). Restoring the saved values makes the read leave them as they were.
+struct UiReadSnapshot
+{
+	CvRandom jon, map;
+	int turn[MAX_PLAYERS], military[MAX_PLAYERS], economic[MAX_PLAYERS];
+	UiReadSnapshot() : jon(GC.getGame().getJonRand()), map(GC.getGame().getMapRand())
+	{
+		for (int i = 0; i < MAX_PLAYERS; ++i)
+		{
+			CvPlayer& p = GET_PLAYER((PlayerTypes)i);
+			turn[i] = (p.*MightPeek::Turn()).get();
+			military[i] = (p.*MightPeek::Military()).get();
+			economic[i] = (p.*MightPeek::Economic()).get();
+		}
+	}
+	void Restore() const
+	{
+		if (!(GC.getGame().getJonRand() == jon)) GC.getGame().getJonRand() = jon;
+		if (!(GC.getGame().getMapRand() == map)) GC.getGame().getMapRand() = map;
+		for (int i = 0; i < MAX_PLAYERS; ++i)
+		{
+			CvPlayer& p = GET_PLAYER((PlayerTypes)i);
+			if ((p.*MightPeek::Turn()).get() != turn[i]) p.*MightPeek::Turn() = turn[i];
+			if ((p.*MightPeek::Military()).get() != military[i]) p.*MightPeek::Military() = military[i];
+			if ((p.*MightPeek::Economic()).get() != economic[i]) p.*MightPeek::Economic() = economic[i];
+		}
+	}
+};
+
+// GcUiReadScope(f, ...): calls f(...) and returns its results; whatever f changed of the state above is put back first, also
+// when f raises (the error is raised again after the restore). Hosts run every screen query and action script through it.
+int lReadScope(lua_State* L)
+{
+	luaL_checktype(L, 1, LUA_TFUNCTION);
+	const int base = lua_gettop(L);
+	UiReadSnapshot saved;
+	const int rc = lua_pcall(L, base - 1, LUA_MULTRET, 0);
+	saved.Restore();
+	if (rc != 0) return lua_error(L);
+	return lua_gettop(L);
+}
+
+// GcUiSetMoveQuestions(player, on): the host says whether this player's client answers BUTTONPOPUP_DECLAREWARMOVE, so that
+// gc_apply_command may ask it before a move into a rival's land at peace (gc_command.h). Runtime-only, never saved, no game state.
+int lSetMoveQuestions(lua_State* L)
+{
+	const PlayerTypes seat = ReadSeat(L, 1);
+	luaL_checktype(L, 2, LUA_TBOOLEAN);
+	SetMoveQuestions((int)seat, lua_toboolean(L, 2) != 0);
+	return 0;
+}
+
 // UI.OnHumanOpenedTradeScreen / OnHumanDemand: the leader answers with the state the trade screen shows.
 int SayState(lua_State* L, DiploUIStateTypes state, DiploMessageTypes msg)
 {
@@ -295,6 +361,8 @@ void RegisterUiDealLib(lua_State* L, ICvScriptSystemUtility1* libs, RtEngine* en
 		{"GcUiGetHistoricDeals", lReadHistoricDeals},
 		{"GcUiGetProposedDeal", lReadProposedDeal},
 		{"GcUiGetBullyScores", lReadBullyScores},
+		{"GcUiReadScope", lReadScope},
+		{"GcUiSetMoveQuestions", lSetMoveQuestions},
 		{"GcUiGetScratchDeal", lGetScratchDeal},
 		{"GcUiProposeDeal", lProposeDeal},
 		{"GcUiDemand", lDemand},

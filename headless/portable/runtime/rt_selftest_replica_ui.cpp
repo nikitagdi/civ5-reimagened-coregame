@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "../abi/gc_command.h"
 #include "../abi/gc_internal.h"
 #include "rt_active.h"
 #include "rt_selftest.h"
@@ -484,6 +485,43 @@ extern "C" int rt_selftest_replica_ui(const gc_host* host, unsigned seed, unsign
 		const std::string error = RunLua(U, queries, "=seat-read-contract");
 		c.add("seat_read_contract", error.empty(), "%s", error.empty() ? "two explicit seats, invalid-seat rejection, scratch untouched" : error.c_str());
 		c.add("seat_read_digest", Digest(inst, -3) == before, "seat queries leave saved state alone");
+	}
+	// A screen read through GcUiReadScope leaves the synced RNG and the might caches alone, also when it raises.
+	{
+		const uint64_t before = Digest(inst, -3);
+		const char* scoped =
+			"local function touch()\n"
+			"  Game.Rand(100, 'read scope probe')\n"
+			"  for id = 0, GameDefines.MAX_CIV_PLAYERS - 1 do\n"
+			"    local p = Players[id]\n"
+			"    if p and p:IsAlive() then\n"
+			"      for c in p:Cities() do c:GetNextBuyablePlot() end\n"
+			"      if p:IsMinorCiv() then p:CanMajorBullyGold(0) p:GetMajorBullyUnitDetails(0) end\n"
+			"    end\n"
+			"  end\n"
+			"  return 7, 'x'\n"
+			"end\n"
+			"local a, b = GcUiReadScope(touch)\n"
+			"assert(a == 7 and b == 'x', 'results pass through')\n"
+			"local ok, err = pcall(GcUiReadScope, function() touch() error('screen failed') end)\n"
+			"assert(not ok and tostring(err):find('screen failed'), 'errors pass through')\n"
+			"assert(not pcall(GcUiReadScope, 5))\n";
+		const std::string error = RunLua(U, scoped, "=read-scope");
+		c.add("read_scope_contract", error.empty(), "%s", error.empty() ? "results and errors pass through" : error.c_str());
+		c.add("read_scope_digest", Digest(inst, -3) == before, "RNG draws and might refreshes inside the scope are undone");
+	}
+	// The move question is off until the host says the seat's client answers it; the flag is not game state.
+	{
+		const uint64_t before = Digest(inst, -3);
+		const bool off = !MoveQuestionsOn(0) && !MoveQuestionsOn(1);
+		const std::string error = RunLua(U,
+			"GcUiSetMoveQuestions(1, true)\n"
+			"assert(not pcall(GcUiSetMoveQuestions, -1, true))\n"
+			"assert(not pcall(GcUiSetMoveQuestions, 0, 1))\n", "=move-questions");
+		const bool set = MoveQuestionsOn(1) && !MoveQuestionsOn(0);
+		SetMoveQuestions(1, false);
+		c.add("move_questions_flag", off && set && error.empty() && !MoveQuestionsOn(1), "%s", error.empty() ? "off by default, set per seat, invalid calls refused" : error.c_str());
+		c.add("move_questions_digest", Digest(inst, -3) == before, "the flag leaves saved state alone");
 	}
 	// A second attach is harmless (hosts attach again to a rebuilt state).
 	{
